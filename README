@@ -1,0 +1,3 @@
+Lua language abstract syntax tree representation
+Used for optimizing / auto-inlining Lua
+Working on a parser to go with it
