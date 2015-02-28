@@ -13,10 +13,12 @@ end
 -- generic global stmt collection
 ast._block = class{type='block'}
 function ast._block:init(...)
-	self.stmts = {...}
+	for i,stmt in ipairs{...} do
+		self[i] = stmt
+	end
 end
 function ast._block:__tostring()
-	return spacesep(self.stmts)
+	return spacesep(self)
 end
 
 --statements
@@ -36,28 +38,34 @@ end
 -- neither for now
 ast._do = class{type='do'}
 function ast._do:init(...)
-	self.stmts = {...}
+	for i,stmt in ipairs{...} do
+		self[i] = stmt
+	end
 end
 function ast._do:__tostring()
-	return 'do '..spacesep(self.stmts)..' end'
+	return 'do '..spacesep(self)..' end'
 end
 
 ast._while = class{type='while'}
 function ast._while:init(cond, ...)
 	self.cond=cond
-	self.stmts={...}
+	for i,stmt in ipairs{...} do
+		self[i] = stmt
+	end
 end
 function ast._while:__tostring()
-	return 'while '..tostring(self.cond)..' do '..spacesep(self.stmts)..' end'
+	return 'while '..tostring(self.cond)..' do '..spacesep(self)..' end'
 end
 
 ast._repeat = class{type='repeat'}
 function ast._repeat:init(cond, ...)
 	self.cond = cond
-	self.stmts = {...}
+	for i,stmt in ipairs{...} do
+		self[i] = stmt
+	end
 end
 function ast._repeat:__tostring()
-	return 'repeat '..spacesep(self.stmts)..' until '..tostring(self.cond)
+	return 'repeat '..spacesep(self)..' until '..tostring(self.cond)
 end
 
 --[[
@@ -69,7 +77,6 @@ _if(_eq(a,b),
 --]]
 ast._if = class{type='if'}
 function ast._if:init(cond,...)
-	local stmts = table()
 	local elseifs = table()
 	local elsestmt, laststmt
 	for _,stmt in ipairs{...} do
@@ -82,17 +89,16 @@ function ast._if:init(cond,...)
 			if laststmt then
 				assert(laststmt.type ~= 'elseif' and laststmt.type ~= 'else', "got a bad stmt in an if after an else: "..laststmt.type)
 			end
-			stmts:insert(stmt)
+			table.insert(self, stmt)
 		end
 		laststmt = stmt
 	end
 	self.cond = cond
-	self.stmts = stmts
 	self.elseifs = elseifs
 	self.elsestmt = elsestmt
 end
 function ast._if:__tostring()
-	local s = 'if '..tostring(self.cond)..' then '..spacesep(self.stmts)
+	local s = 'if '..tostring(self.cond)..' then '..spacesep(self)
 	for _,ei in ipairs(self.elseifs) do
 		s = s .. tostring(ei)
 	end
@@ -105,19 +111,23 @@ end
 ast._elseif = class{type='elseif'}
 function ast._elseif:init(cond,...)
 	self.cond = cond
-	self.stmts={...}
+	for i,stmt in ipairs{...} do
+		self[i] = stmt
+	end
 end
 function ast._elseif:__tostring()
-	return ' elseif '..tostring(self.cond)..' then '..spacesep(self.stmts)
+	return ' elseif '..tostring(self.cond)..' then '..spacesep(self)
 end
 
 -- aux for _if
 ast._else = class{type='else'}
 function ast._else:init(...)
-	self.stmts={...}
+	for i,stmt in ipairs{...} do
+		self[i] = stmt
+	end
 end
 function ast._else:__tostring()
-	return ' else '..spacesep(self.stmts)
+	return ' else '..spacesep(self)
 end
 
 ast._foreq = class{type='foreq'}
@@ -127,12 +137,14 @@ function ast._foreq:init(var,min,max,step,...)
 	self.min=min
 	self.max=max
 	self.step=step
-	self.stmts={...}
+	for i,stmt in ipairs{...} do
+		self[i] = stmt
+	end
 end
 function ast._foreq:__tostring()
 	local s = 'for '..tostring(self.var)..' = '..tostring(self.min)..','..tostring(self.max)
 	if self.step then s = s..','..tostring(self.step) end
-	s = s .. ' do '..spacesep(self.stmts)..' end'
+	s = s .. ' do '..spacesep(self)..' end'
 	return s
 end
 
@@ -140,10 +152,12 @@ ast._forin = class{type='forin'}
 function ast._forin:init(vars,iterexprs,...)
 	self.vars=vars
 	self.iterexprs=iterexprs
-	self.stmts={...}
+	for i,stmt in ipairs{...} do
+		self[i] = stmt
+	end
 end
 function ast._forin:__tostring()
-	return 'for '..commasep(self.vars)..' in '..commasep(self.iterexprs)..' do '..spacesep(self.stmts)..' end'
+	return 'for '..commasep(self.vars)..' in '..commasep(self.iterexprs)..' do '..spacesep(self)..' end'
 end
 
 ast._function = class{type='function'}
@@ -156,13 +170,15 @@ function ast._function:init(name, args, ...)
 	end
 	self.name=name
 	self.args=args
-	self.stmts={...}
+	for i,stmt in ipairs{...} do
+		self[i] = stmt
+	end
 end
 function ast._function:__tostring()
 	local s = 'function '
 	if self.name then s = s .. tostring(self.name) end
 	s = s .. '(' .. commasep(table.map(self.args, tostring))
-		.. ') ' .. spacesep(self.stmts) .. ' end'
+		.. ') ' .. spacesep(self) .. ' end'
 	return s
 end
 
@@ -183,7 +199,7 @@ end
 -- but it can also be a single function declaration with no equals symbol ...
 -- the parser has to accept functions and variables as separate conditions
 --  I'm tempted to make them separate symbols here too ...
--- stmts is a table containing: 1) a single function 2) a single assign statement 3) a list of variables
+-- exprs is a table containing: 1) a single function 2) a single assign statement 3) a list of variables
 ast._local = class{type='local'}
 function ast._local:init(exprs)
 	if exprs[1].type == 'function' or exprs[1].type == 'assign' then 
@@ -375,7 +391,6 @@ local fields = {
 	{'expr', 'one'},
 	{'exprs', 'many'},
 	{'stmt', 'one'},
-	{'stmts', 'many'},
 	{'elseifs', 'many'},
 	{'elsestmt', 'many'},
 	{'name', 'field'},
@@ -402,6 +417,10 @@ function ast.traverse(n, parent, child)
 		end
 	end
 	if type(n) == 'table' then
+		-- treat the object itself like an array of many
+		for i=1,#n do
+			n[i] = ast.traverse(n[i], parent, child)
+		end
 		for _,field in ipairs(fields) do
 			local name = field[1]
 			local howmuch = field[2]
@@ -429,6 +448,9 @@ end
 function ast.copy(n)
 	local newn = {}
 	setmetatable(newn, getmetatable(n))
+	for i=1,#n do
+		newn[i] = ast.copy(n[i])
+	end
 	for _,field in ipairs(fields) do
 		local name = field[1]
 		local howmuch = field[2]
@@ -504,11 +526,11 @@ function ast.flatten(f, varmap)
 			assert(funcname, "can't flatten a function with anonymous calls")
 			local f = varmap[funcname]
 			if f
-			and #f.stmts == 1
-			and f.stmts[1].type == 'return'
+			and #f == 1
+			and f[1].type == 'return'
 			then
 				local retexprs = {}
-				for i,e in ipairs(f.stmts[1].exprs) do
+				for i,e in ipairs(f[1].exprs) do
 					retexprs[i] = ast.copy(e)
 					ast.traverse(retexprs[i], function(v)
 						if type(v) == 'table'
@@ -527,6 +549,10 @@ function ast.flatten(f, varmap)
 	return f
 end
 
+function ast.parse(data)
+	local Parser = require 'ast.parser'
+	return Parser(data).tree
+end
 
 --[[
 function building and eventually reconstructing and inlining
@@ -578,7 +604,7 @@ f = _function(
 				local arg = n.args[i]
 				local v = var()
 				table.insert(vars, v)
-				table.insert(inline.stmts, 1, localassign(v, arg))			-- names are all anonymous, just specify the var and assignment value.	 local() for declaring vars only, assign() for assigning them only, and localassign() for both?  or should i nest the two cmds?
+				table.insert(inline, 1, localassign(v, arg))			-- names are all anonymous, just specify the var and assignment value.	 local() for declaring vars only, assign() for assigning them only, and localassign() for both?  or should i nest the two cmds?
 			end
 			-- then convert the body
 			traverse(inline, function(v)
@@ -594,8 +620,8 @@ f = _function(
 	make a list ... check it twice ...
 	
 	block		- statement block
-		.stmts	- array of stmt objects
-		.tostring = table.concat(stmts, ' ')
+		[1]...[n] - array of stmt objects
+		.tostring = table.concat(block, ' ')
 	
 statements:
 	assign		- assignment operation
@@ -604,29 +630,29 @@ statements:
 		.tostring = table.concat(map(vars, 'name'), ',')..'='..table.concat(exprs, ',')
 
 	do			- do / end block wrapper
-		.stmts	- array of stmt objects
-		.tostring = 'do '..table.concat(stmts, ' ')..' end'
+		[1]...[n] - array of stmt objects
+		.tostring = 'do '..table.concat(do, ' ')..' end'
 		
 	while
 		.cond	- condition expression
-		.stmts	- statements to execute
+		[1]...[n] - statements to execute
 		.tostring = 'while '..cond..' do '..table.concat(tostring, ' ')..' end'
 		
 	repeat
 		.cond	- condition expression
-		.stmts	- statements to execute
+		[1]...[n] - statements to execute
 		.tostring = 'repeat '..table.concat(tostring, ' ')..' until '..cond
 	
 	-- this could be prettier if we just had 'else' as a var, and did a special-case reinterpret for else->if's 
 	-- but it would also have more nodes...
 	if
 		.cond		- condition expression
-		.stmts		- statements if this condition option works
+		[1]...[n] - statements if this condition option works
 		.elseifs	- array of 'elseif' condition options
 			.cond	- condition expression
-			.stmts	- statements if this condition option works
+			[1]...[n] - statements if this condition option works
 		.else		- statements to execute if all other condition options fail
-		.tostring = 'if '..cond..' then '..table.concat(stmts, ' ')..
+		.tostring = 'if '..cond..' then '..table.concat(if, ' ')..
 					table.concat(
 						map(elseifs or {}, function(ei) return " elseif "..ei.cond.." then "..table.concat(stmts, " ") end),
 						' ')..
@@ -649,7 +675,7 @@ last-statements:
 	
 	
 	block
-		-stmts: array of stmt objects
+		[1]...[n]: array of stmt objects
 		-tostring: "do "..all statement's tostring().." end"
 	
 	func

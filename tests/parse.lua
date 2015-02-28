@@ -1,7 +1,6 @@
 #!/usr/bin/env lua
-local Parser = require 'ast.parser'
-local parser = Parser{filename=...}
-local tree = parser.tree
+local ast = require 'ast'
+local tree = ast.parse(io.readfile(assert(..., "expected filename")))
 print(tree)
 
 local function process(n)

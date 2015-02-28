@@ -174,32 +174,11 @@ function Tokenizer:getpos()
 	return 'line '..(#self.r.data:sub(1,self.r.index):gsub('[^\n]','')+1)
 end
 
-local function debugprint(tree)
-	local function process(n)
-		if type(n) ~= 'table' then return end
-		local m = getmetatable(n)
-		if m then n.type = m.type end
-		for k,v in pairs(n) do
-			process(v)
-		end
-	end
-	process(tree)
-	local json = require 'dkjson'
-	print(json.encode(tree, {indent=true}))
-end
-
 local Parser = class()
 
-function Parser:init(args)
-	local data
-	if type(args) == 'string' then
-		data = args
-	elseif args.filename then
-		local file = assert(io.open(args.filename, 'rb'))
-		data = file:read'*a'
-		file:close()
-	end
-
+function Parser:init(data)
+	assert(data, "expected data")
+	data = tostring(data)
 	local t = Tokenizer(data)
 	self.t = t
 
@@ -269,13 +248,13 @@ function Parser:stat()
 			self:mustbe('do', 'keyword')
 			local block = assert(self:block())
 			self:mustbe('end', 'keyword')
-			return ast._foreq(namelist[1], explist[1], explist[2], explist[3], unpack(block.stmts))
+			return ast._foreq(namelist[1], explist[1], explist[2], explist[3], unpack(block))
 		elseif self:canbe('in', 'keyword') then
 			local explist = assert(self:explist())
 			self:mustbe('do', 'keyword')
 			local block = assert(self:block())
 			self:mustbe('end', 'keyword')
-			return ast._forin(namelist, explist, unpack(block.stmts))
+			return ast._forin(namelist, explist, unpack(block))
 		else
 			error("'=' or 'in' expected")
 		end
@@ -283,30 +262,30 @@ function Parser:stat()
 		local cond = assert(self:exp(), "unexpected symbol")
 		self:mustbe('then', 'keyword')
 		local block = self:block()
-		local stmts = table(block.stmts)
+		local stmts = table(block)
 		-- ...and add elseifs and else to this
 		while self:canbe('elseif', 'keyword') do
 			local cond = assert(self:exp())
 			self:mustbe('then', 'keyword')
-			stmts:insert(ast._elseif(cond, unpack(assert(self:block()).stmts)))
+			stmts:insert(ast._elseif(cond, unpack(assert(self:block()))))
 		end
 		if self:canbe('else', 'keyword') then
-			stmts:insert(ast._else(unpack(assert(self:block()).stmts)))
+			stmts:insert(ast._else(unpack(assert(self:block()))))
 		end
 		self:mustbe('end', 'keyword')
 		return ast._if(cond, unpack(stmts))
 	elseif self:canbe('repeat', 'keyword') then
 		local block = assert(self:block())
 		self:mustbe('until', 'keyword')
-		return ast._repeat(assert(self:exp()), unpack(block.stmts))
+		return ast._repeat(assert(self:exp()), unpack(block))
 	elseif self:canbe('while', 'keyword') then
 		local cond = assert(self:exp())
 		self:mustbe('do', 'keyword')
 		local block = assert(self:block())
 		self:mustbe('end', 'keyword')
-		return ast._while(cond, unpack(block.stmts))
+		return ast._while(cond, unpack(block))
 	elseif self:canbe('do', 'keyword') then
-		return ast._do(unpack(assert(self:block()).stmts))
+		return ast._do(unpack(assert(self:block())))
 	end
 
 	-- now we handle functioncall and varlist = explist rules
@@ -562,7 +541,7 @@ function Parser:funcbody()
 	self:mustbe(')', 'symbol')
 	local block = self:block()
 	self:mustbe('end', 'keyword')
-	return table{args, unpack(block.stmts)}
+	return table{args, unpack(block)}
 end
 function Parser:parlist()	-- matches namelist() with ... as a terminator
 	if self:canbe('...', 'symbol') then return {ast._vararg()} end
