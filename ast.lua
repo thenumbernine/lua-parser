@@ -1,86 +1,77 @@
-local class = require 'ext.class'
+require 'ext'
 
-module('ast', package.seeall)
+local ast = {}
 
-function spacesep(stmts)
+local function spacesep(stmts)
 	return table.concat(table.map(stmts, tostring), ' ')
 end
 
-function commasep(exprs)
+local function commasep(exprs)
 	return table.concat(table.map(exprs, tostring), ',')
 end
 
 -- generic global stmt collection
-_block = class{type='block'}
-function _block:init(...)
+ast._block = class{type='block'}
+function ast._block:init(...)
 	self.stmts = {...}
 end
-function _block:__tostring()
+function ast._block:__tostring()
 	return spacesep(self.stmts)
 end
 
 --statements
 
-_assign = class{type='assign'}
-function _assign:init(...)
-	local args = {...}
-	local h = #args/2
-	assert(h == math.floor(h))
-	local vars = table()
-	local exprs = table()
-	for i=1,h do
-		vars:insert(args[i])
-		exprs:insert(args[i+h])
-	end
-	self.vars = vars
-	self.exprs = exprs
+ast._assign = class{type='assign'}
+function ast._assign:init(vars, exprs)
+	self.vars = table(vars)
+	self.exprs = table(exprs)
 end
-function _assign:__tostring()
-	return commasep(self.vars)..' = '..commasep(self.exprs)
+function ast._assign:__tostring()
+	return commasep(self.vars)..'='..commasep(self.exprs)
 end
 
 -- should we impose construction constraints _do(_block(...))
 -- or should we infer?  _do(...) = {type='do', block={type='block, ...}}
 -- or should we do neither?  _do(...) = {type='do', ...}
 -- neither for now
-_do = class{type='do'}
-function _do:init(...)
+ast._do = class{type='do'}
+function ast._do:init(...)
 	self.stmts = {...}
 end
-function _do:__tostring()
+function ast._do:__tostring()
 	return 'do '..spacesep(self.stmts)..' end'
 end
 
-_while = class{type='while'}
-function _while:init(cond, ...)
+ast._while = class{type='while'}
+function ast._while:init(cond, ...)
 	self.cond=cond
 	self.stmts={...}
 end
-function _while:__tostring()
+function ast._while:__tostring()
 	return 'while '..tostring(self.cond)..' do '..spacesep(self.stmts)..' end'
 end
 
-_repeat = class{type='repeat'}
-function _repeat:init(cond, ...)
+ast._repeat = class{type='repeat'}
+function ast._repeat:init(cond, ...)
 	self.cond = cond
 	self.stmts = {...}
 end
-function _repeat:__tostring()
+function ast._repeat:__tostring()
 	return 'repeat '..spacesep(self.stmts)..' until '..tostring(self.cond)
 end
 
 --[[
 _if(_eq(a,b),
-		_assign(a,2),
+	_assign({a},{2}),
 	__elseif(...),
 	__elseif(...),
 	__else(...))
 --]]
-_if = class{type='if'}
-function _if:init(cond,...)
+ast._if = class{type='if'}
+function ast._if:init(cond,...)
 	local stmts = table()
 	local elseifs = table()
-	local elsestmt
+	local elsestmt, laststmt
 	for _,stmt in ipairs{...} do
 		if stmt.type == 'elseif' then
 			elseifs:insert(stmt)
@@ -89,7 +80,7 @@ function _if:init(cond,...)
 			elsestmt = stmt -- and remove
 		else
 			if laststmt then
-				assert(laststmt.type ~= 'elseif' and laststmt.type ~= 'else', "got a bad stmt in an if after an else "..laststmt.type)
+				assert(laststmt.type ~= 'elseif' and laststmt.type ~= 'else', "got a bad stmt in an if after an else: "..laststmt.type)
 			end
 			stmts:insert(stmt)
 		end
@@ -100,7 +91,7 @@ function _if:init(cond,...)
 	self.elseifs = elseifs
 	self.elsestmt = elsestmt
 end
-function _if:__tostring()
+function ast._if:__tostring()
 	local s = 'if '..tostring(self.cond)..' then '..spacesep(self.stmts)
 	for _,ei in ipairs(self.elseifs) do
 		s = s .. tostring(ei)
@@ -111,53 +102,53 @@ function _if:__tostring()
 end
 
 -- aux for _if
-_elseif = class{type='elseif'}
-function _elseif:init(cond,...)
+ast._elseif = class{type='elseif'}
+function ast._elseif:init(cond,...)
 	self.cond = cond
 	self.stmts={...}
 end
-function _elseif:__tostring()
-	return 'elseif '..tostring(self.cond)..' then '..spacesep(self.stmts)
+function ast._elseif:__tostring()
+	return ' elseif '..tostring(self.cond)..' then '..spacesep(self.stmts)
 end
 
 -- aux for _if
-_else = class{type='else'}
-function _else:init(...)
+ast._else = class{type='else'}
+function ast._else:init(...)
 	self.stmts={...}
 end
-function _else:__tostring()
-	return 'else '..spacesep(self.stmts)
+function ast._else:__tostring()
+	return ' else '..spacesep(self.stmts)
 end
 
-_foreq = class{type='foreq'}
+ast._foreq = class{type='foreq'}
 -- step is optional
-function _foreq:init(var,min,max,step,...)
+function ast._foreq:init(var,min,max,step,...)
 	self.var=var
 	self.min=min
 	self.max=max
 	self.step=step
 	self.stmts={...}
 end
-function _foreq:__tostring()
+function ast._foreq:__tostring()
 	local s = 'for '..tostring(self.var)..' = '..tostring(self.min)..','..tostring(self.max)
 	if self.step then s = s..','..tostring(self.step) end
 	s = s .. ' do '..spacesep(self.stmts)..' end'
 	return s
 end
 
-_forin = class{type='forin'}
-function _forin:init(vars,func,...)
+ast._forin = class{type='forin'}
+function ast._forin:init(vars,iterexprs,...)
 	self.vars=vars
-	self.func=func
+	self.iterexprs=iterexprs
 	self.stmts={...}
 end
-function _forin:__tostring()
-	return 'for '..commasep(self.vars)..' in '..tostring(self.func)..' do '..spacesep(self.stmts)..' end'
+function ast._forin:__tostring()
+	return 'for '..commasep(self.vars)..' in '..commasep(self.iterexprs)..' do '..spacesep(self.stmts)..' end'
 end
 
-_function = class{type='function'}
+ast._function = class{type='function'}
 -- name is optional
-function _function:init(name, args, ...)
+function ast._function:init(name, args, ...)
 	-- prep args...
 	for i=1,#args do
 		args[i].index = i
@@ -167,97 +158,160 @@ function _function:init(name, args, ...)
 	self.args=args
 	self.stmts={...}
 end
-function _function:__tostring()
+function ast._function:__tostring()
 	local s = 'function '
-	if self.name then s = s .. self.name end
+	if self.name then s = s .. tostring(self.name) end
 	s = s .. '(' .. commasep(table.map(self.args, tostring))
 		.. ') ' .. spacesep(self.stmts) .. ' end'
 	return s
 end
 
 -- aux for _function
-_arg = class{type='arg'}
-function _arg:init(index)
+ast._arg = class{type='arg'}
+function ast._arg:init(index)
 	self.index = index
 end
 -- params need to know what function they're in
 -- so they can reference the function's arg names
-function _arg:__tostring()
+function ast._arg:__tostring()
 	return 'arg'..self.index
 end
 
-_local = class{type='local'}
-function _local:init(stmt)
-	self.stmt=stmt
+-- _local can be an assignment of multi vars to muli exprs
+--  or can optionally be a declaration of multi vars with no statements
+-- so it will take the form of assignments
+-- but it can also be a single function declaration with no equals symbol ...
+-- the parser has to accept functions and variables as separate conditions
+--  I'm tempted to make them separate symbols here too ...
+-- stmts is a table containing: 1) a single function 2) a single assign statement 3) a list of variables
+ast._local = class{type='local'}
+function ast._local:init(exprs)
+	if exprs[1].type == 'function' or exprs[1].type == 'assign' then 
+		assert(#exprs == 1, "local functions or local assignments must be the only child")
+	end
+	self.exprs = table(assert(exprs))
 end
-function _local:__tostring()
-	return 'local '..tostring(self.stmt)
+function ast._local:__tostring()
+	if self.exprs[1].type == 'function' or self.exprs[1].type == 'assign' then
+		return 'local '..tostring(self.exprs[1])
+	else
+		return 'local '..commasep(self.exprs)
+	end
 end
 
 -- control
 
-_return = class{type='return'}
-function _return:init(...)
+ast._return = class{type='return'}
+function ast._return:init(...)
 	self.exprs={...}
 end
-function _return:__tostring()
+function ast._return:__tostring()
 	return 'return '..commasep(self.exprs)
 end
 
-_break = class{type='break'}
+ast._break = class{type='break'}
+function ast._break:__tostring() return 'break' end
 
--- TODO - don't allow 'func' to just be a string
--- don't allow strings for any of this, in fact
-_call = class{type='call'}
-function _call:init(func, ...)
+ast._call = class{type='call'}
+function ast._call:init(func, ...)
 	self.func=func
 	self.args={...}
 end
-function _call:__tostring()
+function ast._call:__tostring()
+	if #self.args == 1 and (self.args[1].type == 'table' or self.args[1].type == 'string') then
+		return tostring(self.func)..tostring(self.args[1])
+	end
 	return tostring(self.func)..'('..commasep(self.args)..')'
 end
 
 -- please don't change these
-_nil = class{type='nil', const=true}
-_true = class{type='boolean', const=true, value=true}
-_false = class{type='boolean', const=true, value=false}
+ast._nil = class{type='nil', const=true, __tostring=function() return 'nil' end}
+ast._true = class{type='boolean', const=true, value=true, __tostring=function() return 'true' end}
+ast._false = class{type='boolean', const=true, value=false, __tostring=function() return 'false' end}
 
-_number = class{type='number'}
-function _number:init(value) self.value = value end
-function _number:__tostring() return self.value end
+ast._number = class{type='number'}
+function ast._number:init(value) self.value = value end
+function ast._number:__tostring() return self.value end
 
-_string = class{type='string'}
-function _string:init(value) self.value = value end
-function _string:__tostring() return ('%q'):format(self.value) end
+ast._string = class{type='string'}
+function ast._string:init(value) self.value = value end
+function ast._string:__tostring() 
+	-- escape everything
+	return '"' .. self.value:gsub('.', function(c)
+		if c == '"' then return '\\"' end
+		if c == '\\' then return '\\\\' end
+		local b = c:byte()
+		if b < 32 or b > 127 then
+			return '\\'..b
+		end
+	end) .. '"'
+end
 
-_vararg = class{type='vararg'}
-function _vararg:__tostring() return '...' end
-_table = class{type='table'}
+ast._vararg = class{type='vararg'}
+function ast._vararg:__tostring() return '...' end
 
-_var = class{type='var'}	-- variable, lhs of _assign's, similar to _arg
-function _var:init(name)
+ast._table = class{type='table'}	-- single-element assigns
+function ast._table:init(args) 
+	self.args = table(assert(args))
+end
+function ast._table:__tostring() 
+	return '{'..self.args:map(function(arg)
+		-- if it's an assign then wrap the vars[1] with []'s
+		if arg.type == 'assign' then
+			assert(#arg.vars == 1)
+			assert(#arg.exprs == 1)
+			return '[' .. tostring(arg.vars[1]) .. '] = '..tostring(arg.exprs[1])
+		end
+		return tostring(arg)
+	end):concat(',')..'}' 
+end
+
+ast._var = class{type='var'}	-- variable, lhs of ast._assign's, similar to _arg
+function ast._var:init(name)
 	self.name = name
 end
-function _var:__tostring()
+function ast._var:__tostring()
 	return self.name
 end
 
-_par = class{type='parenthesis'}
-function _par:init(expr)
+ast._par = class{type='parenthesis'}
+function ast._par:init(expr)
 	self.expr = expr
 end
-function _par:__tostring()
+function ast._par:__tostring()
 	return '('..tostring(self.expr)..')'
 end
 
-_index = class{type='index'}
-function _index:init(expr,key)
+local function isLuaName(s)
+	return s:match'^[_%a][_%w]*$'
+end
+
+ast._index = class{type='index'}
+function ast._index:init(expr,key)
 	self.expr = expr
 	self.key = key
 end
-function _index:__tostring()
+function ast._index:__tostring()
 -- TODO - if self.key is a string and has no funny chars the use a .$key instead of [$key]
+	if self.key.type == 'string'
+	and isLuaName(self.key.value) 
+	then
+		return tostring(self.expr)..'.'..self.key.value
+	end
 	return tostring(self.expr)..'['..tostring(self.key)..']'
+end
+
+-- this isn't the () call itself, this is just the : dereference
+-- a:b(c) is _call(_indexself(_var'a', _var'b'), _var'c')
+-- technically this is a string lookup, however it is only valid as a lua name, so I'm just passing the Lua string itself
+ast._indexself = class{type='indexself'}
+function ast._indexself:init(expr,key)
+	self.expr = assert(expr)
+	assert(isLuaName(key))
+	self.key = assert(key)
+end
+function ast._indexself:__tostring()
+	return tostring(self.expr)..':'..self.key
 end
 
 for _,info in ipairs{
@@ -279,32 +333,30 @@ for _,info in ipairs{
 } do
 	local name = info[1]
 	local op = info[2]
-	local cl = class{type='binop', op=op}
-	_G['_'..name] = cl
+	local cl = class{type=info[1], op=op}
+	ast['_'..name] = cl
 	function cl:init(...)
 		self.args = {...}
 	end
 	function cl:__tostring()
-		return table.concat(
-			table.map(self.args, tostring),
-			' '..self.op..' ')
+		return table.concat(table.map(self.args, tostring), ' '..self.op..' ') -- spaces required for 'and' and 'or'
 	end
 end
 
 for _,info in ipairs{
 	{'unm','-'},
 	{'not','not'},
-	{'length','#'},
+	{'len','#'},
 } do
 	local name = info[1]
 	local op = info[2]
-	local cl = class{type='unop', op=op}
-	_G['_'..name] = cl
+	local cl = class{type=info[1], op=op}
+	ast['_'..name] = cl
 	function cl:init(arg)
 		self.arg = arg
 	end
 	function cl:__tostring()
-		return self.op..' '..tostring(self.arg)
+		return ' '..self.op..' '..tostring(self.arg)	-- spaces required for 'not'
 	end
 end
 
@@ -331,7 +383,7 @@ local fields = {
 	{'value', 'field'},
 }
 
-function exec(n)
+function ast.exec(n)
 	return assert(loadstring(tostring(n)))
 end
 
@@ -342,7 +394,7 @@ child is the child-first traversal
 return what value of the callbacks you want 
 returning a new node at the parent callback will not traverse its subsequent new children added to the tree
 --]]
-function traverse(n, parent, child)
+function ast.traverse(n, parent, child)
 	if parent then
 		local ret = parent(n)
 		if ret ~= n then
@@ -355,11 +407,11 @@ function traverse(n, parent, child)
 			local howmuch = field[2]
 			if n[name] then
 				if howmuch == 'one' then
-					n[name] = traverse(n[name], parent, child)
+					n[name] = ast.traverse(n[name], parent, child)
 				elseif howmuch == 'many' then
 					local value = n[name]
 					for i=#value,1,-1 do
-						value[i] = traverse(value[i], parent, child)
+						value[i] = ast.traverse(value[i], parent, child)
 					end
 				elseif howmuch == 'field' then
 				else
@@ -374,7 +426,7 @@ function traverse(n, parent, child)
 	return n
 end
 
-function copy(n)
+function ast.copy(n)
 	local newn = {}
 	setmetatable(newn, getmetatable(n))
 	for _,field in ipairs(fields) do
@@ -384,7 +436,7 @@ function copy(n)
 		if value then
 			if howmuch == 'one' then
 				if type(value) == 'table' then
-					newn[name] = copy(value)
+					newn[name] = ast.copy(value)
 				else
 					newn[name] = value
 				end
@@ -392,7 +444,7 @@ function copy(n)
 				local newmany = {}
 				for k,v in ipairs(value) do
 					if type(v) == 'table' then
-						newmany[k] = copy(v)
+						newmany[k] = ast.copy(v)
 					else
 						newmany[k] = v
 					end
@@ -442,9 +494,9 @@ h ret = previous return value of h
 return something(g ret, h ret)
 
 --]]
-function flatten(f, varmap)
-	f = copy(f)
-	traverse(f, function(n)
+function ast.flatten(f, varmap)
+	f = ast.copy(f)
+	ast.traverse(f, function(n)
 		if type(n) == 'table'
 		and n.type == 'call'
 		then
@@ -457,17 +509,17 @@ function flatten(f, varmap)
 			then
 				local retexprs = {}
 				for i,e in ipairs(f.stmts[1].exprs) do
-					retexprs[i] = copy(e)
-					traverse(retexprs[i], function(v)
+					retexprs[i] = ast.copy(e)
+					ast.traverse(retexprs[i], function(v)
 						if type(v) == 'table'
 						and v.type == 'arg'
 						then
-							return copy(n.args[i])
+							return ast.copy(n.args[i])
 						end
 					end)
-					retexprs[i] = _par(retexprs[i])
+					retexprs[i] = ast._par(retexprs[i])
 				end
-				return _block(unpack(retexprs))	-- TODO exprlist, and redo assign to be based on vars and exprs
+				return ast._block(unpack(retexprs))	-- TODO exprlist, and redo assign to be based on vars and exprs
 			end
 		end
 		return n
@@ -481,12 +533,12 @@ function building and eventually reconstructing and inlining
 
 TODO full-on AST:
 
-f = ast._function(
+f = _function(
 		'vec3.add',
 		{'a','b'},
 		-- rest is stmts
-		ast._return(
-			ast._call('vec3',
+		_return(
+			_call(_var('vec3'),
 				add(index(param(1),1), index(param(2),1)),
 				add(index(param(1),2), index(param(2),2)),
 				add(index(param(1),3), index(param(2),3)),
@@ -617,3 +669,6 @@ then we could do tree traversing and graph inferencing
 and do some real inline optimization
 
 --]]
+
+return ast
+
