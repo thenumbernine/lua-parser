@@ -1,5 +1,5 @@
 require 'ext'
-local ast = require 'ast'
+local ast = require 'parser.ast'
 
 local DataReader = class()
 function DataReader:init(data)
@@ -13,7 +13,10 @@ function DataReader:done()
 end
 function DataReader:seekto(pattern)
 	local from, to = self.data:find(pattern, self.index)
-	if not from then return end
+	if not from then 
+		from = #self.data+1
+		to = from
+	end
 	self.index = from
 	self.lasttoken = self.data:sub(from, to)
 	return self.lasttoken
@@ -176,17 +179,23 @@ end
 
 local Parser = class()
 
+-- static function
+function Parser.parse(data)
+	return Parser(data).tree
+end
+
 function Parser:init(data)
 	assert(data, "expected data")
 	data = tostring(data)
 	local t = Tokenizer(data)
 	self.t = t
 
-	xpcall(function()
-		self.tree = self:chunk()
-	end, function(err)
-		io.stderr:write(err..'\n'..self.t:getpos()..'\n'..debug.traceback())
-	end)
+	self.blockStack = table()
+	self.functionStack = table{'function-vararg'}
+
+	self.tree = self:chunk()
+
+	if self.t.token then error("unexpected "..self.t.token) end
 end
 function Parser:canbe(token, tokentype)	-- token is optional
 	assert(tokentype)
@@ -218,8 +227,11 @@ function Parser:chunk()
 	if laststat then stmts:insert(laststat) end
 	return ast._block(unpack(stmts))
 end
-function Parser:block()
-	return self:chunk()
+function Parser:block(blockName)
+	if blockName then self.blockStack:insert(blockName) end
+	local chunk = self:chunk()
+	if blockName then assert(self.blockStack:remove() == blockName) end
+	return chunk
 end
 function Parser:stat()
 	if self:canbe('local', 'keyword') then
@@ -246,13 +258,13 @@ function Parser:stat()
 			local explist = assert(self:explist())
 			assert(#explist >= 2 and #explist <= 3)
 			self:mustbe('do', 'keyword')
-			local block = assert(self:block())
+			local block = assert(self:block'for =')
 			self:mustbe('end', 'keyword')
 			return ast._foreq(namelist[1], explist[1], explist[2], explist[3], unpack(block))
 		elseif self:canbe('in', 'keyword') then
 			local explist = assert(self:explist())
 			self:mustbe('do', 'keyword')
-			local block = assert(self:block())
+			local block = assert(self:block'for in')
 			self:mustbe('end', 'keyword')
 			return ast._forin(namelist, explist, unpack(block))
 		else
@@ -275,17 +287,19 @@ function Parser:stat()
 		self:mustbe('end', 'keyword')
 		return ast._if(cond, unpack(stmts))
 	elseif self:canbe('repeat', 'keyword') then
-		local block = assert(self:block())
+		local block = assert(self:block'repeat')
 		self:mustbe('until', 'keyword')
 		return ast._repeat(assert(self:exp()), unpack(block))
 	elseif self:canbe('while', 'keyword') then
 		local cond = assert(self:exp())
 		self:mustbe('do', 'keyword')
-		local block = assert(self:block())
+		local block = assert(self:block'while')
 		self:mustbe('end', 'keyword')
 		return ast._while(cond, unpack(block))
 	elseif self:canbe('do', 'keyword') then
-		return ast._do(unpack(assert(self:block())))
+		local block = assert(self:block())
+		self:mustbe('end', 'keyword')
+		return ast._do(unpack(block))
 	end
 
 	-- now we handle functioncall and varlist = explist rules
@@ -317,9 +331,17 @@ function Parser:stat()
 	end
 end
 function Parser:laststat()
-	if self:canbe('break', 'keyword') then return ast._break() end
+	if self:canbe('break', 'keyword') then
+		if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
+			error("break not inside loop")
+		end
+		self:canbe(';', 'symbol')
+		return ast._break()
+	end
 	if self:canbe('return', 'keyword') then
-		return ast._return(unpack(self:explist() or {}))
+		local explist = self:explist() or {}
+		self:canbe(';', 'symbol')
+		return ast._return(unpack(explist))
 	end
 end
 function Parser:funcname()
@@ -461,7 +483,10 @@ function Parser:subexp()
 	local function_ = self:function_()
 	if function_ then return function_ end
 
-	if self:canbe('...', 'symbol') then return ast._vararg() end
+	if self:canbe('...', 'symbol') then 
+		assert(self.functionStack:last() == 'function-vararg')
+		return ast._vararg() 
+	end
 	if self:canbe(nil, 'string') then return ast._string(self.lasttoken) end
 	if self:canbe(nil, 'number') then return ast._number(self.lasttoken) end
 	if self:canbe('true', 'keyword') then return ast._true() end
@@ -484,7 +509,7 @@ function Parser:prefixexp()
 	local prefixexp
 	
 	if self:canbe('(', 'symbol') then
-		local exp = self:exp()
+		local exp = assert(self:exp())
 		self:mustbe(')', 'symbol')
 		prefixexp = ast._par(exp)
 	elseif self:canbe(nil, 'name') then
@@ -538,13 +563,17 @@ end
 function Parser:funcbody()
 	if not self:canbe('(', 'symbol') then return end
 	local args = self:parlist() or table()
+	local lastArg = args:last()
+	local functionType = lastArg and lastArg.type == 'vararg' and 'function-vararg' or 'function'
 	self:mustbe(')', 'symbol')
-	local block = self:block()
+	self.functionStack:insert(functionType)
+	local block = self:block(functionType)
+	assert(self.functionStack:remove() == functionType)
 	self:mustbe('end', 'keyword')
 	return table{args, unpack(block)}
 end
 function Parser:parlist()	-- matches namelist() with ... as a terminator
-	if self:canbe('...', 'symbol') then return {ast._vararg()} end
+	if self:canbe('...', 'symbol') then return table{ast._vararg()} end
 	local name = self:canbe(nil, 'name')
 	if not name then return end
 	local names = table{ast._var(name)}

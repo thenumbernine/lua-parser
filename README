@@ -1,3 +1,12 @@
-Lua language abstract syntax tree representation
-Used for optimizing / auto-inlining Lua.
-Also comes with a parser.
+Lua parser written in Lua.
+Parses to an abstract syntax tree representation.
+Call tostring() on the AST to get equivalent Lua code.
+
+AST also contains some functions like flatten() for use with optimizing / auto-inlining Lua.
+
+See the tests folder for example usage.
+
+minify_tests.txt taken from the tests at https://github.com/stravant/LuaMinify
+
+
+Known bugs: "foo"() works, while in Lua it should fail

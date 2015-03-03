@@ -1,1 +1,1 @@
-return require 'ast.ast'
+return require 'parser.parser'
