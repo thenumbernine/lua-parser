@@ -1,4 +1,5 @@
-require 'ext'
+local table = require 'ext.table'
+local class = require 'ext.class'
 
 local ast = {}
 
