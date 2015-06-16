@@ -488,6 +488,12 @@ end
 ast._index = nodeclass{type='index'}
 function ast._index:init(expr,key)
 	self.expr = expr
+	-- helper add wrappers to some types: 
+	if type(key) == 'string' then
+		key = ast._string(key)
+	elseif type(key) == 'number' then
+		key = ast._number(key)
+	end
 	self.key = key
 end
 function ast._index:__tostring()
