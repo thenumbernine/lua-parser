@@ -10,3 +10,8 @@ minify_tests.txt taken from the tests at https://github.com/stravant/LuaMinify
 
 
 Known bugs: "foo"() works, while in Lua it should fail
+
+I tested this by parsing itself,
+then using the parsed & reconstructed version to parse itself,
+then using the parsed & reconstructed version to parse the parsed & reconstructed version,
+then using the 2x parsed & reconstructed version to parse itself

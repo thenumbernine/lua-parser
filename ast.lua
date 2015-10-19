@@ -172,7 +172,7 @@ function node.flatten(f, varmap)
 					end)
 					retexprs[i] = ast._par(retexprs[i])
 				end
-				return ast._block(unpack(retexprs))	-- TODO exprlist, and redo assign to be based on vars and exprs
+				return ast._block(table.unpack(retexprs))	-- TODO exprlist, and redo assign to be based on vars and exprs
 			end
 		end
 		return n

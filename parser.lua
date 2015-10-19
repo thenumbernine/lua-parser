@@ -227,7 +227,7 @@ function Parser:chunk()
 	until false
 	local laststat = self:laststat()
 	if laststat then stmts:insert(laststat) end
-	return ast._block(unpack(stmts))
+	return ast._block(table.unpack(stmts))
 end
 function Parser:block(blockName)
 	if blockName then self.blockStack:insert(blockName) end
@@ -239,7 +239,7 @@ function Parser:stat()
 	if self:canbe('local', 'keyword') then
 		if self:canbe('function', 'keyword') then
 			local name = self:mustbe(nil, 'name')
-			return ast._local{ast._function(name, unpack(assert(self:funcbody())))}
+			return ast._local{ast._function(name, table.unpack(assert(self:funcbody())))}
 		else
 			local namelist = assert(self:namelist())
 			if self:canbe('=', 'symbol') then
@@ -252,7 +252,7 @@ function Parser:stat()
 		end
 	elseif self:canbe('function', 'keyword') then
 		local funcname = self:funcname()
-		return ast._function(funcname, unpack(assert(self:funcbody())))
+		return ast._function(funcname, table.unpack(assert(self:funcbody())))
 	elseif self:canbe('for', 'keyword') then
 		local namelist = assert(self:namelist())
 		if self:canbe('=', 'symbol') then
@@ -262,13 +262,13 @@ function Parser:stat()
 			self:mustbe('do', 'keyword')
 			local block = assert(self:block'for =')
 			self:mustbe('end', 'keyword')
-			return ast._foreq(namelist[1], explist[1], explist[2], explist[3], unpack(block))
+			return ast._foreq(namelist[1], explist[1], explist[2], explist[3], table.unpack(block))
 		elseif self:canbe('in', 'keyword') then
 			local explist = assert(self:explist())
 			self:mustbe('do', 'keyword')
 			local block = assert(self:block'for in')
 			self:mustbe('end', 'keyword')
-			return ast._forin(namelist, explist, unpack(block))
+			return ast._forin(namelist, explist, table.unpack(block))
 		else
 			error("'=' or 'in' expected")
 		end
@@ -281,27 +281,27 @@ function Parser:stat()
 		while self:canbe('elseif', 'keyword') do
 			local cond = assert(self:exp())
 			self:mustbe('then', 'keyword')
-			stmts:insert(ast._elseif(cond, unpack(assert(self:block()))))
+			stmts:insert(ast._elseif(cond, table.unpack(assert(self:block()))))
 		end
 		if self:canbe('else', 'keyword') then
-			stmts:insert(ast._else(unpack(assert(self:block()))))
+			stmts:insert(ast._else(table.unpack(assert(self:block()))))
 		end
 		self:mustbe('end', 'keyword')
-		return ast._if(cond, unpack(stmts))
+		return ast._if(cond, table.unpack(stmts))
 	elseif self:canbe('repeat', 'keyword') then
 		local block = assert(self:block'repeat')
 		self:mustbe('until', 'keyword')
-		return ast._repeat(assert(self:exp()), unpack(block))
+		return ast._repeat(assert(self:exp()), table.unpack(block))
 	elseif self:canbe('while', 'keyword') then
 		local cond = assert(self:exp())
 		self:mustbe('do', 'keyword')
 		local block = assert(self:block'while')
 		self:mustbe('end', 'keyword')
-		return ast._while(cond, unpack(block))
+		return ast._while(cond, table.unpack(block))
 	elseif self:canbe('do', 'keyword') then
 		local block = assert(self:block())
 		self:mustbe('end', 'keyword')
-		return ast._do(unpack(block))
+		return ast._do(table.unpack(block))
 	end
 
 	-- now we handle functioncall and varlist = explist rules
@@ -343,7 +343,7 @@ function Parser:laststat()
 	if self:canbe('return', 'keyword') then
 		local explist = self:explist() or {}
 		self:canbe(';', 'symbol')
-		return ast._return(unpack(explist))
+		return ast._return(table.unpack(explist))
 	end
 end
 function Parser:funcname()
@@ -530,12 +530,12 @@ function Parser:prefixexp()
 			prefixexp = ast._indexself(prefixexp, self:mustbe(nil, 'name'))
 			local args = self:args()
 			if not args then error"function arguments expected" end
-			prefixexp = ast._call(prefixexp, unpack(args))
+			prefixexp = ast._call(prefixexp, table.unpack(args))
 		else
 			local args = self:args()
 			if not args then break end
 			
-			prefixexp = ast._call(prefixexp, unpack(args))
+			prefixexp = ast._call(prefixexp, table.unpack(args))
 		end
 	end
 
@@ -559,7 +559,7 @@ function Parser:args()
 end
 function Parser:function_()
 	if not self:canbe('function', 'keyword') then return end
-	return ast._function(nil, unpack(assert(self:funcbody())))
+	return ast._function(nil, table.unpack(assert(self:funcbody())))
 end
 -- returns a table of ... first element is a table of args, rest of elements are the body statements
 function Parser:funcbody()
@@ -572,7 +572,7 @@ function Parser:funcbody()
 	local block = self:block(functionType)
 	assert(self.functionStack:remove() == functionType)
 	self:mustbe('end', 'keyword')
-	return table{args, unpack(block)}
+	return table{args, table.unpack(block)}
 end
 function Parser:parlist()	-- matches namelist() with ... as a terminator
 	if self:canbe('...', 'symbol') then return table{ast._vararg()} end
