@@ -26,7 +26,7 @@ print(gtree)
 print()
 
 local fflat = ftree:flatten{
-	g=unpack(gtree),	-- TODO gtree:find'g' to look for global-level definitions?
+	g = table.unpack(gtree),	-- TODO gtree:find'g' to look for global-level definitions?
 }
 print('flattened f ast')
 print(tolua(fflat))
