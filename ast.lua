@@ -27,7 +27,7 @@ local fields = {
 }
 
 function node.exec(n)
-	return assert(loadstring(tostring(n)))
+	return assert(load(tostring(n)))
 end
 ast.exec = node.exec
 
