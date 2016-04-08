@@ -731,7 +731,6 @@ and do some real inline optimization
 --]]
 
 
---[=[
 --[[
 last,
 make __tostring modular
@@ -739,15 +738,14 @@ give each node class a lookup table for whatever the current 'tostringmethod' is
 then remove all __tostring methods and replace the base class __tostring with something to call into the lookup table
 --]]
 ast.tostringmethod = 'lua'
+local defaultToString = function(self)
+	return self.tostringmethods[ast.tostringmethod](self)
+end
 for _,nc in ipairs(allclasses) do
 	nc.tostringmethods = {
 		lua = nc.__tostring
 	}
-	nc.__tostring = nil
+	nc.__tostring = defaultToString
 end
-node.__tostring = function(self)
-	self.tostringmethods[ast.tostringmethod](self)
-end
---]=]
 
 return ast
