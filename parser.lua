@@ -181,16 +181,14 @@ end
 
 local Parser = class()
 
-Parser.version = '5.1'
-
 -- static function
 function Parser.parse(data, version)
 	return Parser(data, version).tree
 end
 
 function Parser:init(data, version)
-	self.version = version
-	
+	self.version = version or _VERSION:match'^Lua (.*)$'
+
 	assert(data, "expected data")
 	data = tostring(data)
 	local t = Tokenizer(data)

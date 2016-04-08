@@ -731,6 +731,7 @@ and do some real inline optimization
 --]]
 
 
+--[=[
 --[[
 last,
 make __tostring modular
@@ -747,6 +748,6 @@ end
 node.__tostring = function(self)
 	self.tostringmethods[ast.tostringmethod](self)
 end
-
+--]=]
 
 return ast
