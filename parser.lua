@@ -181,12 +181,16 @@ end
 
 local Parser = class()
 
+Parser.version = '5.1'
+
 -- static function
-function Parser.parse(data)
-	return Parser(data).tree
+function Parser.parse(data, version)
+	return Parser(data, version).tree
 end
 
-function Parser:init(data)
+function Parser:init(data, version)
+	self.version = version
+	
 	assert(data, "expected data")
 	data = tostring(data)
 	local t = Tokenizer(data)
@@ -197,7 +201,9 @@ function Parser:init(data)
 
 	self.tree = self:chunk()
 
-	if self.t.token then error("unexpected "..self.t.token) end
+	if self.t.token then
+		error("unexpected "..self.t.token)
+	end
 end
 function Parser:canbe(token, tokentype)	-- token is optional
 	assert(tokentype)
@@ -227,6 +233,10 @@ function Parser:chunk()
 	until false
 	local laststat = self:laststat()
 	if laststat then stmts:insert(laststat) end
+-- in 5.2/5.3 should all statements have optional ;'s?
+if self.version == '5.2' or self.version == '5.3' then
+	self:canbe(';', 'symbol')
+end
 	return ast._block(table.unpack(stmts))
 end
 function Parser:block(blockName)
@@ -303,6 +313,16 @@ function Parser:stat()
 		self:mustbe('end', 'keyword')
 		return ast._do(table.unpack(block))
 	end
+
+if self.version == '5.2' or self.version == '5.3' then
+	if self:canbe('break', 'keyword') then
+		if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
+			error("break not inside loop")
+		end
+		self:canbe(';', 'symbol')
+		return ast._break()
+	end
+end
 
 	-- now we handle functioncall and varlist = explist rules
 	

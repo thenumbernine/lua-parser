@@ -1,6 +1,11 @@
 local table = require 'ext.table'
 local class = require 'ext.class'
 
+ToStringLua = {
+	
+}
+
+
 local ast = {}
 
 local node = class()
@@ -189,8 +194,11 @@ local function commasep(exprs)
 	return table.concat(table.map(exprs, tostring), ',')
 end
 
+local allclasses = table{node}
 local function nodeclass(...)
-	return class(node, ...)
+	local newclass = class(node, ...)
+	allclasses:insert(newclass)
+	return newclass
 end
 
 -- generic global stmt collection
@@ -424,9 +432,23 @@ function ast._call:__tostring()
 end
 
 -- please don't change these
-ast._nil = nodeclass{type='nil', const=true, __tostring=function() return 'nil' end}
-ast._true = nodeclass{type='boolean', const=true, value=true, __tostring=function() return 'true' end}
-ast._false = nodeclass{type='boolean', const=true, value=false, __tostring=function() return 'false' end}
+ast._nil = nodeclass{
+	type='nil',
+	const=true,
+	__tostring=function() return 'nil' end,
+}
+ast._true = nodeclass{
+	type='boolean',
+	const=true,
+	value=true,
+	__tostring=function() return 'true' end,
+}
+ast._false = nodeclass{
+	type='boolean',
+	const=true,
+	value=false,
+	__tostring=function() return 'false' end,
+}
 
 ast._number = nodeclass{type='number'}
 function ast._number:init(value) self.value = value end
@@ -708,5 +730,23 @@ and do some real inline optimization
 
 --]]
 
-return ast
 
+--[[
+last,
+make __tostring modular
+give each node class a lookup table for whatever the current 'tostringmethod' is 
+then remove all __tostring methods and replace the base class __tostring with something to call into the lookup table
+--]]
+ast.tostringmethod = 'lua'
+for _,nc in ipairs(allclasses) do
+	nc.tostringmethods = {
+		lua = nc.__tostring
+	}
+	nc.__tostring = nil
+end
+node.__tostring = function(self)
+	self.tostringmethods[ast.tostringmethod](self)
+end
+
+
+return ast
