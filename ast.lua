@@ -9,6 +9,7 @@ ToStringLua = {
 local ast = {}
 
 local node = class()
+ast.node = node
 
 local fields = {
 	{'cond', 'one'},
