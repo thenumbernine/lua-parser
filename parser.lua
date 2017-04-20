@@ -126,14 +126,19 @@ local start = r.index-#r.lasttoken
 				-- lua doesn't consider the - to be a part of the number literal
 				-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
 local start = r.index
-				local token = r:canbe'[%.%d]+'
-				assert(#token:gsub('[^%.]','') < 2, 'malformed number') 
-				local n = table{token}
-				if r:canbe'e' then
-					n:insert(r.lasttoken)
-					n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+				if r.data:match'0x' then
+					local token = r:canbe'0x[%da-fA-F]+'
+					coroutine.yield(token, 'number')
+				else
+					local token = r:canbe'[%.%d]+'
+					assert(#token:gsub('[^%.]','') < 2, 'malformed number') 
+					local n = table{token}
+					if r:canbe'e' then
+						n:insert(r.lasttoken)
+						n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+					end
+					coroutine.yield(n:concat(), 'number')
 				end
-				coroutine.yield(n:concat(), 'number')
 --print('read number ['..start..', '..r.index..']: '..r.data:sub(start, r.index-1))
 			else
 				-- see if it matches any symbols
