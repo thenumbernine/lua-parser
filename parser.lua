@@ -126,8 +126,8 @@ local start = r.index-#r.lasttoken
 				-- lua doesn't consider the - to be a part of the number literal
 				-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
 local start = r.index
-				if r.data:match'0x' then
-					local token = r:canbe'0x[%da-fA-F]+'
+				if r.data:match'0[xX]' then
+					local token = r:canbe'0[xX][%da-fA-F]+'
 					coroutine.yield(token, 'number')
 				else
 					local token = r:canbe'[%.%d]+'
