@@ -129,6 +129,7 @@ local start = r.index
 				if r.data:match'0[xX]' then
 					local token = r:canbe'0[xX][%da-fA-F]+'
 					coroutine.yield(token, 'number')
+				-- TODO if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
 				else
 					local token = r:canbe'[%.%d]+'
 					assert(#token:gsub('[^%.]','') < 2, 'malformed number') 
