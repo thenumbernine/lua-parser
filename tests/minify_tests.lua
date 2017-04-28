@@ -1,4 +1,4 @@
-#!/usr/bin/env lua5.1
+#!/usr/bin/env lua
 --taken from the tests at https://github.com/stravant/LuaMinify
 local parser = require 'parser'
 local version = _VERSION:match'^Lua (.*)$'

@@ -194,7 +194,11 @@ end
 
 function Parser:init(data, version)
 	self.version = version or _VERSION:match'^Lua (.*)$'
-
+	if data then
+		self:setData(data)
+	end
+end
+function Parser:setData(data)
 	assert(data, "expected data")
 	data = tostring(data)
 	local t = Tokenizer(data)

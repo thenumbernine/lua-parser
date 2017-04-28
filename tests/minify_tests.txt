@@ -136,6 +136,7 @@ for a = p, q do break end
 for a = p, q do break break end         -- FAIL_5.1
 for a = 1, 2 do return end
 for a = 1, 2 do return return end       -- FAIL_5.1 FAIL_5.2 FAIL_5.3
+for a = 1, 2 + 2 do return return end
 for a = p, q do do end end
 for a = p, q do do break end end
 for a = p, q do do return end end
