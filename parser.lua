@@ -126,9 +126,9 @@ local start = r.index-#r.lasttoken
 				-- lua doesn't consider the - to be a part of the number literal
 				-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
 local start = r.index
-				if r.data:match'0[xX]' then
-					local token = r:canbe'0[xX][%da-fA-F]+'
-					coroutine.yield(token, 'number')
+				if r:canbe'0[xX]' then
+					local token = r:canbe'[%da-fA-F]+'
+					coroutine.yield('0x'..token, 'number')
 				-- TODO if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
 				else
 					local token = r:canbe'[%.%d]+'
@@ -182,7 +182,11 @@ function Tokenizer:consume()
 	self.nexttokentype = nexttokentype
 end
 function Tokenizer:getpos()
-	return 'line '..(#self.r.data:sub(1,self.r.index):gsub('[^\n]','')+1)
+	local sofar = self.r.data:sub(1,self.r.index)
+	local lastline = sofar:match('[^\n]*$') or ''
+	return 'line '..(#sofar:gsub('[^\n]','')+1)
+		..' col '..#lastline
+		..' code "'..lastline..'"'
 end
 
 local Parser = class()
@@ -469,7 +473,9 @@ function Parser:exp_addsub()
 			['+'] = ast._add,
 			['-'] = ast._sub,
 		}
-		a = assert(classForSymbol[self.lasttoken])(a, assert(self:exp_addsub()))
+		local cl = assert(classForSymbol[self.lasttoken])
+		local b = assert(self:exp_addsub())
+		a = cl(a, b)
 	end
 	return a
 end

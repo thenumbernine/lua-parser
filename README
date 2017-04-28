@@ -8,8 +8,9 @@ See the tests folder for example usage.
 
 minify_tests.txt taken from the tests at https://github.com/stravant/LuaMinify
 
-
-Known bugs: "foo"() works, while in Lua it should fail
+Known bugs: 
+- "foo"() works, while in Lua it should fail
+- still doesn't parse hex floating point precision numbers introduced in lua 5.2
 
 I tested this by parsing itself,
 then using the parsed & reconstructed version to parse itself,
