@@ -1,7 +1,8 @@
 #!/usr/bin/env lua5.1
 --taken from the tests at https://github.com/stravant/LuaMinify
 local parser = require 'parser'
-print(_VERSION)
+local version = _VERSION:match'^Lua (.*)$'
+print(version)
 for line in io.lines'minify_tests.txt' do
 	local expected = not line:match('FAIL_'..version)
 	local luaResults = not not (loadstring or load)(line)
