@@ -6,6 +6,10 @@ AST also contains some functions like flatten() for use with optimizing / auto-i
 
 See the tests folder for example usage.
 
+while I was at it, I added a require() replacement for parsing Lua scripts and registering callbacks,
+so any other script can say "require 'parser.require'.callbacks:insert(function(tree) ... modify the parse tree ... end)"
+and viola, Lua preprocessor in Lua!
+
 minify_tests.txt taken from the tests at https://github.com/stravant/LuaMinify
 
 Known bugs: 
@@ -16,3 +20,4 @@ I tested this by parsing itself,
 then using the parsed & reconstructed version to parse itself,
 then using the parsed & reconstructed version to parse the parsed & reconstructed version,
 then using the 2x parsed & reconstructed version to parse itself
+
