@@ -1,4 +1,4 @@
-local basedir = [[C:\Users\crm\frameworks]]
+local basedir = USERPROFILE..[[\frameworks]]
 for i=1,select('#', ...) do
 	local arg = select(i, ...)
 	print(i, arg)
@@ -6,8 +6,12 @@ for i=1,select('#', ...) do
 	or arg == 'clang-6.0.1'
 	then
 		print'found clang'
+	elseif arg == 'lua'
+	or arg == 'lua-5.3.5'
+	then
+		print'found lua'
 	else
-		print(i,"is not clang")
+		print('unknown',arg)
 	end
 end
 

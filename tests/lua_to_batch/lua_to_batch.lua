@@ -46,7 +46,7 @@ end
 
 function ast._concat.tostringmethods:batch()
 	local a,b = table.unpack(self.args)
-	return a..b
+	return tostring(a)..tostring(b)
 end
 
 function ast._call.tostringmethods:batch()
@@ -93,12 +93,12 @@ function ast._if.tostringmethods:batch()
 		s = s .. tostring(ei)
 	end
 	if self.elsestmt then s = s .. tostring(self.elsestmt) end
-	s = s .. '\n' .. ('\t'):rep(tabs) .. ')'
+	s = s .. '\n' .. tab() .. ')'
 	return s
 end
 function ast._elseif.tostringmethods:batch()
 	return '\n'
-		..('\t'):rep(tabs)
+		..tab()
 		..') else if '..tostring(self.cond)
 		..' (\n'
 		..tabblock(self)
@@ -396,41 +396,68 @@ local function nextgoto()
 	return '__tmpgoto__'..gotoindex
 end
 tree:traverse(function(node)
-	if ast._if.is(node) then
+	local function handle_if(
+		cond,
+		ifstmts,
+		elseifs,
+		elsestmt
+	)
 		local l1 = nextgoto()
 		local l2 = nextgoto()
 		
 		local stmts = table()
 
-		local function processcond(node, l1, l2, nott)
-			if ast._or.is(node) then
-				processcond(node.args[1], l1, l2, nott)
-				processcond(node.args[2], l1, l2, nott)
-			elseif ast._and.is(node) then
-				processcond(node.args[1], l2, l1, not nott)
-				processcond(node.args[2], l2, l1, not nott)
+		local function processcond(boolexpr, l1, l2, nott)
+			if ast._or.is(boolexpr) then
+				processcond(boolexpr.args[1], l1, l2, nott)
+				processcond(boolexpr.args[2], l1, l2, nott)
+			elseif ast._and.is(boolexpr) then
+				processcond(boolexpr.args[1], l2, l1, not nott)
+				processcond(boolexpr.args[2], l2, l1, not nott)
 			else
-				if nott then node = ast._not(node) end
-				stmts:insert(ast._if(node, ast._goto(l1)))
+				if nott then boolexpr = ast._not(boolexpr) end
+				stmts:insert(ast._if(boolexpr, ast._goto(l1)))
 			end
 		end
-		processcond(node.cond, l1, l2, false)
+		processcond(cond, l1, l2, false)
 		-- if condition is false:
 		-- (else stmts goes here)
 		-- TODO handle elseifs like nested if's in an else
-		if node.elsestmt then
-			for _,n in ipairs(node.elsestmt) do
-				stmts:insert(n)
+		if #elseifs > 0 or elsestmt then
+			-- handle else alone
+			if #elseifs == 0 then
+				for _,n in ipairs(elsestmt) do
+					stmts:insert(n)
+				end
+			else
+			-- handle else and then if's
+				elseifs = table(elseifs)
+				local firstelseif = elseifs:remove(1)
+				stmts:insert(handle_if(
+					firstelseif.cond,
+					firstelseif,
+					elseifs,
+					elsestmt
+				))
 			end
 		end
 		stmts:insert(ast._goto(l2))
 		-- if condition is true:
 		stmts:insert(ast._label(l1))
-		for _,n in ipairs(node) do
+		for _,n in ipairs(ifstmts) do
 			stmts:insert(n)
 		end
 		stmts:insert(ast._label(l2))
 		return ast._block(stmts:unpack())
+	end
+	
+	if ast._if.is(node) then
+		return handle_if(
+			node.cond,		-- cond
+			node,			-- stmts
+			node.elseifs,	-- elseifs
+			node.elsestmt	-- else
+		)
 	end
 	return node
 end)
