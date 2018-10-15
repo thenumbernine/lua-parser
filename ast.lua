@@ -257,7 +257,8 @@ end
 
 --statements
 
---local _stmt = class(node)
+local _stmt = class(node)
+ast._stmt = _stmt
 
 ast._assign = nodeclass({type='assign'}, _stmt)
 function ast._assign:init(vars, exprs)
@@ -272,7 +273,7 @@ end
 -- or should we infer?  _do(...) = {type='do', block={type='block, ...}}
 -- or should we do neither?  _do(...) = {type='do', ...}
 -- neither for now
-ast._do = nodeclass{type='do'}
+ast._do = nodeclass({type='do'}, _stmt)
 function ast._do:init(...)
 	for i,stmt in ipairs{...} do
 		self[i] = stmt
@@ -282,7 +283,7 @@ function ast._do.tostringmethods:lua()
 	return 'do '..spacesep(self)..' end'
 end
 
-ast._while = nodeclass{type='while'}
+ast._while = nodeclass({type='while'}, _stmt)
 function ast._while:init(cond, ...)
 	self.cond=cond
 	for i,stmt in ipairs{...} do
@@ -293,7 +294,7 @@ function ast._while.tostringmethods:lua()
 	return 'while '..tostring(self.cond)..' do '..spacesep(self)..' end'
 end
 
-ast._repeat = nodeclass{type='repeat'}
+ast._repeat = nodeclass({type='repeat'}, _stmt)
 function ast._repeat:init(cond, ...)
 	self.cond = cond
 	for i,stmt in ipairs{...} do
@@ -311,7 +312,7 @@ _if(_eq(a,b),
 	__elseif(...),
 	__else(...))
 --]]
-ast._if = nodeclass{type='if'}
+ast._if = nodeclass({type='if'}, _stmt)
 function ast._if:init(cond,...)
 	local elseifs = table()
 	local elsestmt, laststmt
@@ -344,7 +345,7 @@ function ast._if.tostringmethods:lua()
 end
 
 -- aux for _if
-ast._elseif = nodeclass{type='elseif'}
+ast._elseif = nodeclass({type='elseif'}, _stmt)
 function ast._elseif:init(cond,...)
 	self.cond = cond
 	for i,stmt in ipairs{...} do
@@ -356,7 +357,7 @@ function ast._elseif.tostringmethods:lua()
 end
 
 -- aux for _if
-ast._else = nodeclass{type='else'}
+ast._else = nodeclass({type='else'}, _stmt)
 function ast._else:init(...)
 	for i,stmt in ipairs{...} do
 		self[i] = stmt
@@ -366,7 +367,7 @@ function ast._else.tostringmethods:lua()
 	return ' else '..spacesep(self)
 end
 
-ast._foreq = nodeclass{type='foreq'}
+ast._foreq = nodeclass({type='foreq'}, _stmt)
 -- step is optional
 function ast._foreq:init(var,min,max,step,...)
 	self.var=var
@@ -384,7 +385,7 @@ function ast._foreq.tostringmethods:lua()
 	return s
 end
 
-ast._forin = nodeclass{type='forin'}
+ast._forin = nodeclass({type='forin'}, _stmt)
 function ast._forin:init(vars,iterexprs,...)
 	self.vars=vars
 	self.iterexprs=iterexprs
@@ -396,7 +397,7 @@ function ast._forin.tostringmethods:lua()
 	return 'for '..commasep(self.vars)..' in '..commasep(self.iterexprs)..' do '..spacesep(self)..' end'
 end
 
-ast._function = nodeclass{type='function'}
+ast._function = nodeclass({type='function'}, _stmt)
 -- name is optional
 function ast._function:init(name, args, ...)
 	-- prep args...
@@ -437,7 +438,7 @@ end
 -- the parser has to accept functions and variables as separate conditions
 --  I'm tempted to make them separate symbols here too ...
 -- exprs is a table containing: 1) a single function 2) a single assign statement 3) a list of variables
-ast._local = nodeclass{type='local'}
+ast._local = nodeclass({type='local'}, _stmt)
 function ast._local:init(exprs)
 	if ast._function.is(exprs[1]) or ast._assign.is(exprs[1]) then
 		assert(#exprs == 1, "local functions or local assignments must be the only child")
@@ -454,7 +455,7 @@ end
 
 -- control
 
-ast._return = nodeclass{type='return'}
+ast._return = nodeclass({type='return'}, _stmt)
 function ast._return:init(...)
 	self.exprs={...}
 end
@@ -462,7 +463,7 @@ function ast._return.tostringmethods:lua()
 	return 'return '..commasep(self.exprs)
 end
 
-ast._break = nodeclass{type='break'}
+ast._break = nodeclass({type='break'}, _stmt)
 function ast._break.tostringmethods:lua() return 'break' end
 
 ast._call = nodeclass{type='call'}

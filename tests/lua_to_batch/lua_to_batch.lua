@@ -1,3 +1,4 @@
+#!/usr/bin/env lua
 --[[
 batch file is a train wreck
 logical operators are missing
@@ -83,32 +84,6 @@ function ast._foreq.tostringmethods:batch()
 			..linesep(self)
 		..'\n)'
 end
-
---[[
-if is tricky...
-since batch supports no boolean operators in if conditions,
- and batch does support gotos
- I'll treat the transpiler like an asm code generator:
-if expr then stmts else stmts2 end => if expr ( stmts ) else ( stmts2 )
-if a or b then stmts else stmts2 end =>
-	if a then goto tmp1
-	if b then goto tmp1
-	stmts2
-	goto tmp2
-:tmp1
-	stmts
-:tmp2
-
-if a and b then stmts else stmts2 end =>
-	if not a then goto tmp1
-	if not b then goto tmp2
-	stmts2
-	goto tmp2
-:tmp1
-	stmts
-:tmp2
-
---]]
 
 function ast._if.tostringmethods:batch()
 	local s = 'if '..tostring(self.cond)
@@ -238,6 +213,39 @@ function ast._function.tostringmethods:batch()
 		.. 'exit /b'
 end
 
+-- TODO add to default lua
+ast._goto = ast.nodeclass{type='goto'}
+function ast._goto:init(label)
+	self.label = label
+end
+function ast._goto.tostringmethods:batch()
+	return 'goto '..self.label
+end
+
+ast._label = ast.nodeclass{type='label'}
+function ast._label:init(name)
+	self.name = name
+end
+function ast._label.tostringmethods:batch()
+	return ':'..self.name
+end
+
+-- notice this doesn't return any values
+-- I'm only using this for inserting an exit at the end of the global scope block, before all temp functions
+--  I should also move all other funtcions beneath this inserted statement...
+function ast._return.tostringmethods:batch()
+	return 'exit /b'
+end
+
+function ast._or.tostringmethods:batch()
+	error("should've replaced all of the or's")
+end
+function ast._and.tostringmethods:batch()
+	error("should've replaced all of the and's")
+end
+
+
+
 -- returns ancestors as a table, including self
 local function ancestors(node)
 	local t = table()
@@ -303,13 +311,6 @@ tree:traverse(function(node)
 	return node
 end)
 
--- notice this doesn't return any values
--- I'm only using this for inserting an exit at the end of the global scope block, before all temp functions
---  I should also move all other funtcions beneath this inserted statement...
-function ast._return.tostringmethods:batch()
-	return 'exit /b'
-end
-
 -- TODO
 -- move all functions to global namespace
 -- make sure there's an exit /b before the first function
@@ -332,9 +333,6 @@ tree:traverse(function(node)
 		for _,stmt in ipairs(stmts) do
 			stmt:traverse(function(node2)
 				if ast._var.is(node2) then
-assert(type(node2.name) == 'string')
-assert(type(node.var.name) == 'string')
-print(node.var.name, node2.name)
 					if node2.name == node.var.name then
 						return ast._var(1)
 					end
@@ -362,6 +360,80 @@ for _,f in ipairs(newfuncs) do
 end
 ast.refreshparents(tree)
 --]]
+
+
+--[[
+if is tricky...
+since batch supports no boolean operators in if conditions,
+ and batch does support gotos
+ I'll treat the transpiler like an asm code generator:
+if expr then stmts else stmts2 end => if expr ( stmts ) else ( stmts2 )
+if a or b then stmts else stmts2 end =>
+	if a goto tmp1
+	if b goto tmp1
+	stmts2
+	goto tmp2
+:tmp1
+	stmts
+:tmp2
+
+if a and b then stmts else stmts2 end =>
+	if not a goto tmp1
+	if not b goto tmp2
+	stmts2
+	goto tmp2
+:tmp1
+	stmts
+:tmp2
+
+general case: if there's an 'if' stmt then generate 2 labels
+	and do the short-circuit evaluation
+	replacing all 'a and b's with 'not (not a or not b)'
+--]]
+local gotoindex = 0
+local function nextgoto()
+	gotoindex = gotoindex + 1
+	return '__tmpgoto__'..gotoindex
+end
+tree:traverse(function(node)
+	if ast._if.is(node) then
+		local l1 = nextgoto()
+		local l2 = nextgoto()
+		
+		local stmts = table()
+
+		local function processcond(node, l1, l2, nott)
+			if ast._or.is(node) then
+				processcond(node.args[1], l1, l2, nott)
+				processcond(node.args[2], l1, l2, nott)
+			elseif ast._and.is(node) then
+				processcond(node.args[1], l2, l1, not nott)
+				processcond(node.args[2], l2, l1, not nott)
+			else
+				if nott then node = ast._not(node) end
+				stmts:insert(ast._if(node, ast._goto(l1)))
+			end
+		end
+		processcond(node.cond, l1, l2, false)
+		-- if condition is false:
+		-- (else stmts goes here)
+		-- TODO handle elseifs like nested if's in an else
+		if node.elsestmt then
+			for _,n in ipairs(node.elsestmt) do
+				stmts:insert(n)
+			end
+		end
+		stmts:insert(ast._goto(l2))
+		-- if condition is true:
+		stmts:insert(ast._label(l1))
+		for _,n in ipairs(node) do
+			stmts:insert(n)
+		end
+		stmts:insert(ast._label(l2))
+		return ast._block(stmts:unpack())
+	end
+	return node
+end)
 
 ast.tostringmethod = 'batch'
 file[outfile] = table{
