@@ -213,6 +213,10 @@ function Parser:setData(data)
 
 	self.tree = self:chunk()
 
+	-- now that we have the tree, build parents
+	-- ... since I don't do that during construction ...
+	ast.refreshparents(self.tree)
+
 	if self.t.token then
 		error("unexpected "..self.t.token)
 	end

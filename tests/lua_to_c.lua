@@ -9,7 +9,7 @@ function tab()
 end
 function tabblock(t)
 	tabs = tabs + 1
-	local s = table(t):map(function(expr)
+	local s = table(t):mapi(function(expr)
 		return tab() .. tostring(expr)
 	end):concat';\n'
 	tabs = tabs - 1
@@ -32,7 +32,7 @@ for _,info in ipairs{
 } do
 	local name, op = table.unpack(info)
 	ast['_'..name].tostringmethods.c = function(self) 
-		return table(self.args):map(tostring):concat(' '..op..' ')
+		return table(self.args):mapi(tostring):concat(' '..op..' ')
 	end
 end
 ast._not.tostringmethods.c = function(self)
@@ -56,7 +56,7 @@ ast._block.tostringmethods.c = function(self)
 	return tabblock(self)
 end
 ast._call.tostringmethods.c = function(self)
-	return tostring(self.func)..'('..table(self.args):map(tostring):concat', '..')'
+	return tostring(self.func)..'('..table.mapi(self.args, tostring):concat', '..')'
 end
 ast._foreq.tostringmethods.c = function(self)
 	local s = 'for (auto '..self.var..' = '..self.min..'; '..self.var..' < '..self.max..'; '
@@ -69,17 +69,17 @@ ast._foreq.tostringmethods.c = function(self)
 	return s
 end
 ast._forin.tostringmethods.c = function(self)
-	return 'for ('..table(self.vars):map(tostring):concat', '..' in '..table(self.iterexprs):map(tostring):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+	return 'for ('..table(self.vars):mapi(tostring):concat', '..' in '..table(self.iterexprs):mapi(tostring):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
 end
 ast._function.tostringmethods.c = function(self)
 	if self.name then
 		-- global-scope def?
-		--return 'auto '..self.name..'('..table(self.args):map(function(arg) return 'auto '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+		--return 'auto '..self.name..'('..table(self.args):mapi(function(arg) return 'auto '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
 		-- local-scope named function def ...
-		return 'auto '..self.name..' = []('..table(self.args):map(function(arg) return 'auto '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+		return 'auto '..self.name..' = []('..table(self.args):mapi(function(arg) return 'auto '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
 	else
 		-- lambdas?
-		return '[]('..table(self.args):map(function(arg) return 'auto '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+		return '[]('..table(self.args):mapi(function(arg) return 'auto '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
 	end
 end
 ast._if.tostringmethods.c = function(self)
@@ -97,7 +97,7 @@ ast._else.tostringmethods.c = function(self)
 	return ' else {\n' .. tabblock(self) .. tab() .. '}'
 end
 ast._indexself.tostringmethods.c = function(self)
-	return self.expr..'.'..self.key
+	return tostring(self.expr)..'.'..tostring(self.key)
 end
 ast._local.tostringmethods.c = function(self)
 	if self.exprs[1].type == 'function' or self.exprs[1].type == 'assign' then
@@ -111,17 +111,21 @@ ast._local.tostringmethods.c = function(self)
 		return s:concat'\n'
 	end
 end
-print(names:sort():concat' ')
+--print(names:sort():concat' ')
 
-local code = file['lua_to_c.lua']
+local code = file[... or 'lua_to_c.lua']
+--[[
 print('original:')
 print(code)
+--]]
 
 local tree = parser.parse(code)
+--[[
 print('lua:')
 print(tree)
 print()
+--]]
 
 ast.tostringmethod = 'c'
-print('c:')
+--print('c:')
 print(tree)

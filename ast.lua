@@ -1,14 +1,12 @@
 local table = require 'ext.table'
 local class = require 'ext.class'
-
-ToStringLua = {
-	
-}
+local range = require 'ext.range'
 
 
 local ast = {}
 
 local node = class()
+node.tostringmethods = {}	-- each class gets a unique one
 ast.node = node
 
 local fields = {
@@ -39,33 +37,39 @@ ast.exec = node.exec
 
 --[[
 I need to fix this up better to handle short-circuiting, replacing, removing, etc...
-parent is the parent-first traversal method
-child is the child-first traversal
+parentFirstCallback is the parent-first traversal method
+childFirstCallback is the child-first traversal
 return what value of the callbacks you want 
 returning a new node at the parent callback will not traverse its subsequent new children added to the tree
 --]]
-function node.traverse(n, parent, child)
-	if parent then
-		local ret = parent(n)
-		if ret ~= n then
+function traverseRecurse(
+	node,
+	parentFirstCallback,
+	childFirstCallback,
+	parentNode
+)
+	if not ast.node.is(node) then return node end
+	if parentFirstCallback then
+		local ret = parentFirstCallback(node, parentNode)
+		if ret ~= node then
 			return ret
 		end
 	end
-	if type(n) == 'table' then
+	if type(node) == 'table' then
 		-- treat the object itself like an array of many
-		for i=1,#n do
-			n[i] = node.traverse(n[i], parent, child)
+		for i=1,#node do
+			node[i] = traverseRecurse(node[i], parentFirstCallback, childFirstCallback, node)
 		end
 		for _,field in ipairs(fields) do
 			local name = field[1]
 			local howmuch = field[2]
-			if n[name] then
+			if node[name] then
 				if howmuch == 'one' then
-					n[name] = node.traverse(n[name], parent, child)
+					node[name] = traverseRecurse(node[name], parentFirstCallback, childFirstCallback, node)
 				elseif howmuch == 'many' then
-					local value = n[name]
+					local value = node[name]
 					for i=#value,1,-1 do
-						value[i] = node.traverse(value[i], parent, child)
+						value[i] = traverseRecurse(value[i], parentFirstCallback, childFirstCallback, node)
 					end
 				elseif howmuch == 'field' then
 				else
@@ -74,12 +78,27 @@ function node.traverse(n, parent, child)
 			end
 		end
 	end
-	if child then
-		n = child(n)
+	if childFirstCallback then
+		node = childFirstCallback(node, parentNode)
 	end
-	return n
+	return node
 end
-ast.traverse = node.traverse
+
+function ast.refreshparents(node)
+	traverseRecurse(node, function(node, parent)
+		node.parent = parent
+		return node
+	end)
+end
+
+local function traverse(node, ...)
+	local newnode = traverseRecurse(node, ...)
+	ast.refreshparents(newnode)
+	return newnode
+end
+
+node.traverse = traverse
+ast.traverse = traverse
 
 function node.copy(n)
 	local newn = {}
@@ -155,23 +174,23 @@ return something(g ret, h ret)
 --]]
 function node.flatten(f, varmap)
 	f = node.copy(f)
-	node.traverse(f, function(n)
+	traverseRecurse(f, function(n)
 		if type(n) == 'table'
-		and n.type == 'call'
+		and ast._call.is(n)
 		then
 			local funcname = tostring(n.func)	-- in case it's a var ... ?
 			assert(funcname, "can't flatten a function with anonymous calls")
 			local f = varmap[funcname]
 			if f
 			and #f == 1
-			and f[1].type == 'return'
+			and ast._return.is(f[1])
 			then
 				local retexprs = {}
 				for i,e in ipairs(f[1].exprs) do
 					retexprs[i] = node.copy(e)
-					node.traverse(retexprs[i], function(v)
+					traverseRecurse(retexprs[i], function(v)
 						if type(v) == 'table'
-						and v.type == 'arg'
+						and ast._arg.is(v)
 						then
 							return node.copy(n.args[i])
 						end
@@ -188,19 +207,42 @@ end
 ast.flatten = node.flatten
 
 local function spacesep(stmts)
-	return table.concat(table.map(stmts, tostring), ' ')
+	return table.mapi(stmts, tostring):concat' '
 end
 
 local function commasep(exprs)
-	return table.concat(table.map(exprs, tostring), ',')
+	return table.mapi(exprs, tostring):concat','
+end
+
+
+--[[
+make __tostring modular
+give each node class a lookup table for whatever the current 'tostringmethod' is
+then remove all __tostring methods and replace the base class __tostring with something to call into the lookup table
+--]]
+ast.tostringmethod = 'lua'
+local defaultToString = function(self)
+	local f = self.tostringmethods[ast.tostringmethod]
+	if not f then error("failed to find tostringmethod for method "..tostring(ast.tostringmethod).." for node of type "..tostring(self.type)) end
+	return f(self)
 end
 
 local allclasses = table{node}
-local function nodeclass(...)
-	local newclass = class(node, ...)
+ast.allclasses = allclasses
+local function nodeclass(contents, parent)
+	local newclass = class(parent or ast.node)
+	newclass.tostringmethods = {}
+	for k,v in pairs(contents) do
+		newclass[k] = v
+	end
+	
+	-- TODO put in root-most ast class
+	newclass.__tostring = defaultToString
+
 	allclasses:insert(newclass)
 	return newclass
 end
+ast.nodeclass = nodeclass
 
 -- generic global stmt collection
 ast._block = nodeclass{type='block'}
@@ -209,18 +251,20 @@ function ast._block:init(...)
 		self[i] = stmt
 	end
 end
-function ast._block:__tostring()
+function ast._block.tostringmethods:lua()
 	return spacesep(self)
 end
 
 --statements
 
-ast._assign = nodeclass{type='assign'}
+--local _stmt = class(node)
+
+ast._assign = nodeclass({type='assign'}, _stmt)
 function ast._assign:init(vars, exprs)
 	self.vars = table(vars)
 	self.exprs = table(exprs)
 end
-function ast._assign:__tostring()
+function ast._assign.tostringmethods:lua()
 	return commasep(self.vars)..'='..commasep(self.exprs)
 end
 
@@ -234,7 +278,7 @@ function ast._do:init(...)
 		self[i] = stmt
 	end
 end
-function ast._do:__tostring()
+function ast._do.tostringmethods:lua()
 	return 'do '..spacesep(self)..' end'
 end
 
@@ -245,7 +289,7 @@ function ast._while:init(cond, ...)
 		self[i] = stmt
 	end
 end
-function ast._while:__tostring()
+function ast._while.tostringmethods:lua()
 	return 'while '..tostring(self.cond)..' do '..spacesep(self)..' end'
 end
 
@@ -256,7 +300,7 @@ function ast._repeat:init(cond, ...)
 		self[i] = stmt
 	end
 end
-function ast._repeat:__tostring()
+function ast._repeat.tostringmethods:lua()
 	return 'repeat '..spacesep(self)..' until '..tostring(self.cond)
 end
 
@@ -272,9 +316,9 @@ function ast._if:init(cond,...)
 	local elseifs = table()
 	local elsestmt, laststmt
 	for _,stmt in ipairs{...} do
-		if stmt.type == 'elseif' then
+		if ast._elseif.is(stmt) then
 			elseifs:insert(stmt)
-		elseif stmt.type == 'else' then
+		elseif ast._else.is(stmt) then
 			assert(not elsestmt)
 			elsestmt = stmt -- and remove
 		else
@@ -289,7 +333,7 @@ function ast._if:init(cond,...)
 	self.elseifs = elseifs
 	self.elsestmt = elsestmt
 end
-function ast._if:__tostring()
+function ast._if.tostringmethods:lua()
 	local s = 'if '..tostring(self.cond)..' then '..spacesep(self)
 	for _,ei in ipairs(self.elseifs) do
 		s = s .. tostring(ei)
@@ -307,7 +351,7 @@ function ast._elseif:init(cond,...)
 		self[i] = stmt
 	end
 end
-function ast._elseif:__tostring()
+function ast._elseif.tostringmethods:lua()
 	return ' elseif '..tostring(self.cond)..' then '..spacesep(self)
 end
 
@@ -318,7 +362,7 @@ function ast._else:init(...)
 		self[i] = stmt
 	end
 end
-function ast._else:__tostring()
+function ast._else.tostringmethods:lua()
 	return ' else '..spacesep(self)
 end
 
@@ -333,7 +377,7 @@ function ast._foreq:init(var,min,max,step,...)
 		self[i] = stmt
 	end
 end
-function ast._foreq:__tostring()
+function ast._foreq.tostringmethods:lua()
 	local s = 'for '..tostring(self.var)..' = '..tostring(self.min)..','..tostring(self.max)
 	if self.step then s = s..','..tostring(self.step) end
 	s = s .. ' do '..spacesep(self)..' end'
@@ -348,7 +392,7 @@ function ast._forin:init(vars,iterexprs,...)
 		self[i] = stmt
 	end
 end
-function ast._forin:__tostring()
+function ast._forin.tostringmethods:lua()
 	return 'for '..commasep(self.vars)..' in '..commasep(self.iterexprs)..' do '..spacesep(self)..' end'
 end
 
@@ -366,10 +410,11 @@ function ast._function:init(name, args, ...)
 		self[i] = stmt
 	end
 end
-function ast._function:__tostring()
+function ast._function.tostringmethods:lua()
 	local s = 'function '
 	if self.name then s = s .. tostring(self.name) end
-	s = s .. '(' .. commasep(table.map(self.args, tostring))
+	s = s .. '('
+		.. commasep(table.mapi(self.args, tostring))
 		.. ') ' .. spacesep(self) .. ' end'
 	return s
 end
@@ -381,7 +426,7 @@ function ast._arg:init(index)
 end
 -- params need to know what function they're in
 -- so they can reference the function's arg names
-function ast._arg:__tostring()
+function ast._arg.tostringmethods:lua()
 	return 'arg'..self.index
 end
 
@@ -394,13 +439,13 @@ end
 -- exprs is a table containing: 1) a single function 2) a single assign statement 3) a list of variables
 ast._local = nodeclass{type='local'}
 function ast._local:init(exprs)
-	if exprs[1].type == 'function' or exprs[1].type == 'assign' then 
+	if ast._function.is(exprs[1]) or ast._assign.is(exprs[1]) then
 		assert(#exprs == 1, "local functions or local assignments must be the only child")
 	end
 	self.exprs = table(assert(exprs))
 end
-function ast._local:__tostring()
-	if self.exprs[1].type == 'function' or self.exprs[1].type == 'assign' then
+function ast._local.tostringmethods:lua()
+	if ast._function.is(self.exprs[1]) or ast._assign.is(self.exprs[1]) then
 		return 'local '..tostring(self.exprs[1])
 	else
 		return 'local '..commasep(self.exprs)
@@ -413,20 +458,23 @@ ast._return = nodeclass{type='return'}
 function ast._return:init(...)
 	self.exprs={...}
 end
-function ast._return:__tostring()
+function ast._return.tostringmethods:lua()
 	return 'return '..commasep(self.exprs)
 end
 
 ast._break = nodeclass{type='break'}
-function ast._break:__tostring() return 'break' end
+function ast._break.tostringmethods:lua() return 'break' end
 
 ast._call = nodeclass{type='call'}
 function ast._call:init(func, ...)
 	self.func=func
 	self.args={...}
 end
-function ast._call:__tostring()
-	if #self.args == 1 and (self.args[1].type == 'table' or self.args[1].type == 'string') then
+function ast._call.tostringmethods:lua()
+	if #self.args == 1
+	and (ast._table.is(self.args[1])
+		or ast._string.is(self.args[1])
+	) then
 		return tostring(self.func)..tostring(self.args[1])
 	end
 	return tostring(self.func)..'('..commasep(self.args)..')'
@@ -436,28 +484,28 @@ end
 ast._nil = nodeclass{
 	type='nil',
 	const=true,
-	__tostring=function() return 'nil' end,
+	tostringmethods = {lua = function() return 'nil' end},
 }
 ast._true = nodeclass{
 	type='boolean',
 	const=true,
 	value=true,
-	__tostring=function() return 'true' end,
+	tostringmethods = {lua = function() return 'true' end},
 }
 ast._false = nodeclass{
 	type='boolean',
 	const=true,
 	value=false,
-	__tostring=function() return 'false' end,
+	tostringmethods = {lua = function() return 'false' end},
 }
 
 ast._number = nodeclass{type='number'}
 function ast._number:init(value) self.value = value end
-function ast._number:__tostring() return self.value end
+function ast._number.tostringmethods:lua() return self.value end
 
 ast._string = nodeclass{type='string'}
 function ast._string:init(value) self.value = value end
-function ast._string:__tostring() 
+function ast._string.tostringmethods:lua()
 	-- escape everything
 	return '"' .. self.value:gsub('.', function(c)
 		if c == '"' then return '\\"' end
@@ -470,16 +518,16 @@ function ast._string:__tostring()
 end
 
 ast._vararg = nodeclass{type='vararg'}
-function ast._vararg:__tostring() return '...' end
+function ast._vararg.tostringmethods:lua() return '...' end
 
 ast._table = nodeclass{type='table'}	-- single-element assigns
 function ast._table:init(args) 
 	self.args = table(assert(args))
 end
-function ast._table:__tostring() 
-	return '{'..self.args:map(function(arg)
+function ast._table.tostringmethods:lua()
+	return '{'..self.args:mapi(function(arg)
 		-- if it's an assign then wrap the vars[1] with []'s
-		if arg.type == 'assign' then
+		if ast._assign.is(arg) then
 			assert(#arg.vars == 1)
 			assert(#arg.exprs == 1)
 			return '[' .. tostring(arg.vars[1]) .. '] = '..tostring(arg.exprs[1])
@@ -492,7 +540,7 @@ ast._var = nodeclass{type='var'}	-- variable, lhs of ast._assign's, similar to _
 function ast._var:init(name)
 	self.name = name
 end
-function ast._var:__tostring()
+function ast._var.tostringmethods:lua()
 	return self.name
 end
 
@@ -500,7 +548,7 @@ ast._par = nodeclass{type='parenthesis'}
 function ast._par:init(expr)
 	self.expr = expr
 end
-function ast._par:__tostring()
+function ast._par.tostringmethods:lua()
 	return '('..tostring(self.expr)..')'
 end
 
@@ -519,9 +567,9 @@ function ast._index:init(expr,key)
 	end
 	self.key = key
 end
-function ast._index:__tostring()
+function ast._index.tostringmethods:lua()
 -- TODO - if self.key is a string and has no funny chars the use a .$key instead of [$key]
-	if self.key.type == 'string'
+	if ast._string.is(self.key)
 	and isLuaName(self.key.value) 
 	then
 		return tostring(self.expr)..'.'..self.key.value
@@ -538,8 +586,8 @@ function ast._indexself:init(expr,key)
 	assert(isLuaName(key))
 	self.key = assert(key)
 end
-function ast._indexself:__tostring()
-	return tostring(self.expr)..':'..self.key
+function ast._indexself.tostringmethods:lua()
+	return tostring(self.expr)..':'..tostring(self.key)
 end
 
 for _,info in ipairs{
@@ -566,8 +614,8 @@ for _,info in ipairs{
 	function cl:init(...)
 		self.args = {...}
 	end
-	function cl:__tostring()
-		return table.concat(table.map(self.args, tostring), ' '..self.op..' ') -- spaces required for 'and' and 'or'
+	function cl.tostringmethods:lua()
+		return table.mapi(self.args, tostring):concat(' '..self.op..' ') -- spaces required for 'and' and 'or'
 	end
 end
 
@@ -583,11 +631,10 @@ for _,info in ipairs{
 	function cl:init(arg)
 		self.arg = arg
 	end
-	function cl:__tostring()
+	function cl.tostringmethods:lua()
 		return ' '..self.op..' '..tostring(self.arg)	-- spaces required for 'not'
 	end
 end
-
 
 --[[
 function building and eventually reconstructing and inlining
@@ -617,21 +664,21 @@ f = _function(
 	end"
 	
 	-- convert + to -
-	traverse(f, function(n)
-		if n.type == 'add' then n.type = 'sub' end
+	traverseRecurse(f, function(n)
+		if ast._add.is(n) then n.type = 'sub' end
 	end
 	
 	-- then we do a tree-descent with replace rule:
-	traverse(f, function(n)
-		if n.type == 'param' and n.param == 2 then
+	traverseRecurse(f, function(n)
+		if ast._param.is(n) and n.param == 2 then
 			n.param = 1
 		end			
 	end)
 	-- and that's how dot() becomes lenSq()
 	
 	-- inline a function
-	traverse(f, function(n)
-		if n.type == 'call' then
+	traverseRecurse(f, function(n)
+		if ast._call.is(n) then
 			local inline = clonetree(n.func.body)
 			-- first scope/local declare args
 			local vars = {}
@@ -642,8 +689,8 @@ f = _function(
 				table.insert(inline, 1, localassign(v, arg))			-- names are all anonymous, just specify the var and assignment value.	 local() for declaring vars only, assign() for assigning them only, and localassign() for both?  or should i nest the two cmds?
 			end
 			-- then convert the body
-			traverse(inline, function(v)
-				if v.type == 'param' then
+			traverseRecurse(inline, function(v)
+				if ast._param.is(v) then
 					return vars[v.param]
 				end
 			end)
@@ -728,25 +775,6 @@ last-statements:
 
 then we could do tree traversing and graph inferencing
 and do some real inline optimization
-
 --]]
-
-
---[[
-last,
-make __tostring modular
-give each node class a lookup table for whatever the current 'tostringmethod' is 
-then remove all __tostring methods and replace the base class __tostring with something to call into the lookup table
---]]
-ast.tostringmethod = 'lua'
-local defaultToString = function(self)
-	return self.tostringmethods[ast.tostringmethod](self)
-end
-for _,nc in ipairs(allclasses) do
-	nc.tostringmethods = {
-		lua = nc.__tostring
-	}
-	nc.__tostring = defaultToString
-end
 
 return ast
