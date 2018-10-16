@@ -6,7 +6,20 @@ local range = require 'ext.range'
 local ast = {}
 
 local node = class()
+
 node.tostringmethods = {}	-- each class gets a unique one
+
+-- returns ancestors as a table, including self
+function node:ancestors()
+	local n = self
+	local t = table()
+	repeat
+		t:insert(n)
+		n = n.parent
+	until not n
+	return t
+end
+
 ast.node = node
 
 local fields = {
@@ -591,6 +604,8 @@ function ast._indexself.tostringmethods:lua()
 	return tostring(self.expr)..':'..tostring(self.key)
 end
 
+ast._op = class(node)
+
 for _,info in ipairs{
 	{'add','+'},
 	{'sub','-'},
@@ -610,7 +625,7 @@ for _,info in ipairs{
 } do
 	local name = info[1]
 	local op = info[2]
-	local cl = nodeclass{type=info[1], op=op}
+	local cl = nodeclass({type=info[1], op=op}, ast._op)
 	ast['_'..name] = cl
 	function cl:init(...)
 		self.args = {...}

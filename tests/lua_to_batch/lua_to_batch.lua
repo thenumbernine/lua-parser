@@ -2,10 +2,31 @@
 --[[
 batch file is a train wreck
 logical operators are missing
-calling internal is broke
-callnig external is broke
+calling internal functions is broke
+calling external scripts is broke
 local variables are broke
+so I'm fixing it
+
+features:
+- globals are transpiled into environment variables
+- locals are transpiled into ... setlocal variables, which operate like Lua globals, that are not environment variables
+- global scope functions work
+- if conditions work.  'and's, 'or's, 'not's, elseifs and else
+- arithmetic and concatenation operations work with assignment
+- command-line arguments, and command-line argument counting, works
+
+still todo:
+- inline and lambda functions need to be moved to global scope
+-  and keep track of what vars are in scope when a function is moved 
+-  local functions won't respect the local scope
+- scope of local variables isn't respected
+- breaking apart boolean expressions of statements into preceding temporary statements, and using them in either conditions or assignment
+-  boolean operations are based on short-circuiting, so assigning to a boolean operation still needs to be implemented
+-  in fact, merging the assignment and if-conditions, it might be best to use temp registers for bool expressions (and all expressions, for that matter)
+- heterogeneous tables -- non-numbers as keys
+- assigning functions to variables
 --]]
+
 local infile = ...
 
 local parser = require 'parser'
@@ -28,9 +49,25 @@ function tabblock(t)
 	return s
 end
 
-local function linesep(stmts)
-	return tabblock(stmts)
-	--return table.mapi(stmts, tostring):concat'\n'
+
+local varindex = 0
+local function nextvar()
+	varindex = varindex + 1
+	return '__tmpvar__'..varindex
+end
+
+
+
+local gotoindex = 0
+local function nextgoto()
+	gotoindex = gotoindex + 1
+	return '__tmpgoto__'..gotoindex
+end
+
+local funcindex = 0
+local function nextfunc()
+	funcindex = funcindex + 1
+	return '__tmpfunc__'..funcindex
 end
 
 
@@ -50,14 +87,27 @@ function ast._concat.tostringmethods:batch()
 end
 
 function ast._call.tostringmethods:batch()
-	local f = self.func.name
-	if f == 'select' then
-		error("select() should have be replaced already")
+	local funcname
+	if ast._var.is(self.func) then
+		funcname = self.func.name
+		if funcname == 'select' then
+			error("select() should have be replaced already")
+		end
+		if funcname == 'print' then
+			return 'echo '..table.mapi(self.args, tostring):concat'\t'
+		end
+	elseif ast._index.is(self.func) then
+		if ast._var.is(self.func.expr)
+		and self.func.expr.name == 'os'
+		and ast._string.is(self.func.key)
+		and self.func.key.value == 'exit'
+		then
+			-- os.exit(1) ... returns an error ... but shouldn't kill calling batch files, right?
+			return 'goto :eof'
+		end
+		funcname = tostring(self.func)
 	end
-	if f == 'print' then
-		return 'echo '..table.mapi(self.args, tostring):concat'\t'
-	end
-	return 'call :'..f..' '..table(self.args):map(tostring):concat'\t'
+	return 'call :'..funcname..table.mapi(self.args, function(arg) return ' '..tostring(arg) end):concat()
 end
 
 function ast._string.tostringmethods:batch()
@@ -81,7 +131,7 @@ function ast._foreq.tostringmethods:batch()
 		..tostring(self.step or '1')..','
 		..tostring(self.max)..') do (\n'
 			-- TODO call into loop body, and exit /b
-			..linesep(self)
+			..tabblock(self)
 		..'\n)'
 end
 
@@ -119,7 +169,7 @@ for _,info in ipairs{
 end
 
 function ast._block.tostringmethods:batch()
-	return linesep(self)
+	return tabblock(self)
 end
 --[[
 function ast._vararg.tostringmethods:batch()
@@ -208,9 +258,15 @@ function ast._function.tostringmethods:batch()
 	local name = assert(self.name)	-- if it's a lambda then generate it a name
 	assert(ast._var.is(name))
 	name = name.name	-- TODO function .name is a var, with .name a string (should it be a _string ?)
-	return '\n:'..name..'\n'
+	local l = nextgoto()
+	-- for safety's sake I'll add gotos around the function 
+	-- so global scope code keeps executing 
+	return '\n'
+		..'goto '..l..'\n'
+		..':'..name..'\n'
 		.. tabblock(self)..'\n'
-		.. 'exit /b'
+		.. 'exit /b\n'
+		.. ':'..l
 end
 
 -- TODO add to default lua
@@ -227,7 +283,7 @@ function ast._label:init(name)
 	self.name = name
 end
 function ast._label.tostringmethods:batch()
-	return ':'..self.name
+	return '\n:'..self.name
 end
 
 -- notice this doesn't return any values
@@ -244,18 +300,22 @@ function ast._and.tostringmethods:batch()
 	error("should've replaced all of the and's")
 end
 
-
-
--- returns ancestors as a table, including self
-local function ancestors(node)
-	local t = table()
-	repeat
-		t:insert(node)
-		node = node.parent
-	until not node
-	return t
+ast._endlocal = ast.nodeclass{type='endlocal'}
+function ast._endlocal:init(globals)
+	self.globals = table(globals)
 end
-
+function ast._endlocal.tostringmethods:batch()
+	-- TODO & set VARIABLE=value at the end
+	-- for all the global variables we assigned to 
+	local t = tab()
+	local s = '\n'..t..'endlocal'
+	t = t .. '\t'
+	for _,name in ipairs(self.globals) do
+		s = s .. ' ^\n'
+			..t..'& set "'..name..'=%'..name..'%"'
+	end
+	return s
+end
 
 infile = infile or 'test1.lua'
 local inbase, ext = io.getfileext(infile)
@@ -265,7 +325,7 @@ local code = file[infile]
 local tree = parser.parse(code)
 
 -- if there is a _call to "select('#', ...)" then find the parent block and put some argcount code at the beginning
-local addhere
+local found
 tree:traverse(function(node)
 	if ast._call.is(node)
 	and node.func.name == 'select'
@@ -274,24 +334,81 @@ tree:traverse(function(node)
 		if ast._string.is(node.args[1])
 		and node.args[1].value == '#'
 		then
-			local _, p = ancestors(node):find(nil, function(n) return ast._block.is(n) end)
+			local _, p = node:ancestors():find(nil, ast._block.is)
 			assert(p, "expected a parent to be a block")
-			addhere = p
+			found = p
 			return ast._var'__tmp__argcount'
 		end
 		return ast._index(
-			ast._var('__tmp__argvalue'),
+			ast._var'__tmp__argvalue',
 			node.args[1]
 		)
 	end
 	return node
 end)
-ast.refreshparents(tree)
 -- don't insert while traversing or else...
---if addhere then
-do addhere = tree	-- always use setlocal
-	table.insert(addhere, 1, ast._argcount())
+--if found then
+table.insert(tree, 1, ast._argcount())
+--end
+ast.refreshparents(tree)
+
+
+-- break down all composite expressions into temp stmts
+local assignsForStmts = {}
+local function opis(node)
+	return (ast._op.is(node) or ast._par.is(node))
+	and not (
+	-- not handling boolean right now
+		ast._eq.is(node)
+		or ast._ne.is(node)
+		or ast._ge.is(node)
+		or ast._gt.is(node)
+		or ast._le.is(node)
+		or ast._lt.is(node)
+		or ast._and.is(node)
+		or ast._or.is(node)
+		or ast._not.is(node)
+	)
 end
+tree:traverse(nil, function(node)
+	if opis(node) then
+		--  then move node to before the containing statement 
+		local _, p = node:ancestors():find(nil, ast._stmt.is)
+		if ast._local.is(p.parent) then p = p.parent end
+
+		local function replace(arg)
+			local varname = nextvar()
+			local var = ast._var(varname)
+			local assign = ast._local{ast._assign({var}, {arg})}
+			assignsForStmts[p] = assignsForStmts[p] or table()
+			assignsForStmts[p]:insert(assign)
+			return var
+		end
+
+		if ast._op.is(node) then
+			for i=1,#node.args do
+				if opis(node.args[i]) then
+					node.args[i] = replace(node.args[i])
+				end
+			end
+		elseif ast._par.is(node) then
+			--node.expr = replace(node.expr)
+			node = node.expr
+		end
+	end
+	return node
+end)
+tree:traverse(function(node)
+	local assigns = assignsForStmts[node]
+	if assigns then
+		assigns:insert(node)
+		return ast._block(assigns:unpack())
+	end
+	return node
+end)
+
+-- now replace 
+
 
 -- if there is an assignment, then check the statement for operations
 -- if it has string literals then use default assignment
@@ -304,16 +421,40 @@ tree:traverse(function(node)
 	or ast._div.is(node)
 	or ast._mod.is(node)
 	then
-		local _, p = ancestors(node):find(nil, function(n) return ast._stmt.is(n) end)
+		local _, p = node:ancestors():find(nil, ast._stmt.is)
 		assert(p, "expected a parent to be a stmt")
 		p.arith = true
 	end
 	return node
 end)
 
+
 -- TODO
 -- move all functions to global namespace
--- make sure there's an exit /b before the first function
+
+
+-- rename all function arguments to %'s
+tree:traverse(function(node)
+	if ast._function.is(node) then
+		-- TODO make sure the function is global scope
+		local args = table.mapi(node.args, function(arg) 
+			assert(type(arg.name) == 'string')
+			return arg.name 
+		end)
+		return node:traverse(function(node2)
+			if ast._var.is(node2) then
+				assert(type(node2.name) == 'string')
+				local i = table.find(args, node2.name)
+				if i then
+					return ast._var(i)
+				end
+			end
+			return node2
+		end)
+	end
+	return node
+end)
+
 
 -- replace foreq bodies with function calls
 -- this messes up scope of variables.
@@ -321,13 +462,10 @@ end)
 --  then rename all variable references accordingly
 -- this is bad because if and or exprs need to be unraveled as gotos in batch,
 --  and goto inside of for-loops fail (unless they are calls)
--- [[
-local newfuncindex = 0
 local newfuncs = table()
 tree:traverse(function(node)
 	if ast._foreq.is(node) then
-		newfuncindex = newfuncindex + 1
-		local newfuncname = '__tmpfunc__'..newfuncindex
+		local newfuncname = nextfunc()
 		local stmts = {table.unpack(node)}
 		-- replace all instances of the for-loop variable with the function arg %1
 		for _,stmt in ipairs(stmts) do
@@ -354,12 +492,10 @@ tree:traverse(function(node)
 	end
 	return node
 end)
-table.insert(tree, ast._return())
 for _,f in ipairs(newfuncs) do
 	table.insert(tree, f)
 end
 ast.refreshparents(tree)
---]]
 
 
 --[[
@@ -367,34 +503,10 @@ if is tricky...
 since batch supports no boolean operators in if conditions,
  and batch does support gotos
  I'll treat the transpiler like an asm code generator:
-if expr then stmts else stmts2 end => if expr ( stmts ) else ( stmts2 )
-if a or b then stmts else stmts2 end =>
-	if a goto tmp1
-	if b goto tmp1
-	stmts2
-	goto tmp2
-:tmp1
-	stmts
-:tmp2
-
-if a and b then stmts else stmts2 end =>
-	if not a goto tmp1
-	if not b goto tmp2
-	stmts2
-	goto tmp2
-:tmp1
-	stmts
-:tmp2
-
-general case: if there's an 'if' stmt then generate 2 labels
+if there's an 'if' stmt then generate 2 labels
 	and do the short-circuit evaluation
 	replacing all 'a and b's with 'not (not a or not b)'
 --]]
-local gotoindex = 0
-local function nextgoto()
-	gotoindex = gotoindex + 1
-	return '__tmpgoto__'..gotoindex
-end
 tree:traverse(function(node)
 	local function handle_if(
 		cond,
@@ -414,6 +526,8 @@ tree:traverse(function(node)
 			elseif ast._and.is(boolexpr) then
 				processcond(boolexpr.args[1], l2, l1, not nott)
 				processcond(boolexpr.args[2], l2, l1, not nott)
+			elseif ast._not.is(boolexpr) then
+				processcond(boolexpr.args[1], l1, l2, not nott)
 			else
 				if nott then boolexpr = ast._not(boolexpr) end
 				stmts:insert(ast._if(boolexpr, ast._goto(l1)))
@@ -462,10 +576,42 @@ tree:traverse(function(node)
 	return node
 end)
 
+-- keep track of all global assignments
+-- notice I'm not keeping track of scope
+local locals = {}
+local globals = {}
+tree:traverse(function(node)
+	if ast._assign.is(node) then
+		local names = table.mapi(node.vars, function(var)
+			assert(type(var.name) == 'string')
+			return var.name
+		end)
+		if ast._local.is(node.parent) then
+			for _,name in ipairs(names) do
+				locals[name] = true
+			end
+		else
+			for _,name in ipairs(names) do
+				globals[name] = true
+			end
+		end
+	end
+	return node
+end)
+for name,_ in ipairs(globals) do
+	if locals[name] then
+		print("Warning, you used the variable '..name..' as a local and a global.  I'm not keeping track of scope.")
+	end
+end
+
+table.insert(tree, ast._endlocal(table.keys(globals)))
+
 ast.tostringmethod = 'batch'
 file[outfile] = table{
 	'@echo off',
 	'setlocal enabledelayedexpansion',
 	tostring(tree)
 }:concat'\n'
+	-- until I can solve my tab problems:
+	:gsub('\t+', '\t')
 print('writing '..outfile)
