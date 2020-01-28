@@ -6,6 +6,10 @@ AST also contains some functions like flatten() for use with optimizing / auto-i
 
 See the tests folder for example usage.
 
+### Dependencies:
+
+- https://github.com/thenumbernine/lua-ext
+
 while I was at it, I added a require() replacement for parsing Lua scripts and registering callbacks,
 so any other script can say "require 'parser.require'.callbacks:insert(function(tree) ... modify the parse tree ... end)"
 and viola, Lua preprocessor in Lua!
