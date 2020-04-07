@@ -1,5 +1,6 @@
 local table = require 'ext.table'
 local class = require 'ext.class'
+local string = require 'ext.string'
 
 local ast = require 'parser.ast'
 
@@ -46,9 +47,6 @@ function DataReader:readblock()
 	end
 	self.lasttoken = self.data:sub(start, self.index - #self.lasttoken - 1)
 	return self.lasttoken
-end
-local function escape(s)
-	return (s:gsub('[%^%$%(%)%%%.%[%]%*%+%-%?]', '%%%0'))
 end
 
 local Tokenizer = class()
@@ -145,7 +143,7 @@ local start = r.index
 				-- see if it matches any symbols
 				local found = false
 				for _,symbol in ipairs(self.symbols) do
-					if r:canbe(escape(symbol)) then
+					if r:canbe(string.patescape(symbol)) then
 --print('read symbol ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
 						coroutine.yield(r.lasttoken, 'symbol')
 						found = true
