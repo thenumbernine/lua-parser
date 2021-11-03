@@ -1,7 +1,16 @@
 #!/usr/bin/env lua
 local parser = require 'parser'
 local ast = require 'parser.ast'
-require 'ext'
+local file = require 'ext.file'
+local table = require 'ext.table'
+local os = require 'ext.os'
+
+local requires = table()
+local cobjtype = 'Object'
+
+local cppReservedWord = {
+	'class',
+}
 
 local tabs = -1	-- because everything is in one block
 function tab()
@@ -19,7 +28,7 @@ end
 -- make lua output the default for nodes' c outputw
 local names = table()
 for name,nc in pairs(ast) do
-	if ast.node.is(nc) then
+	if ast.node:isa(nc) then
 		names:insert(name)
 		nc.tostringmethods.c = nc.tostringmethods.lua
 	end
@@ -35,31 +44,42 @@ for _,info in ipairs{
 		return table(self.args):mapi(tostring):concat(' '..op..' ')
 	end
 end
-ast._not.tostringmethods.c = function(self)
-	return '!'..self[1]
+function ast._not.tostringmethods:c()
+	return '!'..tostring(self[1])
 end
-ast._len.tostringmethods.c = function(self)
-	return self[1]..'.size()';
+function ast._len.tostringmethods:c()
+	return tostring(self[1])..'.size()';
 end
-ast._assign.tostringmethods.c = function(self)
+function ast._assign.tostringmethods:c()
 	local s = table()
 	for i=1,#self.vars do
 		if self.exprs[i] then
-			s:insert(self.vars[i]..' = '..self.exprs[i])
+			s:insert(tostring(self.vars[i])..' = '..tostring(self.exprs[i]))
 		else
 			s:insert(tostring(self.vars[i]))
 		end
 	end
 	return s:concat', '
 end
-ast._block.tostringmethods.c = function(self)
+function ast._block.tostringmethods:c()
 	return tabblock(self)
 end
-ast._call.tostringmethods.c = function(self)
-	return tostring(self.func)..'('..table.mapi(self.args, tostring):concat', '..')'
+function ast._call.tostringmethods:c()
+	local s = tostring(self.func)..'('..table.mapi(self.args, tostring):concat', '..')'
+	if self.func.name == 'require' then
+		if self.args[1].type == 'string' then
+			-- ok here we add the require file based on our lua path
+			-- does this mean we need to declare the lua path up front to lua_to_c?
+			requires:insert(self.args[1].value)
+		else
+			s = s .. '\n#error require arg not a string'
+		end
+		--s = s .. ' ## HERE ##'
+	end
+	return s
 end
-ast._foreq.tostringmethods.c = function(self)
-	local s = 'for (auto '..self.var..' = '..self.min..'; '..self.var..' < '..self.max..'; '
+function ast._foreq.tostringmethods:c()
+	local s = 'for ('..cobjtype..' '..self.var..' = '..self.min..'; '..self.var..' < '..self.max..'; '
 	if self.step then
 		s = s .. self.var..' += '..self.step
 	else
@@ -68,21 +88,21 @@ ast._foreq.tostringmethods.c = function(self)
 	s = s ..') {\n' .. tabblock(self) .. tab() .. '}'
 	return s
 end
-ast._forin.tostringmethods.c = function(self)
+function ast._forin.tostringmethods:c()
 	return 'for ('..table(self.vars):mapi(tostring):concat', '..' in '..table(self.iterexprs):mapi(tostring):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
 end
-ast._function.tostringmethods.c = function(self)
+function ast._function.tostringmethods:c()
 	if self.name then
 		-- global-scope def?
-		--return 'auto '..self.name..'('..table(self.args):mapi(function(arg) return 'auto '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+		--return cobjtype..' '..self.name..'('..table(self.args):mapi(function(arg) return cobjtype..' '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
 		-- local-scope named function def ...
-		return 'auto '..self.name..' = []('..table(self.args):mapi(function(arg) return 'auto '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+		return cobjtype..' '..self.name..' = []('..table(self.args):mapi(function(arg) return cobjtype..' '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
 	else
 		-- lambdas?
-		return '[]('..table(self.args):mapi(function(arg) return 'auto '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+		return '[]('..table(self.args):mapi(function(arg) return cobjtype..' '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
 	end
 end
-ast._if.tostringmethods.c = function(self)
+function ast._if.tostringmethods:c()
 	local s = 'if ('..self.cond..') {\n' .. tabblock(self) .. tab() .. '}'
 	for _,ei in ipairs(self.elseifs) do
 		s = s .. ei
@@ -90,42 +110,153 @@ ast._if.tostringmethods.c = function(self)
 	if self.elsestmt then s = s .. self.elsestmt end
 	return s
 end
-ast._elseif.tostringmethods.c = function(self)
+function ast._elseif.tostringmethods:c()
 	return ' else if ('..self.cond..') {\n' .. tabblock(self) .. tab() .. '}'
 end
-ast._else.tostringmethods.c = function(self)
+function ast._else.tostringmethods:c()
 	return ' else {\n' .. tabblock(self) .. tab() .. '}'
 end
-ast._indexself.tostringmethods.c = function(self)
+function ast._index.tostringmethods:c()
+	return tostring(self.expr)..'['..tostring(self.key)..']'
+end
+function ast._indexself.tostringmethods:c()
 	return tostring(self.expr)..'.'..tostring(self.key)
 end
-ast._local.tostringmethods.c = function(self)
+function ast._local.tostringmethods:c()
 	if self.exprs[1].type == 'function' or self.exprs[1].type == 'assign' then
-		-- if exprs[1] is a multi-assign then an 'auto' needs to prefix each new declaration
-		return 'auto '..self.exprs[1]
+		-- if exprs[1] is a multi-assign then an 'cobjtype' needs to prefix each new declaration
+		return cobjtype..' '..tostring(self.exprs[1])
 	else
 		local s = table()
 		for i=1,#self.exprs do
-			s:insert('auto '..self.exprs[i])
+			s:insert(cobjtype..' '..self.exprs[i])
 		end
 		return s:concat'\n'
 	end
 end
+function ast._vararg.tostringmethods:c()
+	return 'reserved_vararg'	-- reserved name?
+end
+function ast._var.tostringmethods:c()
+	if cppReservedWord[self.name] then
+		return 'cppreserved_' .. self.name
+	end
+	return self.name
+end
 --print(names:sort():concat' ')
 
-local code = file[... or 'lua_to_c.lua']
---[[
-print('original:')
-print(code)
---]]
 
-local tree = parser.parse(code)
---[[
-print('lua:')
-print(tree)
-print()
---]]
 
 ast.tostringmethod = 'c'
 --print('c:')
-print(tree)
+
+local function addtab(s)
+	return '\t'..(s:gsub('\n', '\n\t'))	-- tab
+end
+
+-- also populates requires()
+local function luaFileToCpp(fn)
+	assert(fn, "expected filename")
+	local luacode = assert(os.fileexists(fn), "failed to find "..tostring(fn))
+	local luacode = assert(file[fn], "failed to find "..tostring(fn))
+	local tree = parser.parse(luacode)
+	local cppcode = tostring(tree)
+	cppcode = '//file: '..fn..'\n'..cppcode
+	cppcode = addtab(cppcode)
+	return cppcode 
+end
+
+
+
+print[[
+
+#include "CxxAsLua/Object.h"
+using namespace CxxAsLua;
+
+// how to handle _G ...
+// esp wrt locals ...
+// if we use _G then that incurs overhead ...
+Object _G;
+
+// for global calls ...
+Object error;
+Object type;
+Object require;
+Object table;
+
+int main(int argc, char** argv) {
+	_G = Object::Map();
+	_G["package"] = Object::Map();
+	_G["package"]["loaded"] = Object::Map();
+
+	error = _G["error"] = [](Object x) -> Object {
+		throw std::runtime_error((std::string)x);
+	};
+
+	//hmm, 'type' might be used as a global later, so i might have to remove the 'using namespace' and instead replace all Object's with Object::Object's
+	::type = _G["type"] = [](Object x) -> Object {
+		auto details = x.details;
+		if (std::dynamic_pointer_cast<Object_Details_Nil>(details)) {
+			return "nil";
+		} else if (std::dynamic_pointer_cast<Object_Details_Boolean>(details)) {
+			return "boolean";
+		} else if (std::dynamic_pointer_cast<Object_Details_Number>(details)) {
+			return "number";
+		} else if (std::dynamic_pointer_cast<Object_Details_String>(details)) {
+			return "string";
+		} else if (std::dynamic_pointer_cast<Object_Details_Table>(details)) {
+			return "table";
+		} else if (std::dynamic_pointer_cast<Object_Details_Function>(details)) {
+			return "function";
+		}
+		return "unknown";
+	};
+	
+	table = _G["table"] = Object::Map();
+
+	table["concat"] = [](VarArg arg) -> Object {
+		// list, sep, i
+	};
+
+	require = _G["require"] = [&](std::string const & s) -> Object {
+		Object x = _G["package"]["loaded"][s];
+		if (x != nil) return x;
+	
+		x = _G["cppmodules"][s];
+		if (x != nil) {
+			x = x();
+			_G["package"]["loaded"][s] = x;
+			return x;
+		}
+
+		return error(Object("idk how to load ") + s);
+	};
+	
+	_G["cppmodules"] = Object::Map();
+]]
+
+local cppcode = luaFileToCpp(... or 'lua_to_c_test.lua')
+
+for _,req in ipairs(requires) do
+	-- ok here's where lua_to_c has to assume the same LUA_PATH as the c++ runtime
+	print('//require: '..req)
+	local fn = package.searchpath(req, package.path)
+	if not fn then
+		print("// package.searchpath couldn't find file")
+	else
+		print([[
+	_G["cppmodules"]["]]..req..[["] = []() -> Object {
+]])
+		print(addtab(luaFileToCpp(fn)))
+	
+		print[[
+	};
+]]
+	end
+end
+
+print(cppcode)
+
+print[[
+}
+]]

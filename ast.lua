@@ -61,7 +61,7 @@ function traverseRecurse(
 	childFirstCallback,
 	parentNode
 )
-	if not ast.node.is(node) then return node end
+	if not ast.node:isa(node) then return node end
 	if parentFirstCallback then
 		local ret = parentFirstCallback(node, parentNode)
 		if ret ~= node then
@@ -189,21 +189,21 @@ function node.flatten(f, varmap)
 	f = node.copy(f)
 	traverseRecurse(f, function(n)
 		if type(n) == 'table'
-		and ast._call.is(n)
+		and ast._call:isa(n)
 		then
 			local funcname = tostring(n.func)	-- in case it's a var ... ?
 			assert(funcname, "can't flatten a function with anonymous calls")
 			local f = varmap[funcname]
 			if f
 			and #f == 1
-			and ast._return.is(f[1])
+			and ast._return:isa(f[1])
 			then
 				local retexprs = {}
 				for i,e in ipairs(f[1].exprs) do
 					retexprs[i] = node.copy(e)
 					traverseRecurse(retexprs[i], function(v)
 						if type(v) == 'table'
-						and ast._arg.is(v)
+						and ast._arg:isa(v)
 						then
 							return node.copy(n.args[i])
 						end
@@ -240,6 +240,10 @@ local defaultToString = function(self)
 	return f(self)
 end
 
+local function defaultConcat(a,b)
+	return tostring(a) .. tostring(b)
+end
+
 local allclasses = table{node}
 ast.allclasses = allclasses
 local function nodeclass(contents, parent)
@@ -251,6 +255,8 @@ local function nodeclass(contents, parent)
 	
 	-- TODO put in root-most ast class
 	newclass.__tostring = defaultToString
+
+	newclass.__concat = defaultConcat
 
 	allclasses:insert(newclass)
 	return newclass
@@ -330,9 +336,9 @@ function ast._if:init(cond,...)
 	local elseifs = table()
 	local elsestmt, laststmt
 	for _,stmt in ipairs{...} do
-		if ast._elseif.is(stmt) then
+		if ast._elseif:isa(stmt) then
 			elseifs:insert(stmt)
-		elseif ast._else.is(stmt) then
+		elseif ast._else:isa(stmt) then
 			assert(not elsestmt)
 			elsestmt = stmt -- and remove
 		else
@@ -453,13 +459,13 @@ end
 -- exprs is a table containing: 1) a single function 2) a single assign statement 3) a list of variables
 ast._local = nodeclass({type='local'}, _stmt)
 function ast._local:init(exprs)
-	if ast._function.is(exprs[1]) or ast._assign.is(exprs[1]) then
+	if ast._function:isa(exprs[1]) or ast._assign:isa(exprs[1]) then
 		assert(#exprs == 1, "local functions or local assignments must be the only child")
 	end
 	self.exprs = table(assert(exprs))
 end
 function ast._local.tostringmethods:lua()
-	if ast._function.is(self.exprs[1]) or ast._assign.is(self.exprs[1]) then
+	if ast._function:isa(self.exprs[1]) or ast._assign:isa(self.exprs[1]) then
 		return 'local '..tostring(self.exprs[1])
 	else
 		return 'local '..commasep(self.exprs)
@@ -486,8 +492,8 @@ function ast._call:init(func, ...)
 end
 function ast._call.tostringmethods:lua()
 	if #self.args == 1
-	and (ast._table.is(self.args[1])
-		or ast._string.is(self.args[1])
+	and (ast._table:isa(self.args[1])
+		or ast._string:isa(self.args[1])
 	) then
 		return tostring(self.func)..tostring(self.args[1])
 	end
@@ -541,7 +547,7 @@ end
 function ast._table.tostringmethods:lua()
 	return '{'..self.args:mapi(function(arg)
 		-- if it's an assign then wrap the vars[1] with []'s
-		if ast._assign.is(arg) then
+		if ast._assign:isa(arg) then
 			assert(#arg.vars == 1)
 			assert(#arg.exprs == 1)
 			return '[' .. tostring(arg.vars[1]) .. '] = '..tostring(arg.exprs[1])
@@ -583,7 +589,7 @@ function ast._index:init(expr,key)
 end
 function ast._index.tostringmethods:lua()
 -- TODO - if self.key is a string and has no funny chars the use a .$key instead of [$key]
-	if ast._string.is(self.key)
+	if ast._string:isa(self.key)
 	and isLuaName(self.key.value) 
 	then
 		return tostring(self.expr)..'.'..self.key.value
@@ -681,12 +687,12 @@ f = _function(
 	
 	-- convert + to -
 	traverseRecurse(f, function(n)
-		if ast._add.is(n) then n.type = 'sub' end
+		if ast._add:isa(n) then n.type = 'sub' end
 	end
 	
 	-- then we do a tree-descent with replace rule:
 	traverseRecurse(f, function(n)
-		if ast._param.is(n) and n.param == 2 then
+		if ast._param:isa(n) and n.param == 2 then
 			n.param = 1
 		end			
 	end)
@@ -694,7 +700,7 @@ f = _function(
 	
 	-- inline a function
 	traverseRecurse(f, function(n)
-		if ast._call.is(n) then
+		if ast._call:isa(n) then
 			local inline = clonetree(n.func.body)
 			-- first scope/local declare args
 			local vars = {}
@@ -706,7 +712,7 @@ f = _function(
 			end
 			-- then convert the body
 			traverseRecurse(inline, function(v)
-				if ast._param.is(v) then
+				if ast._param:isa(v) then
 					return vars[v.param]
 				end
 			end)
