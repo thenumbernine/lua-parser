@@ -81,7 +81,13 @@ local start = r.index - #r.lasttoken
 					-- read line otherwise
 					r:seekto'\n'
 				end
---print('read comment ['..start..','..(r.index-1)..']:'..r.data:sub(start, r.index-1))
+				local commentstr = r.data:sub(start, r.index-1)
+				-- TODO how to insert comments into the AST?  should they be their own nodes?
+				-- should all whitespace be its own node, so the original code text can be reconstructed exactly?
+				--coroutine.yield(commentstr, 'comment')
+
+--print('read comment ['..start..','..(r.index-1)..']:'..commentstr)
+			
 			-- block string
 			elseif r:readblock() then
 --print('read multi-line string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
