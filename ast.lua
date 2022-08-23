@@ -43,8 +43,8 @@ local fields = {
 	{'value', 'field'},
 }
 
-function node.exec(n)
-	return assert(load(tostring(n)))
+function node.exec(n, ...)
+	return assert(load(tostring(n), ...))
 end
 ast.exec = node.exec
 

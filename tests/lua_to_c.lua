@@ -195,27 +195,39 @@ int main(int argc, char** argv) {
 
 	//hmm, 'type' might be used as a global later, so i might have to remove the 'using namespace' and instead replace all Object's with Object::Object's
 	::type = _G["type"] = [](Object x) -> Object {
-		auto details = x.details;
-		if (std::dynamic_pointer_cast<Object_Details_Nil>(details)) {
+		if (x.is_nil()) {
 			return "nil";
-		} else if (std::dynamic_pointer_cast<Object_Details_Boolean>(details)) {
-			return "boolean";
-		} else if (std::dynamic_pointer_cast<Object_Details_Number>(details)) {
-			return "number";
-		} else if (std::dynamic_pointer_cast<Object_Details_String>(details)) {
+		} else if (x.is_string()) {
 			return "string";
-		} else if (std::dynamic_pointer_cast<Object_Details_Table>(details)) {
+		} else if (x.is_table()) {
 			return "table";
-		} else if (std::dynamic_pointer_cast<Object_Details_Function>(details)) {
+		} else if (x.is_boolean()) {
+			return "boolean";
+		} else if (x.is_function()) {
 			return "function";
+		} else if (x.is_nil()) {
+			return "nil";
 		}
-		return "unknown";
+		//or use getTypeIndex()
+		// or better yet, rewrite our x.details to be a std::variant, 
+		// and map the variant index to a type,
+		// then just store type info in that extra arra
 	};
 	
 	table = _G["table"] = Object::Map();
 
 	table["concat"] = [](VarArg arg) -> Object {
+		if (!arg[1].is_table()) error("expected a table");
+	//TODO FINISHME	
 		// list, sep, i
+		std::ostringstream s;
+		std::string sep = "";
+		for (const Object& o : arg.objects) {
+			std::cout << sep;
+			std::cout << o;
+			sep = "\t";
+		}
+		std::cout << std::endl;
 	};
 
 	require = _G["require"] = [&](std::string const & s) -> Object {
