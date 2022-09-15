@@ -3,7 +3,6 @@ local parser = require 'parser'
 local ast = require 'parser.ast'
 local file = require 'ext.file'
 local table = require 'ext.table'
-local os = require 'ext.os'
 
 local requires = table()
 local cobjtype = 'Object'
@@ -157,8 +156,8 @@ end
 -- also populates requires()
 local function luaFileToCpp(fn)
 	assert(fn, "expected filename")
-	local luacode = assert(os.fileexists(fn), "failed to find "..tostring(fn))
-	local luacode = assert(file[fn], "failed to find "..tostring(fn))
+	local luacode = assert(file(fn):exists(), "failed to find "..tostring(fn))
+	local luacode = assert(file(fn):read(), "failed to find "..tostring(fn))
 	local tree = parser.parse(luacode)
 	local cppcode = tostring(tree)
 	cppcode = '//file: '..fn..'\n'..cppcode
