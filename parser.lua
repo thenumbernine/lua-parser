@@ -53,7 +53,7 @@ local Tokenizer = class()
 
 -- symbols from largest to smallest
 Tokenizer.symbols = table()
-for w in ([[... .. == ~= <= >= + - * / % ^ # < > = ( ) { } [ ] ; : , .]]):gmatch('%S+') do
+for w in ([[... .. == ~= <= >= // << >> + - * / % ^ # < > = ( ) { } [ ] ; : , . ~ & |]]):gmatch('%S+') do
 	Tokenizer.symbols:insert(w)
 end
 
@@ -253,10 +253,10 @@ function Parser:chunk()
 	until false
 	local laststat = self:laststat()
 	if laststat then stmts:insert(laststat) end
--- in 5.2/5.3 should all statements have optional ;'s?
-if self.version == '5.2' or self.version == '5.3' then
-	self:canbe(';', 'symbol')
-end
+	-- in 5.2/5.3 should all statements have optional ;'s?
+	if self.version >= '5.2' then
+		self:canbe(';', 'symbol')
+	end
 	return ast._block(table.unpack(stmts))
 end
 function Parser:block(blockName)
@@ -334,15 +334,15 @@ function Parser:stat()
 		return ast._do(table.unpack(block))
 	end
 
-if self.version == '5.2' or self.version == '5.3' then
-	if self:canbe('break', 'keyword') then
-		if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
-			error("break not inside loop")
+	if self.version >= '5.2' then
+		if self:canbe('break', 'keyword') then
+			if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
+				error("break not inside loop")
+			end
+			self:canbe(';', 'symbol')
+			return ast._break()
 		end
-		self:canbe(';', 'symbol')
-		return ast._break()
 	end
-end
 
 	-- now we handle functioncall and varlist = explist rules
 	
@@ -442,7 +442,12 @@ function Parser:exp_and()
 	return a
 end
 function Parser:exp_cmp()
-	local a = self:exp_concat()
+	local a
+	if self.version >= '5.3' then
+		a = self:exp_bor()
+	else
+		a = self:exp_concat()
+	end
 	if not a then return end
 	if self:canbe('<', 'symbol')
 	or self:canbe('>', 'symbol')
@@ -463,6 +468,48 @@ function Parser:exp_cmp()
 	end
 	return a
 end
+-- BEGIN 5.3+ ONLY:
+function Parser:exp_bor()
+	local a = self:exp_bxor()
+	if not a then return end
+	if self:canbe('|', 'symbol') then
+		a = ast._bor(a, assert(self:exp_bor()))
+	end
+	return a
+end
+function Parser:exp_bxor()
+	local a = self:exp_band()
+	if not a then return end
+	if self:canbe('~', 'symbol') then
+		a = ast._bxor(a, assert(self:exp_bxor()))
+	end
+	return a
+end
+function Parser:exp_band()
+	local a = self:exp_shift()
+	if not a then return end
+	if self:canbe('&', 'symbol') then
+		a = ast._band(a, assert(self:exp_band()))
+	end
+	return a
+end
+function Parser:exp_shift()
+	local a = self:exp_concat()
+	if not a then return end
+	if self:canbe('<<', 'symbol')
+	or self:canbe('>>', 'symbol')
+	then
+		local classForSymbol = {
+			['<<'] = ast._shl,
+			['>>'] = ast._shr,
+		}
+		local cl = assert(classForSymbol[self.lasttoken])
+		local b = assert(self:exp_shift())
+		a = cl(a, b)
+	end
+	return a
+end
+-- END 5.3+ ONLY:
 function Parser:exp_concat()
 	local a = self:exp_addsub()
 	if not a then return end
@@ -493,11 +540,13 @@ function Parser:exp_muldivmod()
 	if self:canbe('*', 'symbol')
 	or self:canbe('/', 'symbol')
 	or self:canbe('%', 'symbol')
+	or (self.version >= '5.3' and self:canbe('//', 'symbol'))
 	then
 		local classForSymbol = {
 			['*'] = ast._mul,
 			['/'] = ast._div,
 			['%'] = ast._mod,
+			['//'] = ast._idiv,
 		}
 		a = assert(classForSymbol[self.lasttoken])(a, assert(self:exp_muldivmod()))
 	end
@@ -507,6 +556,9 @@ function Parser:exp_unary()
 	if self:canbe('not', 'keyword') then return ast._not(assert(self:exp_unary())) end
 	if self:canbe('#', 'symbol') then return ast._len(assert(self:exp_unary())) end
 	if self:canbe('-', 'symbol') then return ast._unm(assert(self:exp_unary())) end
+	if self.version >= '5.3' then
+		if self:canbe('~', 'symbol') then return ast._bnot(assert(self:exp_unary())) end
+	end
 	return self:exp_pow()
 end
 function Parser:exp_pow()
