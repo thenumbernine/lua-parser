@@ -26,56 +26,6 @@ The `Parser` object has a few more functions to it corresponding with internal u
 This is the AST (abstract syntax tree) library, 
 it hold a collection of AST classes, each representing a different token in the Lua syntax.
 
-Here are the following ast classes:
-```
-_add
-_and
-_arg
-_assign
-_block
-_break
-_call
-_concat
-_div
-_do
-_else
-_elseif
-_eq
-_false
-_foreq
-_forin
-_function
-_ge
-_gt
-_if
-_index
-_indexself
-_le
-_len
-_local
-_lt
-_mod
-_mul
-_ne
-_nil
-_not
-_number
-_op
-_or
-_par
-_pow
-_repeat
-_return
-_stmt
-_string
-_sub
-_table
-_true
-_unm
-_var
-_vararg
-_while
-```
 
 `n = ast.node()`
 = This is the superclass of all AST classes.
