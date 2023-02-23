@@ -177,10 +177,8 @@ function Tokenizer:consume()
 	local status, nexttoken, nexttokentype = coroutine.resume(self.gettokenthread)
 	-- detect errors
 	if not status then
-		io.stderr:write(nexttoken..'\n'
-			..debug.traceback(self.gettokenthread)..'\n'
-			..debug.traceback())
-		os.exit()
+		error(nexttoken..'\n'
+			..debug.traceback(self.gettokenthread))
 	end
 	self.nexttoken = nexttoken
 	self.nexttokentype = nexttokentype
