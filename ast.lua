@@ -1,7 +1,5 @@
 local table = require 'ext.table'
 local class = require 'ext.class'
-local range = require 'ext.range'
-
 
 local ast = {}
 
@@ -52,10 +50,10 @@ ast.exec = node.exec
 I need to fix this up better to handle short-circuiting, replacing, removing, etc...
 parentFirstCallback is the parent-first traversal method
 childFirstCallback is the child-first traversal
-return what value of the callbacks you want 
+return what value of the callbacks you want
 returning a new node at the parent callback will not traverse its subsequent new children added to the tree
 --]]
-function traverseRecurse(
+local function traverseRecurse(
 	node,
 	parentFirstCallback,
 	childFirstCallback,
@@ -252,7 +250,7 @@ local function nodeclass(contents, parent)
 	for k,v in pairs(contents) do
 		newclass[k] = v
 	end
-	
+
 	-- TODO put in root-most ast class
 	newclass.__tostring = defaultToString
 
@@ -541,7 +539,7 @@ ast._vararg = nodeclass{type='vararg'}
 function ast._vararg.tostringmethods:lua() return '...' end
 
 ast._table = nodeclass{type='table'}	-- single-element assigns
-function ast._table:init(args) 
+function ast._table:init(args)
 	self.args = table(assert(args))
 end
 function ast._table.tostringmethods:lua()
@@ -553,7 +551,7 @@ function ast._table.tostringmethods:lua()
 			return '[' .. tostring(arg.vars[1]) .. '] = '..tostring(arg.exprs[1])
 		end
 		return tostring(arg)
-	end):concat(',')..'}' 
+	end):concat(',')..'}'
 end
 
 ast._var = nodeclass{type='var'}	-- variable, lhs of ast._assign's, similar to _arg
@@ -579,7 +577,7 @@ end
 ast._index = nodeclass{type='index'}
 function ast._index:init(expr,key)
 	self.expr = expr
-	-- helper add wrappers to some types: 
+	-- helper add wrappers to some types:
 	if type(key) == 'string' then
 		key = ast._string(key)
 	elseif type(key) == 'number' then
@@ -590,7 +588,7 @@ end
 function ast._index.tostringmethods:lua()
 -- TODO - if self.key is a string and has no funny chars the use a .$key instead of [$key]
 	if ast._string:isa(self.key)
-	and isLuaName(self.key.value) 
+	and isLuaName(self.key.value)
 	then
 		return tostring(self.expr)..'.'..self.key.value
 	end
@@ -682,29 +680,29 @@ f = _function(
 			)
 		)
 	}
-	
+
 	-- becomes --
-	
+
 	"function vec3.add(a,b)
 		return vec3(
 			a[1] + b[1],
 			a[2] + b[2],
 			a[3] + b[3])
 	end"
-	
+
 	-- convert + to -
 	traverseRecurse(f, function(n)
 		if ast._add:isa(n) then n.type = 'sub' end
 	end
-	
+
 	-- then we do a tree-descent with replace rule:
 	traverseRecurse(f, function(n)
 		if ast._param:isa(n) and n.param == 2 then
 			n.param = 1
-		end			
+		end
 	end)
 	-- and that's how dot() becomes lenSq()
-	
+
 	-- inline a function
 	traverseRecurse(f, function(n)
 		if ast._call:isa(n) then
@@ -726,14 +724,14 @@ f = _function(
 			return inline
 		end
 	end)
-	
+
 	--[=[
 	make a list ... check it twice ...
-	
+
 	block		- statement block
 		[1]...[n] - array of stmt objects
 		.tostring = table.concat(block, ' ')
-	
+
 statements:
 	assign		- assignment operation
 		.vars	- array of var objects
@@ -743,18 +741,18 @@ statements:
 	do			- do / end block wrapper
 		[1]...[n] - array of stmt objects
 		.tostring = 'do '..table.concat(do, ' ')..' end'
-		
+
 	while
 		.cond	- condition expression
 		[1]...[n] - statements to execute
 		.tostring = 'while '..cond..' do '..table.concat(tostring, ' ')..' end'
-		
+
 	repeat
 		.cond	- condition expression
 		[1]...[n] - statements to execute
 		.tostring = 'repeat '..table.concat(tostring, ' ')..' until '..cond
-	
-	-- this could be prettier if we just had 'else' as a var, and did a special-case reinterpret for else->if's 
+
+	-- this could be prettier if we just had 'else' as a var, and did a special-case reinterpret for else->if's
 	-- but it would also have more nodes...
 	if
 		.cond		- condition expression
@@ -768,39 +766,39 @@ statements:
 						map(elseifs or {}, function(ei) return " elseif "..ei.cond.." then "..table.concat(stmts, " ") end),
 						' ')..
 					map(else or {}, function(else) return " else "..table.concat(else, ' ') end)
-	
+
 	-- for =
 	-- for in
 	-- local function
-	-- local 
-		
+	-- local
+
 last-statements:
 	return		- returns a list of expressions
 		.exprs
 		.tostring = 'return '..table.concat(exprs, ',')
-	
+
 	break		- breaks out of the current loop
-	
-	
+
+
 	stmt	general parent class of all statements
-	
-	
+
+
 	block
 		[1]...[n]: array of stmt objects
 		-tostring: "do "..all statement's tostring().." end"
-	
+
 	func
 		-name - string of function name.  optional.
 		-args - array of strings of argument names
 		-body - block of the statements in the function body
-	
-		
-	
+
+
+
 	--]=]
-	
+
 	-- we can similarly insert debug.traceback EVERYWHERE something gets referenced
 	so that I CAN GET STACK TRACES FROM ERRORS IN COROUTINES
-				
+
 
 then we could do tree traversing and graph inferencing
 and do some real inline optimization
