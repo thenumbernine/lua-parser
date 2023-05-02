@@ -15,12 +15,12 @@ See the tests folder for example usage.
 `Parser = require 'parser'`
 This will return the parser class.
 
-`Parser.parse(data[, version])`
+`Parser.parse(data[, version, source])`
 This parses the code in `data` and returns an `ast._block` object.
-This is shorthand for `Parser(data, version).tree`
+This is shorthand for `Parser(data, version, source).tree`
 `version` is a string `'5.1', '5.2', '5.3'`, etc., corresponding to your Lua version.
 The `Parser` object has a few more functions to it corresponding with internal use while parsing.
-
+`source` is a description of the source, i.e. filename, which is included in some nodes (functions) for information on where they are declared.
 
 `ast = require 'parser.ast'`
 This is the AST (abstract syntax tree) library, 

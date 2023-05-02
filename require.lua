@@ -35,7 +35,7 @@ require = setmetatable({
 					local parser
 					local result, tree = xpcall(function()
 						parser = Parser()
-						parser:setData(str)
+						parser:setData(str, fn)
 						return parser.tree
 					end, function(err)
 						return err..'\n'..debug.traceback()

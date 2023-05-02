@@ -183,6 +183,14 @@ function Tokenizer:consume()
 	self.nexttoken = nexttoken
 	self.nexttokentype = nexttokentype
 end
+-- TODO a more efficient way of doing this
+function Tokenizer:getlinecol()
+	local sofar = self.r.data:sub(1,self.r.index)
+	local lastline = sofar:match('[^\n]*$') or ''
+	local line = (#sofar:gsub('[^\n]','')+1)
+	local col = #lastline
+	return line, col
+end
 function Tokenizer:getpos()
 	local sofar = self.r.data:sub(1,self.r.index)
 	local lastline = sofar:match('[^\n]*$') or ''
@@ -194,21 +202,22 @@ end
 local Parser = class()
 
 -- static function
-function Parser.parse(data, version)
-	return Parser(data, version).tree
+function Parser.parse(...)
+	return Parser(...).tree
 end
 
-function Parser:init(data, version)
+function Parser:init(data, version, source)
 	self.version = version or _VERSION:match'^Lua (.*)$'
 	if data then
-		self:setData(data)
+		self:setData(data, source)
 	end
 end
-function Parser:setData(data)
+function Parser:setData(data, source)
 	assert(data, "expected data")
 	data = tostring(data)
 	local t = Tokenizer(data)
 	self.t = t
+	self.source = source
 
 	self.blockStack = table()
 	self.functionStack = table{'function-vararg'}
@@ -267,7 +276,7 @@ function Parser:stat()
 	if self:canbe('local', 'keyword') then
 		if self:canbe('function', 'keyword') then
 			local name = self:mustbe(nil, 'name')
-			return ast._local{ast._function(name, table.unpack(assert(self:funcbody())))}
+			return ast._local{self:makeFunction(name, table.unpack(assert(self:funcbody())))}
 		else
 			local namelist = assert(self:namelist())
 			if self:canbe('=', 'symbol') then
@@ -280,7 +289,7 @@ function Parser:stat()
 		end
 	elseif self:canbe('function', 'keyword') then
 		local funcname = self:funcname()
-		return ast._function(funcname, table.unpack(assert(self:funcbody())))
+		return self:makeFunction(funcname, table.unpack(assert(self:funcbody())))
 	elseif self:canbe('for', 'keyword') then
 		local namelist = assert(self:namelist())
 		if self:canbe('=', 'symbol') then
@@ -649,9 +658,16 @@ function Parser:args()
 		return explist or {}
 	end
 end
+-- helper which also includes the line and col in the function object
+function Parser:makeFunction(...)
+	local f = ast._function(...)
+	f.line, f.col = self.t:getlinecol()
+	f.source = self.source
+	return f
+end
 function Parser:function_()
 	if not self:canbe('function', 'keyword') then return end
-	return ast._function(nil, table.unpack(assert(self:funcbody())))
+	return self:makeFunction(nil, table.unpack(assert(self:funcbody())))
 end
 -- returns a table of ... first element is a table of args, rest of elements are the body statements
 function Parser:funcbody()
