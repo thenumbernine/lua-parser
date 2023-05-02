@@ -523,3 +523,11 @@ a = { [1]=a, [2]=b, }
 a = { true, a=1; ["foo"]="bar", }
 "foo"()									-- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 a = b ^ -c
+a = -b ^ c
+a = -b ^ -c
+a = b * -c
+a = -b * c
+a = -b * -c
+a = b + -c
+a = -b + c
+a = -b + -c

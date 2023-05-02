@@ -563,7 +563,7 @@ function Parser:exp_pow()
 	local a = self:subexp()
 	if not a then return end
 	if self:canbe('^', 'symbol') then
-		a = ast._pow(a, assert(self:exp_pow()))
+		a = ast._pow(a, assert(self:exp_unary()))
 	end
 	return a
 end
