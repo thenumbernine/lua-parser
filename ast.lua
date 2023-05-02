@@ -1,5 +1,6 @@
 local table = require 'ext.table'
 local class = require 'ext.class'
+local tolua = require 'ext.tolua'
 
 local ast = {}
 
@@ -217,8 +218,11 @@ function node.flatten(f, varmap)
 end
 ast.flatten = node.flatten
 
+-- TODO something more flexible than this
+ast.spaceseparator = '\n'
+
 local function spacesep(stmts)
-	return table.mapi(stmts, tostring):concat' '
+	return table.mapi(stmts, tostring):concat(ast.spaceseparator)
 end
 
 local function commasep(exprs)
@@ -524,15 +528,8 @@ function ast._number.tostringmethods:lua() return self.value end
 ast._string = nodeclass{type='string'}
 function ast._string:init(value) self.value = value end
 function ast._string.tostringmethods:lua()
-	-- escape everything
-	return '"' .. self.value:gsub('.', function(c)
-		if c == '"' then return '\\"' end
-		if c == '\\' then return '\\\\' end
-		local b = c:byte()
-		if b < 32 or b > 127 then
-			return '\\'..b
-		end
-	end) .. '"'
+	-- use ext.tolua's string serializer
+	return tolua(self.value)
 end
 
 ast._vararg = nodeclass{type='vararg'}

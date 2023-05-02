@@ -31,7 +31,6 @@ require = setmetatable({
 				if f then f:close() end
 				if str then
 					-- here i'm going to insert a profiling call into each function
---print('parsing filename',fn)
 					self.totalLines = self.totalLines + #str:gsub('\n+','\n'):gsub('[^\n]','') + 1
 					local parser
 					local result, tree = xpcall(function()
@@ -50,9 +49,15 @@ require = setmetatable({
 					end
 
 					str = tostring(tree)
-print('parsed '..fn..' total lines:',self.totalLines)
-					result = assert(load(str))()
-					package.loaded[m] = result
+print('...parsed '..fn..' total lines:',self.totalLines)
+					local f, err = load(str)
+					if not f then
+						io.stderr:write(require 'template.showcode'(str)..'\n')
+						io.stderr:write('on file ',fn,'\n')
+						error(err)
+					end
+					result = f()
+					package.loaded[m] = result or true
 					return result
 				end
 			end

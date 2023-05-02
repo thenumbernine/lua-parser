@@ -271,6 +271,7 @@ I still need to support Lua 5.4 variable attributes.
 ### Dependencies:
 
 - https://github.com/thenumbernine/lua-ext
+- https://github.com/thenumbernine/lua-template
 
 While I was at it, I added a require() replacement for parsing Lua scripts and registering callbacks,
 so any other script can say `"require 'parser.require'.callbacks:insert(function(tree) ... modify the parse tree ... end)"`
