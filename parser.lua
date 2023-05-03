@@ -162,6 +162,9 @@ local start = r.index
 			end
 		end
 	end)
+end
+-- separate this in case someone has to modify the tokenizer symbols and keywords before starting
+function Tokenizer:start()
 	self:consume()
 	self:consume()
 end
@@ -216,6 +219,11 @@ function Parser:setData(data, source)
 	assert(data, "expected data")
 	data = tostring(data)
 	local t = Tokenizer(data)
+	if self.version >= '5.2' then
+		t.symbols:insert(1, '::')	-- for labels .. make sure you insert it before ::
+		t.keywords['goto'] = true
+	end
+	t:start()
 	self.t = t
 	self.source = source
 
@@ -256,14 +264,9 @@ function Parser:chunk()
 		local stmt = self:stat()
 		if not stmt then break end
 		stmts:insert(stmt)
-		self:canbe(';', 'symbol')
 	until false
-	local laststat = self:laststat()
+	local laststat = self:retstat()
 	if laststat then stmts:insert(laststat) end
-	-- in 5.2/5.3 should all statements have optional ;'s?
-	if self.version >= '5.2' then
-		self:canbe(';', 'symbol')
-	end
 	return ast._block(table.unpack(stmts))
 end
 function Parser:block(blockName)
@@ -273,6 +276,7 @@ function Parser:block(blockName)
 	return chunk
 end
 function Parser:stat()
+	repeat until not self:canbe(';', 'symbol')
 	if self:canbe('local', 'keyword') then
 		if self:canbe('function', 'keyword') then
 			local name = self:mustbe(nil, 'name')
@@ -339,15 +343,16 @@ function Parser:stat()
 		local block = assert(self:block())
 		self:mustbe('end', 'keyword')
 		return ast._do(table.unpack(block))
-	end
-
-	if self.version >= '5.2' then
-		if self:canbe('break', 'keyword') then
-			if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
-				error("break not inside loop")
-			end
-			self:canbe(';', 'symbol')
-			return ast._break()
+	elseif self.version >= '5.2' then
+		if self:canbe('goto', 'keyword') then
+			return ast._goto(self:mustbe(nil, 'name'))
+		-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
+		elseif self:canbe('break', 'keyword') then
+			return self:_break()
+		elseif self:canbe('::', 'symbol') then
+			local l = ast._label(self:mustbe(nil, 'name'))
+			self:mustbe('::', 'symbol')
+			return l
 		end
 	end
 
@@ -379,13 +384,12 @@ function Parser:stat()
 		end
 	end
 end
-function Parser:laststat()
-	if self:canbe('break', 'keyword') then
-		if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
-			error("break not inside loop")
-		end
-		self:canbe(';', 'symbol')
-		return ast._break()
+-- this is laststat in 5.1, retstat in 5.2+
+function Parser:retstat()
+	-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
+	-- that means only handle 'break' here in 5.1
+	if self.version == '5.1' and self:canbe('break', 'keyword') then
+		return self:_break()
 	end
 	if self:canbe('return', 'keyword') then
 		local explist = self:explist() or {}
@@ -393,6 +397,16 @@ function Parser:laststat()
 		return ast._return(table.unpack(explist))
 	end
 end
+
+-- verify we're in a loop, then return the break
+function Parser:_break()
+	if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
+		error("break not inside loop")
+	end
+	self:canbe(';', 'symbol')
+	return ast._break()
+end
+
 function Parser:funcname()
 	if not self:canbe(nil, 'name') then return end
 	local name = ast._var(self.lasttoken)

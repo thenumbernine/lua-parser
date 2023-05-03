@@ -660,6 +660,22 @@ for _,info in ipairs{
 	end
 end
 
+ast._goto = nodeclass({type='goto'}, _stmt)
+function ast._goto:init(name)
+	self.name = name
+end
+function ast._goto.tostringmethods:lua()
+	return 'goto '..self.name
+end
+
+ast._label = nodeclass({type='label'}, _stmt)
+function ast._label:init(name)
+	self.name = name
+end
+function ast._label.tostringmethods:lua()
+	return '::'..self.name..'::'
+end
+
 --[[
 function building and eventually reconstructing and inlining
 
