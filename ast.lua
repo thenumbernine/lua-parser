@@ -236,7 +236,7 @@ give each node class a lookup table for whatever the current 'tostringmethod' is
 then remove all __tostring methods and replace the base class __tostring with something to call into the lookup table
 --]]
 ast.tostringmethod = 'lua'
-local defaultToString = function(self)
+local nodeToString = function(self)
 	local f = self.tostringmethods[ast.tostringmethod]
 	if not f then error("failed to find tostringmethod for method "..tostring(ast.tostringmethod).." for node of type "..tostring(self.type)) end
 	return f(self)
@@ -256,7 +256,7 @@ local function nodeclass(contents, parent)
 	end
 
 	-- TODO put in root-most ast class
-	newclass.__tostring = defaultToString
+	newclass.__tostring = nodeToString
 
 	newclass.__concat = defaultConcat
 
@@ -329,9 +329,9 @@ end
 --[[
 _if(_eq(a,b),
 	_assign({a},{2}),
-	__elseif(...),
-	__elseif(...),
-	__else(...))
+	_elseif(...),
+	_elseif(...),
+	_else(...))
 --]]
 ast._if = nodeclass({type='if'}, _stmt)
 function ast._if:init(cond,...)
