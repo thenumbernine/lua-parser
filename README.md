@@ -6,6 +6,8 @@
 Parses to an abstract syntax tree representation.
 Call tostring() on the AST to get equivalent Lua code.
 
+Works for versions 5.1 5.2 5.3 5.4 and maybe some luajit versions depending on their compatability.
+
 AST also contains some functions like flatten() for use with optimizing / auto-inlining Lua.
 
 See the tests folder for example usage.
