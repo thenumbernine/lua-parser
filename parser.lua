@@ -16,7 +16,7 @@ function DataReader:done()
 end
 function DataReader:seekto(pattern)
 	local from, to = self.data:find(pattern, self.index)
-	if not from then 
+	if not from then
 		from = #self.data+1
 		to = from
 	end
@@ -42,8 +42,8 @@ function DataReader:readblock()
 	if not self:canbe('%[=*%[') then return end
 	local eq = assert(self.lasttoken:match('^%[(=*)%[$'))
 	local start = self.index
-	if not self:seekpast('%]'..eq..'%]') then 
-		error("expected closing block") 
+	if not self:seekpast('%]'..eq..'%]') then
+		error("expected closing block")
 	end
 	self.lasttoken = self.data:sub(start, self.index - #self.lasttoken - 1)
 	return self.lasttoken
@@ -51,9 +51,8 @@ end
 
 local Tokenizer = class()
 
--- symbols from largest to smallest
 Tokenizer.symbols = table()
-for w in ([[... .. == ~= <= >= // << >> + - * / % ^ # < > = ( ) { } [ ] ; : , . ~ & |]]):gmatch('%S+') do
+for w in ([[... .. == ~= <= >= + - * / % ^ # < > = ( ) { } [ ] ; : , .]]):gmatch('%S+') do
 	Tokenizer.symbols:insert(w)
 end
 
@@ -77,7 +76,7 @@ function Tokenizer:init(data)
 			if r:canbe'%-%-' then
 local start = r.index - #r.lasttoken
 				-- read block comment if it exists
-				if not r:readblock() then 
+				if not r:readblock() then
 					-- read line otherwise
 					r:seekto'\n'
 				end
@@ -87,7 +86,7 @@ local start = r.index - #r.lasttoken
 				--coroutine.yield(commentstr, 'comment')
 
 --print('read comment ['..start..','..(r.index-1)..']:'..commentstr)
-			
+
 			-- block string
 			elseif r:readblock() then
 --print('read multi-line string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
@@ -136,7 +135,7 @@ local start = r.index
 				-- TODO if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
 				else
 					local token = r:canbe'[%.%d]+'
-					assert(#token:gsub('[^%.]','') < 2, 'malformed number') 
+					assert(#token:gsub('[^%.]','') < 2, 'malformed number')
 					local n = table{token}
 					if r:canbe'e' then
 						n:insert(r.lasttoken)
@@ -165,6 +164,8 @@ local start = r.index
 end
 -- separate this in case someone has to modify the tokenizer symbols and keywords before starting
 function Tokenizer:start()
+	-- arrange symbols from largest to smallest
+	self.symbols:sort(function(a,b) return #a > #b end)
 	self:consume()
 	self:consume()
 end
@@ -218,10 +219,20 @@ end
 function Parser:setData(data, source)
 	assert(data, "expected data")
 	data = tostring(data)
+	self.gotos = {}		-- keep track of all gotos
+	self.labels = {}	-- keep track of all labels
 	local t = Tokenizer(data)
 	if self.version >= '5.2' then
-		t.symbols:insert(1, '::')	-- for labels .. make sure you insert it before ::
+		t.symbols:insert'::'	-- for labels .. make sure you insert it before ::
 		t.keywords['goto'] = true
+	end
+	if self.version >= '5.2' then
+		t.symbols:insert'//'
+		t.symbols:insert'~'
+		t.symbols:insert'&'
+		t.symbols:insert'|'
+		t.symbols:insert'<<'
+		t.symbols:insert'>>'
 	end
 	t:start()
 	self.t = t
@@ -231,6 +242,11 @@ function Parser:setData(data, source)
 	self.functionStack = table{'function-vararg'}
 
 	self.tree = self:chunk()
+
+	-- last verify that all gotos went to all labels
+	for _,g in pairs(self.gotos) do
+		assert(self.labels[g.name], "no visible label '"..g.name.."' for <goto> at line "..g.line)
+	end
 
 	-- now that we have the tree, build parents
 	-- ... since I don't do that during construction ...
@@ -264,9 +280,17 @@ function Parser:chunk()
 		local stmt = self:stat()
 		if not stmt then break end
 		stmts:insert(stmt)
+		if self.version == '5.1' then
+			self:canbe(';', 'symbol')
+		end
 	until false
 	local laststat = self:retstat()
-	if laststat then stmts:insert(laststat) end
+	if laststat then
+		stmts:insert(laststat)
+		if self.version == '5.1' then
+			self:canbe(';', 'symbol')
+		end
+	end
 	return ast._block(table.unpack(stmts))
 end
 function Parser:block(blockName)
@@ -276,13 +300,15 @@ function Parser:block(blockName)
 	return chunk
 end
 function Parser:stat()
-	repeat until not self:canbe(';', 'symbol')
+	if self.version >= '5.2' then
+		repeat until not self:canbe(';', 'symbol')
+	end
 	if self:canbe('local', 'keyword') then
 		if self:canbe('function', 'keyword') then
 			local name = self:mustbe(nil, 'name')
 			return ast._local{self:makeFunction(name, table.unpack(assert(self:funcbody())))}
 		else
-			local namelist = assert(self:namelist())
+			local namelist = assert(self:attnamelist())
 			if self:canbe('=', 'symbol') then
 				local explist = assert(self:explist())
 				local assign = ast._assign(namelist, explist)
@@ -345,28 +371,34 @@ function Parser:stat()
 		return ast._do(table.unpack(block))
 	elseif self.version >= '5.2' then
 		if self:canbe('goto', 'keyword') then
-			return ast._goto(self:mustbe(nil, 'name'))
+			local name = self:mustbe(nil, 'name')
+			local g = ast._goto(name)
+			g.line, g.col = self.t:getlinecol()
+			self.gotos[name] = g
+			return g
 		-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
 		elseif self:canbe('break', 'keyword') then
 			return self:_break()
 		elseif self:canbe('::', 'symbol') then
-			local l = ast._label(self:mustbe(nil, 'name'))
+			local name = self:mustbe(nil, 'name')
+			local l = ast._label(name)
+			self.labels[name] = true
 			self:mustbe('::', 'symbol')
 			return l
 		end
 	end
 
 	-- now we handle functioncall and varlist = explist rules
-	
+
 	--[[
 	stat ::= varlist `=` explist | functioncall
 	varlist ::= var {`,` var}
 	var ::= Name | prefixexp `[` exp `]` | prefixexp `.` Name
 	prefixexp ::= var | functioncall | `(` exp `)`
-	functioncall ::= prefixexp args | prefixexp `:` Name args	
+	functioncall ::= prefixexp args | prefixexp `:` Name args
 		right now prefixexp is designed to process trailing args ...
 		... so just use it and complain if the wrapping ast is not a _call
-	likewise with var, complain if it is a call 
+	likewise with var, complain if it is a call
 	--]]
 	local prefixexp = self:prefixexp()
 	if prefixexp then
@@ -380,11 +412,11 @@ function Parser:stat()
 				vars:insert(var)
 			end
 			self:mustbe('=', 'symbol')
-			return ast._assign(vars, assert(self:explist()))	
+			return ast._assign(vars, assert(self:explist()))
 		end
 	end
 end
--- this is laststat in 5.1, retstat in 5.2+
+-- 'laststat' in 5.1, 'retstat' in 5.2+
 function Parser:retstat()
 	-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
 	-- that means only handle 'break' here in 5.1
@@ -393,7 +425,9 @@ function Parser:retstat()
 	end
 	if self:canbe('return', 'keyword') then
 		local explist = self:explist() or {}
-		self:canbe(';', 'symbol')
+		if self.version >= '5.2' then
+			self:canbe(';', 'symbol')
+		end
 		return ast._return(table.unpack(explist))
 	end
 end
@@ -403,7 +437,6 @@ function Parser:_break()
 	if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
 		error("break not inside loop")
 	end
-	self:canbe(';', 'symbol')
 	return ast._break()
 end
 
@@ -427,6 +460,28 @@ function Parser:namelist()
 	end
 	return names
 end
+-- same as above but with optional attributes
+function Parser:attnamelist()
+	local name = self:canbe(nil, 'name')
+	if not name then return end
+	local attrib = self:attrib()
+	local names = table{ast._var(name, attrib)}
+	while self:canbe(',', 'symbol') do
+		local name = self:mustbe(nil, 'name')
+		local attrib = self:attrib()
+		names:insert(ast._var(name, attrib))
+	end
+	return names
+end
+function Parser:attrib()
+	if self.version < '5.4' then return end
+	local attrib
+	if self:canbe('<', 'symbol') then
+		attrib = self:mustbe(nil, 'name')
+		self:mustbe('>', 'symbol')
+	end
+	return attrib
+end
 function Parser:explist()
 	local exp = self:exp()
 	if not exp then return end
@@ -438,10 +493,10 @@ function Parser:explist()
 end
 
 --[[
-exp ::= nil | false | true | Number | String | `...` | function | prefixexp | tableconstructor | exp binop exp | unop exp
+exp ::= nil | false | true | Numeral | LiteralString | `...` | function | prefixexp | tableconstructor | exp binop exp | unop exp
 ... splitting this into two ...
 exp ::= [unop] subexp {binop [unop] subexp}
-subexp ::= nil | false | true | Number | String | `...` | function | prefixexp | tableconstructor 
+subexp ::= nil | false | true | Numeral | LiteralString | `...` | function | prefixexp | tableconstructor
 --]]
 function Parser:exp()
 	return self:exp_or()
@@ -593,16 +648,16 @@ end
 function Parser:subexp()
 	local tableconstructor = self:tableconstructor()
 	if tableconstructor then return tableconstructor end
-	
+
 	local prefixexp = self:prefixexp()
 	if prefixexp then return prefixexp end
-	
-	local function_ = self:function_()
-	if function_ then return function_ end
 
-	if self:canbe('...', 'symbol') then 
+	local functiondef = self:functiondef()
+	if functiondef then return functiondef end
+
+	if self:canbe('...', 'symbol') then
 		assert(self.functionStack:last() == 'function-vararg')
-		return ast._vararg() 
+		return ast._vararg()
 	end
 	if self:canbe(nil, 'string') then return ast._string(self.lasttoken) end
 	if self:canbe(nil, 'number') then return ast._number(self.lasttoken) end
@@ -624,7 +679,7 @@ prefixexp ::= (Name {'[' exp ']' | `.` Name | [`:` Name] args} | `(` exp `)`) {a
 --]]
 function Parser:prefixexp()
 	local prefixexp
-	
+
 	if self:canbe('(', 'symbol') then
 		local exp = assert(self:exp())
 		self:mustbe(')', 'symbol')
@@ -649,7 +704,7 @@ function Parser:prefixexp()
 		else
 			local args = self:args()
 			if not args then break end
-			
+
 			prefixexp = ast._call(prefixexp, table.unpack(args))
 		end
 	end
@@ -662,10 +717,10 @@ end
 -- returns a table of the args -- particularly an empty table if no args were found
 function Parser:args()
 	if self:canbe(nil, 'string') then return {ast._string(self.lasttoken)} end
-	
+
 	local tableconstructor = self:tableconstructor()
 	if tableconstructor then return {tableconstructor} end
-	
+
 	if self:canbe('(', 'symbol') then
 		local explist = self:explist()
 		self:mustbe(')', 'symbol')
@@ -679,7 +734,8 @@ function Parser:makeFunction(...)
 	f.source = self.source
 	return f
 end
-function Parser:function_()
+-- 'function' in the 5.1 syntax
+function Parser:functiondef()
 	if not self:canbe('function', 'keyword') then return end
 	return self:makeFunction(nil, table.unpack(assert(self:funcbody())))
 end
@@ -728,7 +784,7 @@ function Parser:fieldlist()
 	self:fieldsep()
 	return fields
 end
-function Parser:field()	
+function Parser:field()
 	if self:canbe('[', 'symbol') then
 		local keyexp = assert(self:exp())
 		self:mustbe(']', 'symbol')

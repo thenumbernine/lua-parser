@@ -32,14 +32,14 @@
 
 	explist ::= exp {‘,’ exp}
 
-	exp ::=  nil | false | true | Number | String | ‘...’ | functiondef | 
+	exp ::=  nil | false | true | Numeral | LiteralString | ‘...’ | functiondef | 
 		 prefixexp | tableconstructor | exp binop exp | unop exp 
 
 	prefixexp ::= var | functioncall | ‘(’ exp ‘)’
 
 	functioncall ::=  prefixexp args | prefixexp ‘:’ Name args 
 
-	args ::=  ‘(’ [explist] ‘)’ | tableconstructor | String 
+	args ::=  ‘(’ [explist] ‘)’ | tableconstructor | LiteralString 
 
 	functiondef ::= function funcbody
 
@@ -55,8 +55,10 @@
 
 	fieldsep ::= ‘,’ | ‘;’
 
-	binop ::= ‘+’ | ‘-’ | ‘*’ | ‘/’ | ‘^’ | ‘%’ | ‘..’ | 
-		 ‘<’ | ‘<=’ | ‘>’ | ‘>=’ | ‘==’ | ‘~=’ | 
+	binop ::= ‘+’ | ‘-’ | ‘*’ | ‘/’ |
+		 ‘^’ |
+		 ‘%’ | 
+		 ‘..’ | ‘<’ | ‘<=’ | ‘>’ | ‘>=’ | ‘==’ | ‘~=’ | 
 		 and | or
 
 	unop ::= ‘-’ | not | ‘#’

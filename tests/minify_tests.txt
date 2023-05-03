@@ -1,4 +1,3 @@
-;                                       -- FAIL_5.1
 local                                   -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 local;                                  -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 local =                                 -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
@@ -23,7 +22,6 @@ local a, b = , local                    -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 do                                      -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 end                                     -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 do end
-do ; end                                -- FAIL_5.1
 do 1 end                                -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 do "foo" end                            -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 do local a, b end
@@ -51,7 +49,6 @@ while 1 do local a; local b; end
 while 1 do 2 end                        -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 while 1 do "foo" end                    -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 while true do end
-while 1 do ; end                        -- FAIL_5.1
 while 1 do while                        -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 while 1 end                             -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 while 1 2 do                            -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
@@ -61,7 +58,6 @@ while 1 do return return end            -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 while 1 do do end end
 while 1 do do return end end
 while 1 do break end
-while 1 do break break end              -- FAIL_5.1
 while 1 do do break end end
 repeat                                  -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 repeat until                            -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
@@ -74,13 +70,11 @@ repeat =                                -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 repeat local a until 1
 repeat local a local b until 0
 repeat local a; local b; until 0
-repeat ; until 1                        -- FAIL_5.1
 repeat 2 until 1                        -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 repeat "foo" until 1                    -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 repeat return until 0
 repeat return return until 0            -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 repeat break until 0
-repeat break break until 0              -- FAIL_5.1
 repeat do end until 0
 repeat do return end until 0
 repeat do break end until 0
@@ -109,7 +103,6 @@ for a in 1 do end
 for a in true do end
 for a in "foo" do end
 for a in b do break end
-for a in b do break break end           -- FAIL_5.1
 for a in b do return end
 for a in b do return return end         -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 for a in b do do end end
@@ -133,7 +126,6 @@ for a = 1, 2 do "foo" end               -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 for a = p, q, r do end
 for a = 1, 2, 3 do end
 for a = p, q do break end
-for a = p, q do break break end         -- FAIL_5.1
 for a = 1, 2 do return end
 for a = 1, 2 do return return end       -- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 for a = p, q do do end end
@@ -533,3 +525,19 @@ a = -b + -c 		-- (-b) + (-c)
 a = b ^ -c			-- b ^ (-c)
 a = -b ^ c			-- -(b ^ c)
 a = -b ^ -c			-- -(b ^ (-c))
+;                                       -- FAIL_5.1
+do ; end                                -- FAIL_5.1
+while 1 do ; end                        -- FAIL_5.1
+while 1 do break break end              -- FAIL_5.1
+repeat ; until 1                        -- FAIL_5.1
+repeat break break until 0              -- FAIL_5.1
+for a in b do break break end           -- FAIL_5.1
+for a = p, q do break break end         -- FAIL_5.1
+-- goto a will compile in 5.1 ... unless the label is missing ...
+goto a									-- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
+::a::									-- FAIL_5.1
+::a:: goto a							-- FAIL_5.1
+goto a ::a::							-- FAIL_5.1
+local a<const>							-- FAIL_5.1 FAIL_5.2 FAIL_5.3
+local a<const> = b						-- FAIL_5.1 FAIL_5.2 FAIL_5.3
+local a<const>, b<const> = c, d			-- FAIL_5.1 FAIL_5.2 FAIL_5.3

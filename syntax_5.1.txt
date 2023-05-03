@@ -2,7 +2,8 @@
 
 	block ::= chunk
 
-	stat ::=  varlist ‘=’ explist | 
+	stat ::=
+		 varlist ‘=’ explist | 
 		 functioncall | 
 		 do block end | 
 		 while exp do block end | 
@@ -26,16 +27,16 @@
 
 	explist ::= {exp ‘,’} exp
 
-	exp ::=  nil | false | true | Number | String | ‘...’ | function | 
+	exp ::=  nil | false | true | Numeral | LiteralString | ‘...’ | functiondef | 
 		 prefixexp | tableconstructor | exp binop exp | unop exp 
 
 	prefixexp ::= var | functioncall | ‘(’ exp ‘)’
 
 	functioncall ::=  prefixexp args | prefixexp ‘:’ Name args 
 
-	args ::=  ‘(’ [explist] ‘)’ | tableconstructor | String 
+	args ::=  ‘(’ [explist] ‘)’ | tableconstructor | LiteralString 
 
-	function ::= function funcbody
+	functiondef ::= function funcbody
 
 	funcbody ::= ‘(’ [parlist] ‘)’ block end
 
@@ -49,8 +50,10 @@
 
 	fieldsep ::= ‘,’ | ‘;’
 
-	binop ::= ‘+’ | ‘-’ | ‘*’ | ‘/’ | ‘^’ | ‘%’ | ‘..’ | 
-		 ‘<’ | ‘<=’ | ‘>’ | ‘>=’ | ‘==’ | ‘~=’ | 
+	binop ::= ‘+’ | ‘-’ | ‘*’ | ‘/’ |
+		 ‘^’ |
+		 ‘%’ |
+		 ‘..’ | ‘<’ | ‘<=’ | ‘>’ | ‘>=’ | ‘==’ | ‘~=’ | 
 		 and | or
 
 	unop ::= ‘-’ | not | ‘#’

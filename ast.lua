@@ -552,11 +552,14 @@ function ast._table.tostringmethods:lua()
 end
 
 ast._var = nodeclass{type='var'}	-- variable, lhs of ast._assign's, similar to _arg
-function ast._var:init(name)
+function ast._var:init(name, attrib)
 	self.name = name
+	self.attrib = attrib
 end
 function ast._var.tostringmethods:lua()
-	return self.name
+	local s = self.name
+	if self.attrib then s = s .. '<'..self.attrib..'>' end
+	return s
 end
 
 ast._par = nodeclass{type='parenthesis'}
