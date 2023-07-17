@@ -1,7 +1,7 @@
 #!/usr/bin/env lua
 local parser = require 'parser'
 local ast = require 'parser.ast'
-local file = require 'ext.file'
+local path = require 'ext.path'
 local table = require 'ext.table'
 
 local requires = table()
@@ -156,8 +156,8 @@ end
 -- also populates requires()
 local function luaFileToCpp(fn)
 	assert(fn, "expected filename")
-	local luacode = assert(file(fn):exists(), "failed to find "..tostring(fn))
-	local luacode = assert(file(fn):read(), "failed to find "..tostring(fn))
+	local luacode = assert(path(fn):exists(), "failed to find "..tostring(fn))
+	local luacode = assert(path(fn):read(), "failed to find "..tostring(fn))
 	local tree = parser.parse(luacode)
 	local cppcode = tostring(tree)
 	cppcode = '//file: '..fn..'\n'..cppcode
