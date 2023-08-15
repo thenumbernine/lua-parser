@@ -456,7 +456,7 @@ function Parser:namelist()
 	if not name then return end
 	local names = table{ast._var(name)}
 	while self:canbe(',', 'symbol') do
-		names:insert(ast._var(self:mustbe(nil, 'name')))
+		names:insert(ast._var((self:mustbe(nil, 'name'))))
 	end
 	return names
 end
