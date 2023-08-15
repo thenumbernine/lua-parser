@@ -266,7 +266,7 @@ end
 ast.nodeclass = nodeclass
 
 -- generic global stmt collection
-ast._block = nodeclass{type='block'}
+ast._block = nodeclass{type = 'block'}
 function ast._block:init(...)
 	for i,stmt in ipairs{...} do
 		self[i] = stmt
@@ -281,7 +281,7 @@ end
 local _stmt = class(node)
 ast._stmt = _stmt
 
-ast._assign = nodeclass({type='assign'}, _stmt)
+ast._assign = nodeclass({type = 'assign'}, _stmt)
 function ast._assign:init(vars, exprs)
 	self.vars = table(vars)
 	self.exprs = table(exprs)
@@ -291,10 +291,10 @@ function ast._assign.tostringmethods:lua()
 end
 
 -- should we impose construction constraints _do(_block(...))
--- or should we infer?  _do(...) = {type='do', block={type='block, ...}}
--- or should we do neither?  _do(...) = {type='do', ...}
+-- or should we infer?  _do(...) = {type = 'do', block = {type = 'block, ...}}
+-- or should we do neither?  _do(...) = {type = 'do', ...}
 -- neither for now
-ast._do = nodeclass({type='do'}, _stmt)
+ast._do = nodeclass({type = 'do'}, _stmt)
 function ast._do:init(...)
 	for i,stmt in ipairs{...} do
 		self[i] = stmt
@@ -304,9 +304,9 @@ function ast._do.tostringmethods:lua()
 	return 'do '..spacesep(self)..' end'
 end
 
-ast._while = nodeclass({type='while'}, _stmt)
+ast._while = nodeclass({type = 'while'}, _stmt)
 function ast._while:init(cond, ...)
-	self.cond=cond
+	self.cond = cond
 	for i,stmt in ipairs{...} do
 		self[i] = stmt
 	end
@@ -315,7 +315,7 @@ function ast._while.tostringmethods:lua()
 	return 'while '..tostring(self.cond)..' do '..spacesep(self)..' end'
 end
 
-ast._repeat = nodeclass({type='repeat'}, _stmt)
+ast._repeat = nodeclass({type = 'repeat'}, _stmt)
 function ast._repeat:init(cond, ...)
 	self.cond = cond
 	for i,stmt in ipairs{...} do
@@ -333,7 +333,7 @@ _if(_eq(a,b),
 	_elseif(...),
 	_else(...))
 --]]
-ast._if = nodeclass({type='if'}, _stmt)
+ast._if = nodeclass({type = 'if'}, _stmt)
 function ast._if:init(cond,...)
 	local elseifs = table()
 	local elsestmt, laststmt
@@ -366,7 +366,7 @@ function ast._if.tostringmethods:lua()
 end
 
 -- aux for _if
-ast._elseif = nodeclass({type='elseif'}, _stmt)
+ast._elseif = nodeclass({type = 'elseif'}, _stmt)
 function ast._elseif:init(cond,...)
 	self.cond = cond
 	for i,stmt in ipairs{...} do
@@ -378,7 +378,7 @@ function ast._elseif.tostringmethods:lua()
 end
 
 -- aux for _if
-ast._else = nodeclass({type='else'}, _stmt)
+ast._else = nodeclass({type = 'else'}, _stmt)
 function ast._else:init(...)
 	for i,stmt in ipairs{...} do
 		self[i] = stmt
@@ -388,13 +388,13 @@ function ast._else.tostringmethods:lua()
 	return ' else '..spacesep(self)
 end
 
-ast._foreq = nodeclass({type='foreq'}, _stmt)
+ast._foreq = nodeclass({type = 'foreq'}, _stmt)
 -- step is optional
 function ast._foreq:init(var,min,max,step,...)
-	self.var=var
-	self.min=min
-	self.max=max
-	self.step=step
+	self.var = var
+	self.min = min
+	self.max = max
+	self.step = step
 	for i,stmt in ipairs{...} do
 		self[i] = stmt
 	end
@@ -406,10 +406,10 @@ function ast._foreq.tostringmethods:lua()
 	return s
 end
 
-ast._forin = nodeclass({type='forin'}, _stmt)
+ast._forin = nodeclass({type = 'forin'}, _stmt)
 function ast._forin:init(vars,iterexprs,...)
-	self.vars=vars
-	self.iterexprs=iterexprs
+	self.vars = vars
+	self.iterexprs = iterexprs
 	for i,stmt in ipairs{...} do
 		self[i] = stmt
 	end
@@ -418,7 +418,7 @@ function ast._forin.tostringmethods:lua()
 	return 'for '..commasep(self.vars)..' in '..commasep(self.iterexprs)..' do '..spacesep(self)..' end'
 end
 
-ast._function = nodeclass({type='function'}, _stmt)
+ast._function = nodeclass({type = 'function'}, _stmt)
 -- name is optional
 function ast._function:init(name, args, ...)
 	-- prep args...
@@ -426,8 +426,8 @@ function ast._function:init(name, args, ...)
 		args[i].index = i
 		args[i].param = true
 	end
-	self.name=name
-	self.args=args
+	self.name = name
+	self.args = args
 	for i,stmt in ipairs{...} do
 		self[i] = stmt
 	end
@@ -442,7 +442,7 @@ function ast._function.tostringmethods:lua()
 end
 
 -- aux for _function
-ast._arg = nodeclass{type='arg'}
+ast._arg = nodeclass{type = 'arg'}
 function ast._arg:init(index)
 	self.index = index
 end
@@ -459,7 +459,7 @@ end
 -- the parser has to accept functions and variables as separate conditions
 --  I'm tempted to make them separate symbols here too ...
 -- exprs is a table containing: 1) a single function 2) a single assign statement 3) a list of variables
-ast._local = nodeclass({type='local'}, _stmt)
+ast._local = nodeclass({type = 'local'}, _stmt)
 function ast._local:init(exprs)
 	if ast._function:isa(exprs[1]) or ast._assign:isa(exprs[1]) then
 		assert(#exprs == 1, "local functions or local assignments must be the only child")
@@ -476,21 +476,21 @@ end
 
 -- control
 
-ast._return = nodeclass({type='return'}, _stmt)
+ast._return = nodeclass({type = 'return'}, _stmt)
 function ast._return:init(...)
-	self.exprs={...}
+	self.exprs = {...}
 end
 function ast._return.tostringmethods:lua()
 	return 'return '..commasep(self.exprs)
 end
 
-ast._break = nodeclass({type='break'}, _stmt)
+ast._break = nodeclass({type = 'break'}, _stmt)
 function ast._break.tostringmethods:lua() return 'break' end
 
-ast._call = nodeclass{type='call'}
+ast._call = nodeclass{type = 'call'}
 function ast._call:init(func, ...)
-	self.func=func
-	self.args={...}
+	self.func = func
+	self.args = {...}
 end
 function ast._call.tostringmethods:lua()
 	if #self.args == 1
@@ -504,38 +504,38 @@ end
 
 -- please don't change these
 ast._nil = nodeclass{
-	type='nil',
-	const=true,
+	type = 'nil',
+	const = true,
 	tostringmethods = {lua = function() return 'nil' end},
 }
 ast._true = nodeclass{
-	type='boolean',
-	const=true,
-	value=true,
+	type = 'boolean',
+	const = true,
+	value = true,
 	tostringmethods = {lua = function() return 'true' end},
 }
 ast._false = nodeclass{
-	type='boolean',
-	const=true,
-	value=false,
+	type = 'boolean',
+	const = true,
+	value = false,
 	tostringmethods = {lua = function() return 'false' end},
 }
 
-ast._number = nodeclass{type='number'}
+ast._number = nodeclass{type = 'number'}
 function ast._number:init(value) self.value = value end
 function ast._number.tostringmethods:lua() return self.value end
 
-ast._string = nodeclass{type='string'}
+ast._string = nodeclass{type = 'string'}
 function ast._string:init(value) self.value = value end
 function ast._string.tostringmethods:lua()
 	-- use ext.tolua's string serializer
 	return tolua(self.value)
 end
 
-ast._vararg = nodeclass{type='vararg'}
+ast._vararg = nodeclass{type = 'vararg'}
 function ast._vararg.tostringmethods:lua() return '...' end
 
-ast._table = nodeclass{type='table'}	-- single-element assigns
+ast._table = nodeclass{type = 'table'}	-- single-element assigns
 function ast._table:init(args)
 	self.args = table(assert(args))
 end
@@ -551,7 +551,7 @@ function ast._table.tostringmethods:lua()
 	end):concat(',')..'}'
 end
 
-ast._var = nodeclass{type='var'}	-- variable, lhs of ast._assign's, similar to _arg
+ast._var = nodeclass{type = 'var'}	-- variable, lhs of ast._assign's, similar to _arg
 function ast._var:init(name, attrib)
 	self.name = name
 	self.attrib = attrib
@@ -562,7 +562,7 @@ function ast._var.tostringmethods:lua()
 	return s
 end
 
-ast._par = nodeclass{type='parenthesis'}
+ast._par = nodeclass{type = 'parenthesis'}
 function ast._par:init(expr)
 	self.expr = expr
 end
@@ -574,7 +574,7 @@ local function isLuaName(s)
 	return s:match'^[_%a][_%w]*$'
 end
 
-ast._index = nodeclass{type='index'}
+ast._index = nodeclass{type = 'index'}
 function ast._index:init(expr,key)
 	self.expr = expr
 	-- helper add wrappers to some types:
@@ -598,7 +598,7 @@ end
 -- this isn't the () call itself, this is just the : dereference
 -- a:b(c) is _call(_indexself(_var'a', _var'b'), _var'c')
 -- technically this is a string lookup, however it is only valid as a lua name, so I'm just passing the Lua string itself
-ast._indexself = nodeclass{type='indexself'}
+ast._indexself = nodeclass{type = 'indexself'}
 function ast._indexself:init(expr,key)
 	self.expr = assert(expr)
 	assert(isLuaName(key))
@@ -635,7 +635,7 @@ for _,info in ipairs{
 } do
 	local name = info[1]
 	local op = info[2]
-	local cl = nodeclass({type=info[1], op=op}, ast._op)
+	local cl = nodeclass({type = info[1], op = op}, ast._op)
 	ast['_'..name] = cl
 	function cl:init(...)
 		self.args = {...}
@@ -653,7 +653,7 @@ for _,info in ipairs{
 } do
 	local name = info[1]
 	local op = info[2]
-	local cl = nodeclass{type=info[1], op=op}
+	local cl = nodeclass{type = info[1], op = op}
 	ast['_'..name] = cl
 	function cl:init(arg)
 		self.arg = arg
@@ -663,7 +663,7 @@ for _,info in ipairs{
 	end
 end
 
-ast._goto = nodeclass({type='goto'}, _stmt)
+ast._goto = nodeclass({type = 'goto'}, _stmt)
 function ast._goto:init(name)
 	self.name = name
 end
@@ -671,7 +671,7 @@ function ast._goto.tostringmethods:lua()
 	return 'goto '..self.name
 end
 
-ast._label = nodeclass({type='label'}, _stmt)
+ast._label = nodeclass({type = 'label'}, _stmt)
 function ast._label:init(name)
 	self.name = name
 end
