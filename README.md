@@ -268,7 +268,8 @@ Some more useful functions in AST:
 
 ### TODO:
 
-I still need to support Lua 5.4 variable attributes.
+- Still doesn't parse hex floating point precision numbers introduced in Lua 5.2.
+- Option for parsing LuaJIT LL and ULL number suffixes.
 
 ### Dependencies:
 
@@ -280,9 +281,6 @@ so any other script can say `"require 'parser.require'.callbacks:insert(function
 and viola, Lua preprocessor in Lua!
 
 `minify_tests.txt` taken from the tests at https://github.com/stravant/LuaMinify
-
-Known bugs: 
-- still doesn't parse hex floating point precision numbers introduced in lua 5.2
 
 I tested this by parsing itself,
 then using the parsed & reconstructed version to parse itself,
