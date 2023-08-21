@@ -222,26 +222,26 @@ Binary operations:
 
 |node type|Lua operator|      |
 |---------|------------|------|
-|add      |+           |      |
-|sub      |-           |      |
-|mul      |*           |      |
-|div      |/           |      |
-|mod      |%           |      |
-|concat   |..          |      |
-|lt       |<           |      |
-|le       |<=          |      |
-|gt       |>           |      |
-|ge       |>=          |      |
-|eq       |==          |      |
-|ne       |~=          |      |
-|and      |and         |      |
-|or       |or          |      |
-|idiv     |//          | 5.3+ |
-|band     |&           | 5.3+ |
-|bxor     |~           | 5.3+ |
-|bor      | |          | 5.3+ |
-|shl      |<<          | 5.3+ |
-|shr      |>>          | 5.3+ |
+|add      |`+`           |      |
+|sub      |`-`           |      |
+|mul      |`*`           |      |
+|div      |`/`           |      |
+|mod      |`%`           |      |
+|concat   |`..`          |      |
+|lt       |`<`           |      |
+|le       |`<=`          |      |
+|gt       |`>`           |      |
+|ge       |`>=`          |      |
+|eq       |`==`          |      |
+|ne       |`~=`          |      |
+|and      |`and`         |      |
+|or       |`or`          |      |
+|idiv     |`//`          | 5.3+ |
+|band     |`&`           | 5.3+ |
+|bxor     |`~`           | 5.3+ |
+|bor      |`\|`          | 5.3+ |
+|shl      |`<<`          | 5.3+ |
+|shr      |`>>`          | 5.3+ |
 
 `n.args =` a table of the arguments of the operation.
 
@@ -249,10 +249,10 @@ Unary operations:
 
 |node type|Lua operator|      |
 |---------|------------|------|
-|unm      |-           |      |
-|not      |not         |      |
-|len      |#           |      |
-|bnot     |~           | 5.3+ |
+|unm      |`-`         |      |
+|not      |`not`       |      |
+|len      |`#`         |      |
+|bnot     |`~`         | 5.3+ |
 
 `n.arg =` the single argument of the operation.
 
