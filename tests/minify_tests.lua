@@ -23,6 +23,7 @@ if version == '5.1' then
 	-- [[
 	if jit then version = '5.2' end
 	--]]
+	-- but nevermind, both luajit 2.0.5 and 2.1.0 choke in weird places on the minify tests
 end
 
 print(version)

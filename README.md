@@ -268,8 +268,8 @@ Some more useful functions in AST:
 
 ### TODO:
 
-- Still doesn't parse hex floating point precision numbers introduced in Lua 5.2.
 - Option for parsing LuaJIT -LL, -ULL, -i number suffixes.
+- Speaking of LuaJIT, it has different edge case syntax for 2.0.5, 2.1.0, and whether 5.2-compat is enabled or not.  It isn't passing the `minify_tests.lua`.
 
 ### Dependencies:
 

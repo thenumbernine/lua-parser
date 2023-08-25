@@ -141,16 +141,26 @@ local start = r.index-#r.lasttoken
 			then 								-- otherwise I want it to continue to the next 'else'
 				-- lua doesn't consider the - to be a part of the number literal
 				-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
-local start = r.index
+--local start = r.index
 				if r:canbe'0[xX]' then
 
 					-- if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
 					if self.version >= '5.2' then
+						-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
+						local token = r:canbe'[%.%da-fA-F]+'
+						assert(#token:gsub('[^%.]','') < 2, 'malformed number')
+						local n = table{'0x', token}
+						if r:canbe'p' then
+							n:insert(r.lasttoken)
+							-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
+							n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+						end
+						coroutine.yield(n:concat(), 'number')
+					else
+						local token = r:canbe'[%da-fA-F]+'
+						assert(token, 'malformed number')
+						coroutine.yield('0x'..token, 'number')
 					end
-
-					local token = r:canbe'[%da-fA-F]+'
-					assert(token, 'malformed number')
-					coroutine.yield('0x'..token, 'number')
 				else
 					local token = r:canbe'[%.%d]+'
 					assert(#token:gsub('[^%.]','') < 2, 'malformed number')
