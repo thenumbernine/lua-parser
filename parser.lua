@@ -61,7 +61,20 @@ for w in ([[and break do else elseif end false for function if in local nil not 
 	Tokenizer.keywords[w] = true
 end
 
-function Tokenizer:init(data)
+function Tokenizer:init(data, version)
+	self.version = assert(version)
+	if self.version >= '5.2' then
+		self.symbols:insert'::'	-- for labels .. make sure you insert it before ::
+		self.keywords['goto'] = true
+	end
+	if self.version >= '5.2' then
+		self.symbols:insert'//'
+		self.symbols:insert'~'
+		self.symbols:insert'&'
+		self.symbols:insert'|'
+		self.symbols:insert'<<'
+		self.symbols:insert'>>'
+	end
 	self.r = DataReader(data)
 	self.gettokenthread = coroutine.create(function()
 		local r = self.r
@@ -130,9 +143,14 @@ local start = r.index-#r.lasttoken
 				-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
 local start = r.index
 				if r:canbe'0[xX]' then
+
+					-- if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
+					if self.version >= '5.2' then
+					end
+
 					local token = r:canbe'[%da-fA-F]+'
+					assert(token, 'malformed number')
 					coroutine.yield('0x'..token, 'number')
-				-- TODO if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
 				else
 					local token = r:canbe'[%.%d]+'
 					assert(#token:gsub('[^%.]','') < 2, 'malformed number')
@@ -221,19 +239,7 @@ function Parser:setData(data, source)
 	data = tostring(data)
 	self.gotos = {}		-- keep track of all gotos
 	self.labels = {}	-- keep track of all labels
-	local t = Tokenizer(data)
-	if self.version >= '5.2' then
-		t.symbols:insert'::'	-- for labels .. make sure you insert it before ::
-		t.keywords['goto'] = true
-	end
-	if self.version >= '5.2' then
-		t.symbols:insert'//'
-		t.symbols:insert'~'
-		t.symbols:insert'&'
-		t.symbols:insert'|'
-		t.symbols:insert'<<'
-		t.symbols:insert'>>'
-	end
+	local t = Tokenizer(data, self.version)
 	t:start()
 	self.t = t
 	self.source = source
