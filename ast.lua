@@ -1,5 +1,6 @@
 local table = require 'ext.table'
 local class = require 'ext.class'
+local string = require 'ext.class'
 local tolua = require 'ext.tolua'
 
 local ast = {}
@@ -242,10 +243,6 @@ local nodeToString = function(self)
 	return f(self)
 end
 
-local function defaultConcat(a,b)
-	return tostring(a) .. tostring(b)
-end
-
 local allclasses = table{node}
 ast.allclasses = allclasses
 local function nodeclass(contents, parent)
@@ -258,7 +255,7 @@ local function nodeclass(contents, parent)
 	-- TODO put in root-most ast class
 	newclass.__tostring = nodeToString
 
-	newclass.__concat = defaultConcat
+	newclass.__concat = string.defaultConcat
 
 	allclasses:insert(newclass)
 	return newclass
