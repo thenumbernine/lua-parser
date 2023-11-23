@@ -255,7 +255,7 @@ local function nodeclass(contents, parent)
 	-- TODO put in root-most ast class
 	newclass.__tostring = nodeToString
 
-	newclass.__concat = string.defaultConcat
+	newclass.__concat = string.concat
 
 	allclasses:insert(newclass)
 	return newclass
