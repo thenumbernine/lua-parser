@@ -555,7 +555,10 @@ function ast._var:init(name, attrib)
 end
 function ast._var.tostringmethods:lua()
 	local s = self.name
-	if self.attrib then s = s .. '<'..self.attrib..'>' end
+	if self.attrib then
+		-- the extra space is needed for assignments, otherwise lua5.4 `local x<const>=1` chokes while `local x<const> =1` works
+		s = s .. '<'..self.attrib..'> '
+	end
 	return s
 end
 
