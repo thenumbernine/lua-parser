@@ -19,6 +19,15 @@ end
 function DataReader:done()
 	return self.index > #self.data
 end
+function DataReader:updatelinecol(skipped)
+	local newlines = #skipped:gsub('[^\n]','')
+	if newlines > 0 then
+		self.line = self.line + newlines
+		self.col = #skipped:match('[^\n]*$') + 1
+	else
+		self.col = self.col + #skipped
+	end
+end
 function DataReader:seekto(pattern)
 	local from, to = self.data:find(pattern, self.index)
 	if not from then
@@ -28,13 +37,7 @@ function DataReader:seekto(pattern)
 	local skipped = self.data:sub(self.index, from - 1)
 	self.index = from
 	self.lasttoken = self.data:sub(from, to)
-	local newlines = #skipped:gsub('[^\n]','')
-	if newlines > 0 then
-		self.line = self.line + newlines
-		self.col = #skipped:match('[^\n]*$') + 1
-	else
-		self.col = self.col + #skipped
-	end
+	self:updatelinecol(skipped)
 	return self.lasttoken
 end
 function DataReader:seekpast(pattern)
@@ -43,13 +46,7 @@ function DataReader:seekpast(pattern)
 	local skipped = self.data:sub(self.index, to)
 	self.index = to + 1
 	self.lasttoken = self.data:sub(from, to)
-	local newlines = #skipped:gsub('[^\n]','')
-	if newlines > 0 then
-		self.line = self.line + newlines
-		self.col = #skipped:match('[^\n]*$') + 1
-	else
-		self.col = self.col + #skipped
-	end
+	self:updatelinecol(skipped)
 	return self.lasttoken
 end
 function DataReader:canbe(pattern)
