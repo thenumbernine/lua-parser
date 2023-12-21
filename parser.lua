@@ -778,7 +778,7 @@ function Parser:parlist()	-- matches namelist() with ... as a terminator
 			names:insert(ast._vararg())
 			return names
 		end
-		names:insert(ast._var(self:mustbe(nil, 'name')))
+		names:insert(ast._var((self:mustbe(nil, 'name'))))
 	end
 	return names
 end
