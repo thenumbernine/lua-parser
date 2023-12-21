@@ -8,8 +8,13 @@ local DataReader = class()
 function DataReader:init(data)
 	self.data = data
 	self.index = 1
+	self.line = 1
+	self.col = 1
 	-- skip past initial #'s
-	if self.data:sub(1,1) == '#' then self.index = self.data:find('\n')+1 end
+	if self.data:sub(1,1) == '#' then
+		self.index = self.data:find('\n')+1
+		self.line = self.line + 1
+	end
 end
 function DataReader:done()
 	return self.index > #self.data
@@ -20,15 +25,31 @@ function DataReader:seekto(pattern)
 		from = #self.data+1
 		to = from
 	end
+	local skipped = self.data:sub(self.index, from - 1)
 	self.index = from
 	self.lasttoken = self.data:sub(from, to)
+	local newlines = #skipped:gsub('[^\n]','')
+	if newlines > 0 then
+		self.line = self.line + newlines
+		self.col = #skipped:match('[^\n]*$') + 1
+	else
+		self.col = self.col + #skipped
+	end
 	return self.lasttoken
 end
 function DataReader:seekpast(pattern)
 	local from, to = self.data:find(pattern, self.index)
 	if not from then return end
+	local skipped = self.data:sub(self.index, to)
 	self.index = to + 1
 	self.lasttoken = self.data:sub(from, to)
+	local newlines = #skipped:gsub('[^\n]','')
+	if newlines > 0 then
+		self.line = self.line + newlines
+		self.col = #skipped:match('[^\n]*$') + 1
+	else
+		self.col = self.col + #skipped
+	end
 	return self.lasttoken
 end
 function DataReader:canbe(pattern)
@@ -215,19 +236,15 @@ function Tokenizer:consume()
 	self.nexttoken = nexttoken
 	self.nexttokentype = nexttokentype
 end
--- TODO a more efficient way of doing this
 function Tokenizer:getlinecol()
-	local sofar = self.r.data:sub(1,self.r.index)
-	local lastline = sofar:match('[^\n]*$') or ''
-	local line = (#sofar:gsub('[^\n]','')+1)
-	local col = #lastline
-	return line, col
+	return self.r.line, self.r.col
 end
+-- TODO a more efficient way of doing this
 function Tokenizer:getpos()
 	local sofar = self.r.data:sub(1,self.r.index)
 	local lastline = sofar:match('[^\n]*$') or ''
-	return 'line '..(#sofar:gsub('[^\n]','')+1)
-		..' col '..#lastline
+	return 'line '..self.r.line
+		..' col '..self.r.col
 		..' code "'..lastline..'"'
 end
 
