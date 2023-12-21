@@ -41,6 +41,7 @@ local fields = {
 	{'name', 'field'},
 	{'index', 'field'},
 	{'value', 'field'},
+	{'span', 'field'},
 }
 
 function node.exec(n, ...)
@@ -243,6 +244,11 @@ local nodeToString = function(self)
 	return f(self)
 end
 
+local function setspan(node, span)
+	node.span = span
+	return node
+end
+
 local allclasses = table{node}
 ast.allclasses = allclasses
 local function nodeclass(contents, parent)
@@ -256,6 +262,8 @@ local function nodeclass(contents, parent)
 	newclass.__tostring = nodeToString
 
 	newclass.__concat = string.concat
+
+	newclass.setspan = setspan
 
 	allclasses:insert(newclass)
 	return newclass

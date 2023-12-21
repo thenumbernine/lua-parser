@@ -36,6 +36,8 @@ Each has the following properties:
 
 `n.type` = returns the type of the node, coinciding with the classname in the `ast` library with underscore removed.
 
+`n.span` = source code span information (`from` and `to` subtables each with `source`, `line` and `col` fields)
+
 `n:copy()` = returns a copy of the node.
 
 `n:flatten(func, varmap)` = flattens / inlines the contents of all function call of this function.  Used for performance optimizations.
