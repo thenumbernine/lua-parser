@@ -492,7 +492,7 @@ function Parser:funcname()
 	local from = self:getloc()
 	local name = ast._var(self.lasttoken):setspan{ from = from, to = self:getloc() }
 	while self:canbe('.', 'symbol') do
-		local sfrom =- self.t:getlock()
+		local sfrom = self.t:getloc()
 		name = ast._index(name, ast._string(self:mustbe(nil, 'name')):setspan{ from = sfrom, to = self:getloc() }):setspan{ from = from, to = self:getloc() }
 	end
 	if self:canbe(':', 'symbol') then
