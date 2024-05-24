@@ -216,6 +216,16 @@ function Tokenizer:start()
 	self:consume()
 end
 function Tokenizer:consume()
+	-- TODO store these in an array somewhere, make the history adjustable
+	-- then in all the get[prev][2]loc's just pass an index for how far back to search
+	self.prev2line = self.prevline
+	self.prev2col = self.prevcol
+	self.prev2index = self.previndex
+
+	self.prevline = self.r.line
+	self.prevcol = self.r.col
+	self.previndex = self.r.index
+
 	self.token = self.nexttoken
 	self.tokentype = self.nexttokentype
 	if coroutine.status(self.gettokenthread) == 'dead' then
@@ -244,8 +254,16 @@ function Tokenizer:getpos()
 		..' col '..self.r.col
 		..' code "'..lastline..'"'
 end
+
+-- TODO I don't need all these, just :getprev2loc()
+function Tokenizer:getprev2loc()
+	return {line = self.prev2line, col = self.prev2col, index = self.prev2index}
+end
+function Tokenizer:getprevloc()
+	return {line = self.prevline, col = self.prevcol, index = self.previndex}
+end
 function Tokenizer:getloc()
-	return { line = self.r.line, col = self.r.col }
+	return {line = self.r.line, col = self.r.col, index = self.r.index}
 end
 
 local Parser = class()
@@ -261,11 +279,24 @@ function Parser:init(data, version, source)
 		self:setData(data, source)
 	end
 end
+
+-- TODO I don't need all these, just :getprev2loc()
+function Parser:getprev2loc()
+	local loc = self.t:getprev2loc()
+	loc.source = self.source
+	return loc
+end
+function Parser:getprevloc()
+	local loc = self.t:getprevloc()
+	loc.source = self.source
+	return loc
+end
 function Parser:getloc()
 	local loc = self.t:getloc()
 	loc.source = self.source
 	return loc
 end
+
 function Parser:setData(data, source)
 	assert(data, "expected data")
 	data = tostring(data)
@@ -313,7 +344,7 @@ function Parser:mustbe(token, tokentype)
 	return self.lasttoken, self.lasttokentype
 end
 function Parser:chunk()
-	local from = self:getloc()
+	local from = self:getprev2loc()
 	local stmts = table()
 	repeat
 		local stmt = self:stat()
@@ -330,7 +361,8 @@ function Parser:chunk()
 			self:canbe(';', 'symbol')
 		end
 	end
-	return ast._block(table.unpack(stmts)):setspan{ from = from, to = self:getloc() }
+	return ast._block(table.unpack(stmts))
+		:setspan{from = from, to = self:getprev2loc()}
 end
 function Parser:block(blockName)
 	if blockName then self.blockStack:insert(blockName) end
@@ -342,26 +374,33 @@ function Parser:stat()
 	if self.version >= '5.2' then
 		repeat until not self:canbe(';', 'symbol')
 	end
-	local from = self:getloc()
+	local from = self:getprev2loc()
 	if self:canbe('local', 'keyword') then
-		local ffrom = self:getloc()
+		local ffrom = self:getprev2loc()
 		if self:canbe('function', 'keyword') then
 			local name = self:mustbe(nil, 'name')
-			return ast._local{self:makeFunction(name, table.unpack(assert(self:funcbody()))):setspan{ from = ffrom , to = self:getloc() }}:setspan{ from = from , to = self:getloc() }
+			return ast._local{
+				self:makeFunction(name, table.unpack(assert(self:funcbody())))
+					:setspan{from = ffrom , to = self:getprev2loc()}
+				}:setspan{from = from , to = self:getprev2loc()}
 		else
-			local afrom = self:getloc()
+			local afrom = self:getprev2loc()
 			local namelist = assert(self:attnamelist())
 			if self:canbe('=', 'symbol') then
 				local explist = assert(self:explist())
-				local assign = ast._assign(namelist, explist):setspan{ from = afrom, to = self:getloc() }
-				return ast._local{assign}:setspan{ from = from, to = self:getloc() }
+				local assign = ast._assign(namelist, explist)
+					:setspan{from = from, to = self:getprev2loc()}
+				return ast._local{assign}
+					:setspan{from = from, to = self:getprev2loc()}
 			else
-				return ast._local(namelist):setspan{ from = from, to = self:getloc() }
+				return ast._local(namelist)
+					:setspan{from = from, to = self:getprev2loc()}
 			end
 		end
 	elseif self:canbe('function', 'keyword') then
 		local funcname = self:funcname()
-		return self:makeFunction(funcname, table.unpack(assert(self:funcbody()))):setspan{ from = from , to = self:getloc() }
+		return self:makeFunction(funcname, table.unpack(assert(self:funcbody())))
+			:setspan{from = from , to = self:getprev2loc()}
 	elseif self:canbe('for', 'keyword') then
 		local namelist = assert(self:namelist())
 		if self:canbe('=', 'symbol') then
@@ -371,13 +410,15 @@ function Parser:stat()
 			self:mustbe('do', 'keyword')
 			local block = assert(self:block'for =')
 			self:mustbe('end', 'keyword')
-			return ast._foreq(namelist[1], explist[1], explist[2], explist[3], table.unpack(block)):setspan{ from = from, to = self:getloc() }
+			return ast._foreq(namelist[1], explist[1], explist[2], explist[3], table.unpack(block))
+				:setspan{from = from, to = self:getprev2loc()}
 		elseif self:canbe('in', 'keyword') then
 			local explist = assert(self:explist())
 			self:mustbe('do', 'keyword')
 			local block = assert(self:block'for in')
 			self:mustbe('end', 'keyword')
-			return ast._forin(namelist, explist, table.unpack(block)):setspan{ from = from, to = self:getloc() }
+			return ast._forin(namelist, explist, table.unpack(block))
+				:setspan{from = from, to = self:getprev2loc()}
 		else
 			error("'=' or 'in' expected")
 		end
@@ -387,48 +428,60 @@ function Parser:stat()
 		local block = self:block()
 		local stmts = table(block)
 		-- ...and add elseifs and else to this
-		local efrom = self:getloc()
+		local efrom = self:getprev2loc()
 		while self:canbe('elseif', 'keyword') do
 			local cond = assert(self:exp())
 			self:mustbe('then', 'keyword')
-			stmts:insert(ast._elseif(cond, table.unpack(assert(self:block()))):setspan{ from = efrom, to = self:getloc() })
-			efrom = self:getloc()
+			stmts:insert(
+				ast._elseif(cond, table.unpack(assert(self:block())))
+					:setspan{from = efrom, to = self:getprev2loc()}
+			)
+			efrom = self:getprev2loc()
 		end
 		if self:canbe('else', 'keyword') then
-			stmts:insert(ast._else(table.unpack(assert(self:block()))):setspan{ from = efrom, to = self:getloc() })
+			stmts:insert(
+				ast._else(table.unpack(assert(self:block())))
+					:setspan{from = efrom, to = self:getprev2loc()}
+			)
 		end
 		self:mustbe('end', 'keyword')
-		return ast._if(cond, table.unpack(stmts)):setspan{ from = from, to = self:getloc() }
+		return ast._if(cond, table.unpack(stmts))
+			:setspan{from = from, to = self:getprev2loc()}
 	elseif self:canbe('repeat', 'keyword') then
 		local block = assert(self:block'repeat')
 		self:mustbe('until', 'keyword')
-		return ast._repeat(assert(self:exp()), table.unpack(block)):setspan{ from = from, to = self:getloc() }
+		return ast._repeat(assert(self:exp()), table.unpack(block))
+			:setspan{from = from, to = self:getprev2loc()}
 	elseif self:canbe('while', 'keyword') then
 		local cond = assert(self:exp())
 		self:mustbe('do', 'keyword')
 		local block = assert(self:block'while')
 		self:mustbe('end', 'keyword')
-		return ast._while(cond, table.unpack(block)):setspan{ from = from, to = self:getloc() }
+		return ast._while(cond, table.unpack(block))
+			:setspan{from = from, to = self:getprev2loc()}
 	elseif self:canbe('do', 'keyword') then
 		local block = assert(self:block())
 		self:mustbe('end', 'keyword')
-		return ast._do(table.unpack(block)):setspan{ from = from, to = self:getloc() }
+		return ast._do(table.unpack(block))
+			:setspan{from = from, to = self:getprev2loc()}
 	elseif self.version >= '5.2' then
 		if self:canbe('goto', 'keyword') then
 			local name = self:mustbe(nil, 'name')
-			local g = ast._goto(name):setspan{ from = from, to = self:getloc() }
+			local g = ast._goto(name)
+				:setspan{from = from, to = self:getprev2loc()}
 			g.line, g.col = self.t:getlinecol()
 			self.gotos[name] = g
 			return g
 		-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
 		elseif self:canbe('break', 'keyword') then
-			return self:_break():setspan{ from = from, to = self:getloc() }
+			return self:_break()
+				:setspan{from = from, to = self:getprev2loc()}
 		elseif self:canbe('::', 'symbol') then
 			local name = self:mustbe(nil, 'name')
 			local l = ast._label(name)
 			self.labels[name] = true
 			self:mustbe('::', 'symbol')
-			return l:setspan{ from = from, to = self:getloc() }
+			return l:setspan{from = from, to = self:getprev2loc()}
 		end
 	end
 
@@ -444,7 +497,7 @@ function Parser:stat()
 		... so just use it and complain if the wrapping ast is not a _call
 	likewise with var, complain if it is a call
 	--]]
-	
+
 	local prefixexp = self:prefixexp()
 	if prefixexp then
 		if prefixexp.type == 'call' then 	-- function call
@@ -457,72 +510,94 @@ function Parser:stat()
 				vars:insert(var)
 			end
 			self:mustbe('=', 'symbol')
-			return ast._assign(vars, assert(self:explist())):setspan{ from = from, to = self:getloc() }
+			return ast._assign(vars, assert(self:explist()))
+				:setspan{from = from, to = self:getprev2loc()}
 		end
 	end
 end
 -- 'laststat' in 5.1, 'retstat' in 5.2+
 function Parser:retstat()
-	local from = self:getloc()
+	local from = self:getprev2loc()
 	-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
 	-- that means only handle 'break' here in 5.1
 	if self.version == '5.1' and self:canbe('break', 'keyword') then
-		return self:_break():setspan{ from = from, to = self:getloc() }
+		return self:_break()
+			:setspan{from = from, to = self:getprev2loc()}
 	end
 	if self:canbe('return', 'keyword') then
 		local explist = self:explist() or {}
 		if self.version >= '5.2' then
 			self:canbe(';', 'symbol')
 		end
-		return ast._return(table.unpack(explist)):setspan{ from = from, to = self:getloc() }
+		return ast._return(table.unpack(explist))
+			:setspan{from = from, to = self:getprev2loc()}
 	end
 end
 
 -- verify we're in a loop, then return the break
 function Parser:_break()
-	local from = self:getloc()
+	local from = self:getprev2loc()
 	if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
 		error("break not inside loop")
 	end
-	return ast._break():setspan{ from = from, to = self:getloc() }
+	return ast._break()
+		:setspan{from = from, to = self:getprev2loc()}
 end
 
 function Parser:funcname()
 	if not self:canbe(nil, 'name') then return end
-	local from = self:getloc()
-	local name = ast._var(self.lasttoken):setspan{ from = from, to = self:getloc() }
+	local from = self:getprev2loc()
+	local name = ast._var(self.lasttoken)
+		:setspan{from = from, to = self:getprev2loc()}
 	while self:canbe('.', 'symbol') do
-		local sfrom = self.t:getloc()
-		name = ast._index(name, ast._string(self:mustbe(nil, 'name')):setspan{ from = sfrom, to = self:getloc() }):setspan{ from = from, to = self:getloc() }
+		local sfrom = self.t:getprev2loc()
+		name = ast._index(
+			name,
+			ast._string(self:mustbe(nil, 'name'))
+				:setspan{from = sfrom, to = self:getprev2loc()}
+		):setspan{from = from, to = self:getprev2loc()}
 	end
 	if self:canbe(':', 'symbol') then
-		name = ast._indexself(name, self:mustbe(nil, 'name')):setspan{ from = from, to = self:getloc() }
+		name = ast._indexself(name, self:mustbe(nil, 'name'))
+			:setspan{from = from, to = self:getprev2loc()}
 	end
 	return name
 end
 function Parser:namelist()
-	local from = self:getloc()
+	local from = self:getprev2loc()
 	local name = self:canbe(nil, 'name')
 	if not name then return end
-	local names = table{ast._var(name):setspan{ from = from, to = self:getloc() }}
+	local names = table{
+		ast._var(name)
+			:setspan{from = from, to = self:getprev2loc()}
+	}
 	while self:canbe(',', 'symbol') do
-		from = self:getloc()
-		names:insert(ast._var((self:mustbe(nil, 'name'))):setspan{ from = from, to = self:getloc() })
+		from = self:getprev2loc()
+		names:insert(
+			ast._var((self:mustbe(nil, 'name')))
+				:setspan{from = from, to = self:getprev2loc()}
+		)
 	end
 	return names
 end
 -- same as above but with optional attributes
 function Parser:attnamelist()
-	local from = self:getloc()
+	local from = self:getprev2loc()
 	local name = self:canbe(nil, 'name')
 	if not name then return end
 	local attrib = self:attrib()
-	local names = table{ast._var(name, attrib):setspan{ from = from, to = self:getloc() }}
+	local names = table{
+		ast._var(name, attrib)
+			:setspan{from = from, to = self:getprev2loc()}
+	}
 	while self:canbe(',', 'symbol') do
-		from = self:getloc()
+		from = self:getprev2loc()
 		local name = self:mustbe(nil, 'name')
 		local attrib = self:attrib()
-		names:insert(ast._var(name, attrib):setspan{ from = from, to = self:getloc() })
+		names:insert(
+			ast._var(name, attrib)
+				:setspan{from = from, to = self:getprev2loc()}
+		)
 	end
 	return names
 end
@@ -558,7 +633,8 @@ function Parser:exp_or()
 	local a = self:exp_and()
 	if not a then return end
 	if self:canbe('or', 'keyword') then
-		a = ast._or(a,assert(self:exp_or())):setspan{ from = a.span.from, to = self:getloc() }
+		a = ast._or(a,assert(self:exp_or()))
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
@@ -566,7 +642,8 @@ function Parser:exp_and()
 	local a = self:exp_cmp()
 	if not a then return end
 	if self:canbe('and', 'keyword') then
-		a = ast._and(a, assert(self:exp_and())):setspan{ from = a.span.from, to = self:getloc() }
+		a = ast._and(a, assert(self:exp_and()))
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
@@ -593,7 +670,8 @@ function Parser:exp_cmp()
 			['~='] = ast._ne,
 			['=='] = ast._eq,
 		}
-		a = assert(classForSymbol[self.lasttoken])(a, assert(self:exp_cmp())):setspan{ from = a.span.from, to = self:getloc() }
+		a = assert(classForSymbol[self.lasttoken])(a, assert(self:exp_cmp()))
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
@@ -602,7 +680,8 @@ function Parser:exp_bor()
 	local a = self:exp_bxor()
 	if not a then return end
 	if self:canbe('|', 'symbol') then
-		a = ast._bor(a, assert(self:exp_bor())):setspan{ from = a.span.from, to = self:getloc() }
+		a = ast._bor(a, assert(self:exp_bor()))
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
@@ -610,7 +689,8 @@ function Parser:exp_bxor()
 	local a = self:exp_band()
 	if not a then return end
 	if self:canbe('~', 'symbol') then
-		a = ast._bxor(a, assert(self:exp_bxor())):setspan{ from = a.span.from, to = self:getloc() }
+		a = ast._bxor(a, assert(self:exp_bxor()))
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
@@ -618,7 +698,8 @@ function Parser:exp_band()
 	local a = self:exp_shift()
 	if not a then return end
 	if self:canbe('&', 'symbol') then
-		a = ast._band(a, assert(self:exp_band())):setspan{ from = a.span.from, to = self:getloc() }
+		a = ast._band(a, assert(self:exp_band()))
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
@@ -634,7 +715,8 @@ function Parser:exp_shift()
 		}
 		local cl = assert(classForSymbol[self.lasttoken])
 		local b = assert(self:exp_shift())
-		a = cl(a, b):setspan{ from = a.span.from, to = self:getloc() }
+		a = cl(a, b)
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
@@ -643,7 +725,8 @@ function Parser:exp_concat()
 	local a = self:exp_addsub()
 	if not a then return end
 	if self:canbe('..', 'symbol') then
-		a = ast._concat(a, assert(self:exp_concat())):setspan{ from = a.span.from, to = self:getloc() }
+		a = ast._concat(a, assert(self:exp_concat()))
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
@@ -659,7 +742,8 @@ function Parser:exp_addsub()
 		}
 		local cl = assert(classForSymbol[self.lasttoken])
 		local b = assert(self:exp_addsub())
-		a = cl(a, b):setspan{ from = a.span.from, to = self:getloc() }
+		a = cl(a, b)
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
@@ -677,17 +761,30 @@ function Parser:exp_muldivmod()
 			['%'] = ast._mod,
 			['//'] = ast._idiv,
 		}
-		a = assert(classForSymbol[self.lasttoken])(a, assert(self:exp_muldivmod())):setspan{ from = a.span.from, to = self:getloc() }
+		a = assert(classForSymbol[self.lasttoken])(a, assert(self:exp_muldivmod()))
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
 function Parser:exp_unary()
-	local from = self:getloc()
-	if self:canbe('not', 'keyword') then return ast._not(assert(self:exp_unary())):setspan{ from = from, to = self:getloc() } end
-	if self:canbe('#', 'symbol') then return ast._len(assert(self:exp_unary())):setspan{ from = from, to = self:getloc() } end
-	if self:canbe('-', 'symbol') then return ast._unm(assert(self:exp_unary())):setspan{ from = from, to = self:getloc() } end
+	local from = self:getprev2loc()
+	if self:canbe('not', 'keyword') then
+		return ast._not(assert(self:exp_unary()))
+			:setspan{from = from, to = self:getprev2loc()}
+	end
+	if self:canbe('#', 'symbol') then
+		return ast._len(assert(self:exp_unary()))
+			:setspan{from = from, to = self:getprev2loc()}
+	end
+	if self:canbe('-', 'symbol') then
+		return ast._unm(assert(self:exp_unary()))
+			:setspan{from = from, to = self:getprev2loc()}
+	end
 	if self.version >= '5.3' then
-		if self:canbe('~', 'symbol') then return ast._bnot(assert(self:exp_unary())):setspan{ from = from, to = self:getloc() } end
+		if self:canbe('~', 'symbol') then
+			return ast._bnot(assert(self:exp_unary()))
+				:setspan{from = from, to = self:getprev2loc()}
+		end
 	end
 	return self:exp_pow()
 end
@@ -695,7 +792,8 @@ function Parser:exp_pow()
 	local a = self:subexp()
 	if not a then return end
 	if self:canbe('^', 'symbol') then
-		a = ast._pow(a, assert(self:exp_unary())):setspan{ from = a.span.from, to = self:getloc() }
+		a = ast._pow(a, assert(self:exp_unary()))
+			:setspan{from = a.span.from, to = self:getprev2loc()}
 	end
 	return a
 end
@@ -709,16 +807,32 @@ function Parser:subexp()
 	local functiondef = self:functiondef()
 	if functiondef then return functiondef end
 
-	local from = self:getloc()
+	local from = self:getprev2loc()
 	if self:canbe('...', 'symbol') then
 		assert(self.functionStack:last() == 'function-vararg')
-		return ast._vararg():setspan{ from = from, to = self:getloc() }
+		return ast._vararg()
+			:setspan{from = from, to = self:getprev2loc()}
 	end
-	if self:canbe(nil, 'string') then return ast._string(self.lasttoken):setspan{ from = from, to = self:getloc() } end
-	if self:canbe(nil, 'number') then return ast._number(self.lasttoken):setspan{ from = from, to = self:getloc() } end
-	if self:canbe('true', 'keyword') then return ast._true():setspan{ from = from, to = self:getloc() } end
-	if self:canbe('false', 'keyword') then return ast._false():setspan{ from = from, to = self:getloc() } end
-	if self:canbe('nil', 'keyword') then return ast._nil():setspan{ from = from, to = self:getloc() } end
+	if self:canbe(nil, 'string') then
+		return ast._string(self.lasttoken)
+			:setspan{from = from, to = self:getprev2loc()}
+	end
+	if self:canbe(nil, 'number') then
+		return ast._number(self.lasttoken)
+			:setspan{from = from, to = self:getprev2loc()}
+	end
+	if self:canbe('true', 'keyword') then
+		return ast._true()
+			:setspan{from = from, to = self:getprev2loc()}
+	end
+	if self:canbe('false', 'keyword') then
+		return ast._false()
+			:setspan{from = from, to = self:getprev2loc()}
+	end
+	if self:canbe('nil', 'keyword') then
+		return ast._nil()
+			:setspan{from = from, to = self:getprev2loc()}
+	end
 end
 
 --[[
@@ -734,14 +848,16 @@ prefixexp ::= (Name {'[' exp ']' | `.` Name | [`:` Name] args} | `(` exp `)`) {a
 --]]
 function Parser:prefixexp()
 	local prefixexp
-	local from = self:getloc()
+	local from = self:getprev2loc()
 
 	if self:canbe('(', 'symbol') then
 		local exp = assert(self:exp())
 		self:mustbe(')', 'symbol')
-		prefixexp = ast._par(exp):setspan{ from = from, to = self:getloc() }
+		prefixexp = ast._par(exp)
+			:setspan{from = from, to = self:getprev2loc()}
 	elseif self:canbe(nil, 'name') then
-		prefixexp = ast._var(self.lasttoken):setspan{ from = from, to = self:getloc() }
+		prefixexp = ast._var(self.lasttoken)
+			:setspan{from = from, to = self:getprev2loc()}
 	else
 		return
 	end
@@ -750,20 +866,30 @@ function Parser:prefixexp()
 		if self:canbe('[', 'symbol') then
 			prefixexp = ast._index(prefixexp, assert(self:exp()))
 			self:mustbe(']', 'symbol')
-			prefixexp:setspan{ from = from, to = self:getloc() }
+			prefixexp:setspan{from = from, to = self:getprev2loc()}
 		elseif self:canbe('.', 'symbol') then
-			local sfrom = self:getloc()
-			prefixexp = ast._index(prefixexp, ast._string(self:mustbe(nil, 'name')):setspan{ from = sfrom, to = self:getloc() }):setspan{ from = from, to = self:getloc() }
+			local sfrom = self:getprev2loc()
+			prefixexp = ast._index(
+				prefixexp,
+				ast._string(self:mustbe(nil, 'name'))
+					:setspan{from = sfrom, to = self:getprev2loc()}
+			)
+			:setspan{from = from, to = self:getprev2loc()}
 		elseif self:canbe(':', 'symbol') then
-			prefixexp = ast._indexself(prefixexp, self:mustbe(nil, 'name')):setspan{ from = from, to = self:getloc() }
+			prefixexp = ast._indexself(
+				prefixexp,
+				self:mustbe(nil, 'name')
+			):setspan{from = from, to = self:getprev2loc()}
 			local args = self:args()
 			if not args then error"function arguments expected" end
-			prefixexp = ast._call(prefixexp, table.unpack(args)):setspan{ from = from, to = self:getloc() }
+			prefixexp = ast._call(prefixexp, table.unpack(args))
+				:setspan{from = from, to = self:getprev2loc()}
 		else
 			local args = self:args()
 			if not args then break end
 
-			prefixexp = ast._call(prefixexp, table.unpack(args)):setspan{ from = from, to = self:getloc() }
+			prefixexp = ast._call(prefixexp, table.unpack(args))
+				:setspan{from = from, to = self:getprev2loc()}
 		end
 	end
 
@@ -774,8 +900,13 @@ end
 -- produces error on syntax error
 -- returns a table of the args -- particularly an empty table if no args were found
 function Parser:args()
-	local from = self:getloc()
-	if self:canbe(nil, 'string') then return {ast._string(self.lasttoken):setspan{ from = from, to = self:getloc() }} end
+	local from = self:getprev2loc()
+	if self:canbe(nil, 'string') then
+		return {
+			ast._string(self.lasttoken)
+				:setspan{from = from, to = self:getprev2loc()}
+			}
+	end
 
 	local tableconstructor = self:tableconstructor()
 	if tableconstructor then return {tableconstructor} end
@@ -795,9 +926,10 @@ function Parser:makeFunction(...)
 end
 -- 'function' in the 5.1 syntax
 function Parser:functiondef()
-	local from = self:getloc()
+	local from = self:getprev2loc()
 	if not self:canbe('function', 'keyword') then return end
-	return self:makeFunction(nil, table.unpack(assert(self:funcbody()))):setspan{ from = from, to = self:getloc() }
+	return self:makeFunction(nil, table.unpack(assert(self:funcbody())))
+		:setspan{from = from, to = self:getprev2loc()}
 end
 -- returns a table of ... first element is a table of args, rest of elements are the body statements
 function Parser:funcbody()
@@ -813,27 +945,42 @@ function Parser:funcbody()
 	return table{args, table.unpack(block)}
 end
 function Parser:parlist()	-- matches namelist() with ... as a terminator
-	local from = self:getloc()
-	if self:canbe('...', 'symbol') then return table{ast._vararg():setspan{ from = from, to = self:getloc() }} end
+	local from = self:getprev2loc()
+	if self:canbe('...', 'symbol') then
+		return table{
+			ast._vararg()
+				:setspan{from = from, to = self:getprev2loc()}
+		}
+	end
 	local name = self:canbe(nil, 'name')
 	if not name then return end
-	local names = table{ast._var(name):setspan{ from = from, to = self:getloc() }}
+	local names = table{
+		ast._var(name)
+			:setspan{from = from, to = self:getprev2loc()}
+	}
 	while self:canbe(',', 'symbol') do
-		from = self:getloc()
+		from = self:getprev2loc()
 		if self:canbe('...', 'symbol') then
-			names:insert(ast._vararg():setspan{ from = from, to = self:getloc() })
+			names:insert(
+				ast._vararg()
+					:setspan{from = from, to = self:getprev2loc()}
+			)
 			return names
 		end
-		names:insert(ast._var((self:mustbe(nil, 'name'))):setspan{ from = from, to = self:getloc() })
+		names:insert(
+			ast._var((self:mustbe(nil, 'name')))
+				:setspan{from = from, to = self:getprev2loc()}
+		)
 	end
 	return names
 end
 function Parser:tableconstructor()
-	local from = self:getloc()
+	local from = self:getprev2loc()
 	if not self:canbe('{', 'symbol') then return end
 	local fields = self:fieldlist()
 	self:mustbe('}', 'symbol')
-	return ast._table(fields or {}):setspan{ from = from, to = self:getloc() }
+	return ast._table(fields or {})
+		:setspan{from = from, to = self:getprev2loc()}
 end
 function Parser:fieldlist()
 	local field = self:field()
@@ -848,14 +995,15 @@ function Parser:fieldlist()
 	return fields
 end
 function Parser:field()
-	local from = self:getloc()
+	local from = self:getprev2loc()
 	if self:canbe('[', 'symbol') then
 		local keyexp = assert(self:exp())
 		self:mustbe(']', 'symbol')
 		self:mustbe('=', 'symbol')
 		local valexp = self:exp()
 		if not valexp then error("expected expression but found "..self.t.token) end
-		return ast._assign({keyexp}, {valexp}):setspan{ from = from, to = self:getloc() }
+		return ast._assign({keyexp}, {valexp})
+			:setspan{from = from, to = self:getprev2loc()}
 	end
 
 	-- this will be Name or exp
@@ -864,7 +1012,13 @@ function Parser:field()
 	if not exp then return end
 
 	if exp.type == 'var' and self:canbe('=', 'symbol') then
-		return ast._assign({ast._string(exp.name):setspan(exp.span)}, {assert(self:exp())}):setspan{ from = from, to = self:getloc() }
+		return ast._assign(
+			{
+				ast._string(exp.name):setspan(exp.span)
+			}, {
+				assert(self:exp())
+			}
+		):setspan{from = from, to = self:getprev2loc()}
 	else
 		return exp
 	end
