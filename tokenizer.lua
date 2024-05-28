@@ -7,15 +7,12 @@ local DataReader = require 'parser.datareader'
 local Tokenizer = class()
 
 function Tokenizer:initSymbolsAndKeywords(...)
-	error[[
-This function should build the `.symbols[i] = symbol` and `.keywords[keyword] = true` members of the Tokenizer subclass.
-]]
 end
 
 function Tokenizer:init(data, ...)
 	-- TODO move what this does to just the subclass initialization
-	self.symbols = table()
-	self.keywords = {}
+	self.symbols = table(self.symbols)
+	self.keywords = table(self.keywords):setmetatable(nil)
 	self:initSymbolsAndKeywords(...)
 	
 	self.r = DataReader(data)
