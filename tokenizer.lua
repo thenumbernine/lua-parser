@@ -1,0 +1,196 @@
+local table = require 'ext.table'
+local class = require 'ext.class'
+local string = require 'ext.string'
+local DataReader = require 'parser.datareader'
+
+local Tokenizer = class()
+
+function Tokenizer:initSymbolsAndKeywords(...)
+	error[[
+This function should build the `.symbols[i] = symbol` and `.keywords[keyword] = true` members of the Tokenizer subclass.
+]]
+end
+
+function Tokenizer:init(data, version, ...)
+	-- version is tied to number parsing.
+	-- TODO instead abstract out the number-parsing to subclasses instead, and get rid of version in the parent class (since it is Lua-specific)
+	self.version = version
+
+	-- TODO move what this does to just the subclass initialization
+	self:initSymbolsAndKeywords(version, ...)
+	
+	self.r = DataReader(data)
+	self.gettokenthread = coroutine.create(function()
+		local r = self.r
+
+		while not r:done() do
+			
+			-- whitespace
+			while r:canbe'%s+' do
+--DEBUG: print('read space ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
+			end
+			
+			if r:done() then break end
+			
+			-- comment
+			if r:canbe'%-%-' then
+local start = r.index - #r.lasttoken
+				-- read block comment if it exists
+				if not r:readblock() then
+					-- read line otherwise
+					r:seekto'\n'
+				end
+				local commentstr = r.data:sub(start, r.index-1)
+				-- TODO how to insert comments into the AST?  should they be their own nodes?
+				-- should all whitespace be its own node, so the original code text can be reconstructed exactly?
+				--coroutine.yield(commentstr, 'comment')
+
+--DEBUG: print('read comment ['..start..','..(r.index-1)..']:'..commentstr)
+
+			-- block string
+			elseif r:readblock() then
+--DEBUG: print('read multi-line string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
+				coroutine.yield(r.lasttoken, 'string')
+			
+			-- other string
+			elseif r:canbe'["\']' then
+--DEBUG: print('read quote string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
+local start = r.index-#r.lasttoken
+				local quote = r.lasttoken
+				local s = table()
+				while true do
+					r:seekpast'.'
+					if r.lasttoken == quote then break end
+					if r:done() then error("unfinished string") end
+					if r.lasttoken == '\\' then
+						local esc = r:canbe'.'
+						local escapeCodes = {a='\a', b='\b', f='\f', n='\n', r='\r', t='\t', v='\v', ['\\']='\\', ['"']='"', ["'"]="'", ['0']='\0'}
+						local escapeCode = escapeCodes[esc]
+						if escapeCode then
+							s:insert(escapeCode)
+						elseif esc:match('%d') then
+							-- can read up to three
+							if r:canbe'%d' then esc = esc .. r.lasttoken end
+							if r:canbe'%d' then esc = esc .. r.lasttoken end
+							s:insert(string.char(tonumber(esc)))
+						end
+					else
+						s:insert(r.lasttoken)
+					end
+				end
+--DEBUG: print('read quote string ['..start..','..(r.index-#r.lasttoken)..']: '..r.data:sub(start, r.index-#r.lasttoken))
+				coroutine.yield(s:concat(), 'string')
+			elseif r:canbe'[%a_][%w_]*' then	-- name
+--DEBUG: print('read name ['..(r.index-#r.lasttoken)..', '..r.index..']: '..r.lasttoken)
+				coroutine.yield(r.lasttoken, self.keywords[r.lasttoken] and 'keyword' or 'name')
+			elseif r.data:match('^[%.%d]', r.index) -- if it's a decimal or a number...
+			and (r.data:match('^%d', r.index)	-- then, if it's a number it's good
+			or r.data:match('^%.%d', r.index))	-- or if it's a decimal then if it has a number following it then it's good ...
+			then 								-- otherwise I want it to continue to the next 'else'
+				-- lua doesn't consider the - to be a part of the number literal
+				-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
+--local start = r.index
+				if r:canbe'0[xX]' then
+
+					-- if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
+					if self.version >= '5.2' then
+						-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
+						local token = r:canbe'[%.%da-fA-F]+'
+						assert(#token:gsub('[^%.]','') < 2, 'malformed number')
+						local n = table{'0x', token}
+						if r:canbe'p' then
+							n:insert(r.lasttoken)
+							-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
+							n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+						end
+						coroutine.yield(n:concat(), 'number')
+					else
+						local token = r:canbe'[%da-fA-F]+'
+						assert(token, 'malformed number')
+						coroutine.yield('0x'..token, 'number')
+					end
+				else
+					local token = r:canbe'[%.%d]+'
+					assert(#token:gsub('[^%.]','') < 2, 'malformed number')
+					local n = table{token}
+					if r:canbe'e' then
+						n:insert(r.lasttoken)
+						n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+					end
+					coroutine.yield(n:concat(), 'number')
+				end
+--DEBUG: print('read number ['..start..', '..r.index..']: '..r.data:sub(start, r.index-1))
+			else
+				-- see if it matches any symbols
+				local found = false
+				for _,symbol in ipairs(self.symbols) do
+					if r:canbe(string.patescape(symbol)) then
+--DEBUG: print('read symbol ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
+						coroutine.yield(r.lasttoken, 'symbol')
+						found = true
+						break
+					end
+				end
+				if not found then
+					error("unknown symbol "..r.data:sub(r.index))
+				end
+			end
+		end
+	end)
+end
+
+-- separate this in case someone has to modify the tokenizer symbols and keywords before starting
+function Tokenizer:start()
+	-- arrange symbols from largest to smallest
+	self.symbols:sort(function(a,b) return #a > #b end)
+	self:consume()
+	self:consume()
+end
+
+function Tokenizer:consume()
+	-- [[ TODO store these in an array somewhere, make the history adjustable
+	-- then in all the get[prev][2]loc's just pass an index for how far back to search
+	self.prev2line = self.prevline
+	self.prev2col = self.prevcol
+	self.prev2index = self.previndex
+
+	self.prevline = self.r.line
+	self.prevcol = self.r.col
+	self.previndex = self.r.index
+	--]]
+
+	self.token = self.nexttoken
+	self.tokentype = self.nexttokentype
+	if coroutine.status(self.gettokenthread) == 'dead' then
+		self.nexttoken = nil
+		self.nexttokentype = nil
+		-- done = true
+		return
+	end
+	local status, nexttoken, nexttokentype = coroutine.resume(self.gettokenthread)
+	-- detect errors
+	if not status then
+		error(nexttoken..'\n'
+			..debug.traceback(self.gettokenthread))
+	end
+	self.nexttoken = nexttoken
+	self.nexttokentype = nexttokentype
+end
+
+function Tokenizer:getlinecol()
+	return self.r.line, self.r.col
+end
+
+function Tokenizer:getpos()
+	local sofar = self.r.data:sub(1,self.r.index)
+	local lastline = sofar:match('[^\n]*$') or ''
+	return 'line '..self.r.line
+		..' col '..self.r.col
+		..' code "'..lastline..'"'
+end
+
+function Tokenizer:getloc()
+	return {line = self.prev2line, col = self.prev2col, index = self.prev2index}
+end
+
+return Tokenizer 
