@@ -13,6 +13,8 @@ end
 
 function Tokenizer:init(data, ...)
 	-- TODO move what this does to just the subclass initialization
+	self.symbols = table()
+	self.keywords = {}
 	self:initSymbolsAndKeywords(...)
 	
 	self.r = DataReader(data)

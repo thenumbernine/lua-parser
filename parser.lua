@@ -1,7 +1,7 @@
 local table = require 'ext.table'
-local class = require 'ext.class'
 local ast = require 'parser.ast'
 local Tokenizer = require 'parser.tokenizer'
+local Parser = require 'parser.parserbase'
 
 local LuaTokenizer = Tokenizer:subclass()
 
@@ -19,13 +19,9 @@ function LuaTokenizer:initSymbolsAndKeywords(version, ...)
 	-- store later for parseHexNumber
 	self.version = assert(version)
 
-	self.symbols = table()
-
 	for w in ([[... .. == ~= <= >= + - * / % ^ # < > = ( ) { } [ ] ; : , .]]):gmatch('%S+') do
 		self.symbols:insert(w)
 	end
-
-	self.keywords = {}
 
 	for w in ([[and break do else elseif end false for function if in local nil not or repeat return then true until while]]):gmatch('%S+') do
 		self.keywords[w] = true
@@ -65,14 +61,14 @@ function LuaTokenizer:parseHexNumber(...)
 	end
 end
 
-local Parser = class()
+local LuaParser = Parser:subclass()
 
 -- static function
-function Parser.parse(...)
-	return Parser(...).tree
+function LuaParser.parse(...)
+	return LuaParser(...).tree
 end
 
-function Parser:init(data, version, source)
+function LuaParser:init(data, version, source)
 	self.version = version or _VERSION:match'^Lua (.*)$'
 	if data then
 		self:setData(data, source)
@@ -80,31 +76,31 @@ function Parser:init(data, version, source)
 end
 
 -- TODO I don't need all these, just :getloc()
-function Parser:getloc()
+function LuaParser:getloc()
 	local loc = self.t:getloc()
 	loc.source = self.source
 	return loc
 end
 
-function Parser:setData(data, source)
-	assert(data, "expected data")
-	data = tostring(data)
+function LuaParser:setData(data, source)
 	self.gotos = {}		-- keep track of all gotos
 	self.labels = {}	-- keep track of all labels
-	local t = LuaTokenizer(data, self.version)
-	t:start()
-	self.t = t
 	self.source = source
-
 	self.blockStack = table()
 	self.functionStack = table{'function-vararg'}
 
-	self.tree = self:chunk()
+-- [[
+	LuaParser.super.setData(self, data)
+--]]
+--[[ just use Parser:setData
+	assert(data, "expected data")
+	data = tostring(data)
+	local t = self:buildTokenizer(data)
+	t:start()
+	self.t = t
 
-	-- last verify that all gotos went to all labels
-	for _,g in pairs(self.gotos) do
-		assert(self.labels[g.name], "no visible label '"..g.name.."' for <goto> at line "..g.line)
-	end
+	-- default entry point for parsing data sources
+	self.tree = self:parseTree()
 
 	-- now that we have the tree, build parents
 	-- ... since I don't do that during construction ...
@@ -113,26 +109,25 @@ function Parser:setData(data, source)
 	if self.t.token then
 		error("unexpected "..self.t.token)
 	end
-end
-function Parser:canbe(token, tokentype)	-- token is optional
-	assert(tokentype)
-	if (not token or token == self.t.token)
-	and tokentype == self.t.tokentype
-	then
-		self.lasttoken, self.lasttokentype = self.t.token, self.t.tokentype
-		self.t:consume()
-		return self.lasttoken, self.lasttokentype
+--]]
+	-- after parsing ...
+
+	-- last verify that all gotos went to all labels
+	for _,g in pairs(self.gotos) do
+		assert(self.labels[g.name], "no visible label '"..g.name.."' for <goto> at line "..g.line)
 	end
 end
-function Parser:mustbe(token, tokentype)
-	local lasttoken, lasttokentype = self.t.token, self.t.tokentype
-	self.lasttoken, self.lasttokentype = self:canbe(token, tokentype)
-	if not self.lasttoken then
-		error("expected token='"..token.."' tokentype="..tokentype.." but found token='"..tostring(lasttoken).."' type="..tostring(lasttokentype))
-	end
-	return self.lasttoken, self.lasttokentype
+
+function LuaParser:buildTokenizer(data)
+	return LuaTokenizer(data, self.version)
 end
-function Parser:chunk()
+
+-- default entry point for parsing data sources
+function LuaParser:parseTree()
+	return self:chunk()
+end
+
+function LuaParser:chunk()
 	local from = self:getloc()
 	local stmts = table()
 	repeat
@@ -153,13 +148,13 @@ function Parser:chunk()
 	return ast._block(table.unpack(stmts))
 		:setspan{from = from, to = self:getloc()}
 end
-function Parser:block(blockName)
+function LuaParser:block(blockName)
 	if blockName then self.blockStack:insert(blockName) end
 	local chunk = self:chunk()
 	if blockName then assert(self.blockStack:remove() == blockName) end
 	return chunk
 end
-function Parser:stat()
+function LuaParser:stat()
 	if self.version >= '5.2' then
 		repeat until not self:canbe(';', 'symbol')
 	end
@@ -305,7 +300,7 @@ function Parser:stat()
 	end
 end
 -- 'laststat' in 5.1, 'retstat' in 5.2+
-function Parser:retstat()
+function LuaParser:retstat()
 	local from = self:getloc()
 	-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
 	-- that means only handle 'break' here in 5.1
@@ -324,7 +319,7 @@ function Parser:retstat()
 end
 
 -- verify we're in a loop, then return the break
-function Parser:_break()
+function LuaParser:_break()
 	local from = self:getloc()
 	if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
 		error("break not inside loop")
@@ -333,7 +328,7 @@ function Parser:_break()
 		:setspan{from = from, to = self:getloc()}
 end
 
-function Parser:funcname()
+function LuaParser:funcname()
 	if not self:canbe(nil, 'name') then return end
 	local from = self:getloc()
 	local name = ast._var(self.lasttoken)
@@ -352,7 +347,7 @@ function Parser:funcname()
 	end
 	return name
 end
-function Parser:namelist()
+function LuaParser:namelist()
 	local from = self:getloc()
 	local name = self:canbe(nil, 'name')
 	if not name then return end
@@ -370,7 +365,7 @@ function Parser:namelist()
 	return names
 end
 -- same as above but with optional attributes
-function Parser:attnamelist()
+function LuaParser:attnamelist()
 	local from = self:getloc()
 	local name = self:canbe(nil, 'name')
 	if not name then return end
@@ -390,7 +385,7 @@ function Parser:attnamelist()
 	end
 	return names
 end
-function Parser:attrib()
+function LuaParser:attrib()
 	if self.version < '5.4' then return end
 	local attrib
 	if self:canbe('<', 'symbol') then
@@ -399,7 +394,7 @@ function Parser:attrib()
 	end
 	return attrib
 end
-function Parser:explist()
+function LuaParser:explist()
 	local exp = self:exp()
 	if not exp then return end
 	local exps = table{exp}
@@ -415,10 +410,10 @@ exp ::= nil | false | true | Numeral | LiteralString | `...` | function | prefix
 exp ::= [unop] subexp {binop [unop] subexp}
 subexp ::= nil | false | true | Numeral | LiteralString | `...` | function | prefixexp | tableconstructor
 --]]
-function Parser:exp()
+function LuaParser:exp()
 	return self:exp_or()
 end
-function Parser:exp_or()
+function LuaParser:exp_or()
 	local a = self:exp_and()
 	if not a then return end
 	if self:canbe('or', 'keyword') then
@@ -427,7 +422,7 @@ function Parser:exp_or()
 	end
 	return a
 end
-function Parser:exp_and()
+function LuaParser:exp_and()
 	local a = self:exp_cmp()
 	if not a then return end
 	if self:canbe('and', 'keyword') then
@@ -436,7 +431,7 @@ function Parser:exp_and()
 	end
 	return a
 end
-function Parser:exp_cmp()
+function LuaParser:exp_cmp()
 	local a
 	if self.version >= '5.3' then
 		a = self:exp_bor()
@@ -465,7 +460,7 @@ function Parser:exp_cmp()
 	return a
 end
 -- BEGIN 5.3+ ONLY:
-function Parser:exp_bor()
+function LuaParser:exp_bor()
 	local a = self:exp_bxor()
 	if not a then return end
 	if self:canbe('|', 'symbol') then
@@ -474,7 +469,7 @@ function Parser:exp_bor()
 	end
 	return a
 end
-function Parser:exp_bxor()
+function LuaParser:exp_bxor()
 	local a = self:exp_band()
 	if not a then return end
 	if self:canbe('~', 'symbol') then
@@ -483,7 +478,7 @@ function Parser:exp_bxor()
 	end
 	return a
 end
-function Parser:exp_band()
+function LuaParser:exp_band()
 	local a = self:exp_shift()
 	if not a then return end
 	if self:canbe('&', 'symbol') then
@@ -492,7 +487,7 @@ function Parser:exp_band()
 	end
 	return a
 end
-function Parser:exp_shift()
+function LuaParser:exp_shift()
 	local a = self:exp_concat()
 	if not a then return end
 	if self:canbe('<<', 'symbol')
@@ -510,7 +505,7 @@ function Parser:exp_shift()
 	return a
 end
 -- END 5.3+ ONLY:
-function Parser:exp_concat()
+function LuaParser:exp_concat()
 	local a = self:exp_addsub()
 	if not a then return end
 	if self:canbe('..', 'symbol') then
@@ -519,7 +514,7 @@ function Parser:exp_concat()
 	end
 	return a
 end
-function Parser:exp_addsub()
+function LuaParser:exp_addsub()
 	local a = self:exp_muldivmod()
 	if not a then return end
 	if self:canbe('+', 'symbol')
@@ -536,7 +531,7 @@ function Parser:exp_addsub()
 	end
 	return a
 end
-function Parser:exp_muldivmod()
+function LuaParser:exp_muldivmod()
 	local a = self:exp_unary()
 	if not a then return end
 	if self:canbe('*', 'symbol')
@@ -555,7 +550,7 @@ function Parser:exp_muldivmod()
 	end
 	return a
 end
-function Parser:exp_unary()
+function LuaParser:exp_unary()
 	local from = self:getloc()
 	if self:canbe('not', 'keyword') then
 		return ast._not(assert(self:exp_unary()))
@@ -577,7 +572,7 @@ function Parser:exp_unary()
 	end
 	return self:exp_pow()
 end
-function Parser:exp_pow()
+function LuaParser:exp_pow()
 	local a = self:subexp()
 	if not a then return end
 	if self:canbe('^', 'symbol') then
@@ -586,7 +581,7 @@ function Parser:exp_pow()
 	end
 	return a
 end
-function Parser:subexp()
+function LuaParser:subexp()
 	local tableconstructor = self:tableconstructor()
 	if tableconstructor then return tableconstructor end
 
@@ -635,7 +630,7 @@ prefixexp ::= Name | prefixexp `[` exp `]` | prefixexp `.` Name | prefixexp args
 simplify ...
 prefixexp ::= (Name {'[' exp ']' | `.` Name | [`:` Name] args} | `(` exp `)`) {args}
 --]]
-function Parser:prefixexp()
+function LuaParser:prefixexp()
 	local prefixexp
 	local from = self:getloc()
 
@@ -688,7 +683,7 @@ end
 -- returns nil on fail to match, like all functions
 -- produces error on syntax error
 -- returns a table of the args -- particularly an empty table if no args were found
-function Parser:args()
+function LuaParser:args()
 	local from = self:getloc()
 	if self:canbe(nil, 'string') then
 		return {
@@ -707,21 +702,21 @@ function Parser:args()
 	end
 end
 -- helper which also includes the line and col in the function object
-function Parser:makeFunction(...)
+function LuaParser:makeFunction(...)
 	local f = ast._function(...) -- no :setspan(), this is done by the caller
 	f.line, f.col = self.t:getlinecol()
 	f.source = self.source
 	return f
 end
 -- 'function' in the 5.1 syntax
-function Parser:functiondef()
+function LuaParser:functiondef()
 	local from = self:getloc()
 	if not self:canbe('function', 'keyword') then return end
 	return self:makeFunction(nil, table.unpack(assert(self:funcbody())))
 		:setspan{from = from, to = self:getloc()}
 end
 -- returns a table of ... first element is a table of args, rest of elements are the body statements
-function Parser:funcbody()
+function LuaParser:funcbody()
 	if not self:canbe('(', 'symbol') then return end
 	local args = self:parlist() or table()
 	local lastArg = args:last()
@@ -733,7 +728,7 @@ function Parser:funcbody()
 	self:mustbe('end', 'keyword')
 	return table{args, table.unpack(block)}
 end
-function Parser:parlist()	-- matches namelist() with ... as a terminator
+function LuaParser:parlist()	-- matches namelist() with ... as a terminator
 	local from = self:getloc()
 	if self:canbe('...', 'symbol') then
 		return table{
@@ -763,7 +758,7 @@ function Parser:parlist()	-- matches namelist() with ... as a terminator
 	end
 	return names
 end
-function Parser:tableconstructor()
+function LuaParser:tableconstructor()
 	local from = self:getloc()
 	if not self:canbe('{', 'symbol') then return end
 	local fields = self:fieldlist()
@@ -771,7 +766,7 @@ function Parser:tableconstructor()
 	return ast._table(fields or {})
 		:setspan{from = from, to = self:getloc()}
 end
-function Parser:fieldlist()
+function LuaParser:fieldlist()
 	local field = self:field()
 	if not field then return end
 	local fields = table{field}
@@ -783,7 +778,7 @@ function Parser:fieldlist()
 	self:fieldsep()
 	return fields
 end
-function Parser:field()
+function LuaParser:field()
 	local from = self:getloc()
 	if self:canbe('[', 'symbol') then
 		local keyexp = assert(self:exp())
@@ -812,8 +807,8 @@ function Parser:field()
 		return exp
 	end
 end
-function Parser:fieldsep()
+function LuaParser:fieldsep()
 	return self:canbe(',', 'symbol') or self:canbe(';', 'symbol')
 end
 
-return Parser
+return LuaParser
