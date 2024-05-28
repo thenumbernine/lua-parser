@@ -9,9 +9,9 @@ local ast = require 'parser.ast'
 local Parser = class()
 
 -- seems redundant. does anyone need to construct a Parser without data? maybe to modify the syntax or something?  just build a subclass in that case?
-function Parser:init(data)
+function Parser:init(data, ...)
 	if data then
-		self:setData(data)
+		self:setData(data, ...)
 	end
 end
 
