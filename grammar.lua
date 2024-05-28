@@ -31,6 +31,7 @@ local asserteq = require 'ext.assert'.eq
 local asserttype = require 'ext.assert'.type
 local assertindex = require 'ext.assert'.index
 local tolua = require 'ext.tolua'
+local template = require 'template'
 local Tokenizer = require 'parser.tokenizer'
 local Parser = require 'parser.parserbase'
 
@@ -64,21 +65,32 @@ function GrammarParser:setData(...)
 	rulesForName.Numeral = true
 	for _,rule in ipairs(self.tree) do
 print(tolua(rule))
+		asserteq(#rule, 3)
+		-- TODO should I convert from indexed to named fields here?
 		asserteq(rule[1], 'rule')
-		local name = asserttype(rule[2], 'string')
-		rulesForName[name] = rule
+		rule.name = rule[2]
+		rule.expr = rule[3]
+		rule[1] = nil
+		rule[2] = nil
+		rule[3] = nil
+		rulesForName[rule.name] = rule
 	end
 
 	-- while we're here, traverse all rules and pick out all symbols and keywords
 	local keywords = {}
 	local symbols = {}
 	local function process(node)
-		if node[1] == 'name' then
+		local nodetype = node[1]
+		if nodetype == 'name' then
 			asserteq(#node, 2)
 			-- names in the grammar should always point to either other rules, or to builtin axiomatic rules (Name, Numeric, LiteralString)
 			local name = asserttype(node[2], 'string')
-			assertindex(rulesForName, name)
-		elseif node[1] == 'string' then
+			local rule = rulesForName[name]
+			if not rule then
+				error("rule referenced but not defined: "..tolua(name))
+			end
+			-- TODO replace the element in the table with the AST? that'd remove the DAG property of the AST.  no more pretty `tolua()` output.
+		elseif nodetype == 'string' then
 			asserteq(#node, 2)
 			local s = asserttype(node[2], 'string')
 
@@ -106,8 +118,50 @@ print(tolua(rule))
 		process(rule)
 	end
 
+	-- At this point I'm torn
+	-- Should I initialize the Tokenizer & Parser classes here, and therefore require a GrammarParser to be run every time the class is initialized?
+	-- Seems like a needless amount of work, but it happens pretty quickly.
+	-- Or should I code-generate the Tokenizer & Parser?
+	-- Downside to codegen is you potentially lose access to the source material.
+	-- Meh, I can just tolua() it in the output if I really want it.
+
 	print('keywords', tolua(table.keys(keywords):sort():concat' '))
 	print('symbols', tolua(table.keys(symbols):sort():concat' '))
+
+	local tokenizerClassName = 'LuaTokenizer'
+	local parserClassName = 'LuaParser'
+
+	print(template([[
+function <?=tokenizerClassName?>:initSymbolsAndKeywords()
+	self.symbols = <?=tolua(table.keys(symbols))?>
+	self.keywords = <?=tolua(keywords)?>
+end
+
+function <?=parserClassName?>:buildTokenizer(data)
+	return <?=tokenizerClassName?>(data)
+end
+
+function <?=parserClassName?>:parseTree()
+	return <?=parserClassName?>:parse_<?=rules[1].name?>()
+end
+
+<? for _,rule in ipairs(rules) do ?>
+function <?=parserClassName?>:parse_<?=rule.name?>()
+end
+<? end ?>
+]], {
+		-- requires above
+		table = table,
+		tolua = tolua,
+		-- self
+		self = self,
+		-- locals
+		rules = self.tree,
+		tokenizerClassName = tokenizerClassName,
+		parserClassName = parserClassName,
+		symbols = symbols,
+		keywords = keywords,
+	}))
 end
 
 function GrammarParser:parseTree()
