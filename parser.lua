@@ -16,6 +16,9 @@ while 'symbols' consist of everything else. (can symbols contain letters that na
 For this reason, when parsing, keywords need separated spaces, while symbols do not (except for distinguishing between various-sized symbols, i.e. < < vs <<).
 --]]
 function LuaTokenizer:initSymbolsAndKeywords(version, ...)
+	-- store later for parseHexNumber
+	self.version = assert(version)
+
 	self.symbols = table()
 
 	for w in ([[... .. == ~= <= >= + - * / % ^ # < > = ( ) { } [ ] ; : , .]]):gmatch('%S+') do
@@ -43,6 +46,24 @@ function LuaTokenizer:initSymbolsAndKeywords(version, ...)
 	end
 end
 
+function LuaTokenizer:parseHexNumber(...)
+	local r = self.r
+	-- if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
+	if self.version >= '5.2' then
+		-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
+		local token = r:canbe'[%.%da-fA-F]+'
+		assert(#token:gsub('[^%.]','') < 2, 'malformed number')
+		local n = table{'0x', token}
+		if r:canbe'p' then
+			n:insert(r.lasttoken)
+			-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
+			n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+		end
+		coroutine.yield(n:concat(), 'number')
+	else
+		return LuaTokenizer.super.parseHexNumber(self, ...)
+	end
+end
 
 local Parser = class()
 

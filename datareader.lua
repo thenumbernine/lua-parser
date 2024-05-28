@@ -63,6 +63,7 @@ function DataReader:mustbe(pattern, msg)
 	return self.lasttoken
 end
 
+-- TODO this one is specific to Lua languages ... I could move it into tokenizer ...
 function DataReader:readblock()
 	if not self:canbe('%[=*%[') then return end
 	local eq = assert(self.lasttoken:match('^%[(=*)%[$'))

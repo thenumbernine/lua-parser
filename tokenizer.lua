@@ -11,20 +11,16 @@ This function should build the `.symbols[i] = symbol` and `.keywords[keyword] = 
 ]]
 end
 
-function Tokenizer:init(data, version, ...)
-	-- version is tied to number parsing.
-	-- TODO instead abstract out the number-parsing to subclasses instead, and get rid of version in the parent class (since it is Lua-specific)
-	self.version = version
-
+function Tokenizer:init(data, ...)
 	-- TODO move what this does to just the subclass initialization
-	self:initSymbolsAndKeywords(version, ...)
+	self:initSymbolsAndKeywords(...)
 	
 	self.r = DataReader(data)
 	self.gettokenthread = coroutine.create(function()
 		local r = self.r
 
 		while not r:done() do
-			self:skipWhitespace()
+			self:skipWhiteSpaces()
 			if r:done() then break end
 			
 			if self:parseComment() then 
@@ -39,16 +35,18 @@ function Tokenizer:init(data, version, ...)
 	end)
 end
 
-function Tokenizer:skipWhitespace()
+function Tokenizer:skipWhiteSpaces()
 	local r = self.r
 	while r:canbe'%s+' do
 --DEBUG: print('read space ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
 	end
 end
 
+-- Lua-specific comments (tho changing the comment symbol is easy ...)
+Tokenizer.singleLineComment = string.patescape'--'
 function Tokenizer:parseComment()
 	local r = self.r
-	if r:canbe(string.patescape'--') then
+	if r:canbe(self.singleLineComment) then
 local start = r.index - #r.lasttoken
 		-- read block comment if it exists
 		if not r:readblock() then
@@ -69,6 +67,7 @@ function Tokenizer:parseString()
 	if self:parseQuoteString() then return true end
 end
 
+-- Lua-specific block strings
 function Tokenizer:parseBlockString()
 	local r = self.r
 	if r:readblock() then
@@ -78,6 +77,7 @@ function Tokenizer:parseBlockString()
 	end
 end
 
+-- '' or "" single-line quote-strings with escape-codes
 function Tokenizer:parseQuoteString()
 	local r = self.r
 	if r:canbe'["\']' then
@@ -111,6 +111,7 @@ function Tokenizer:parseQuoteString()
 	end
 end
 
+-- C names
 function Tokenizer:parseName()
 	local r = self.r
 	if r:canbe'[%a_][%w_]*' then	-- name
@@ -130,37 +131,31 @@ function Tokenizer:parseNumber()
 		-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
 --local start = r.index
 		if r:canbe'0[xX]' then
-
-			-- if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
-			if self.version >= '5.2' then
-				-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
-				local token = r:canbe'[%.%da-fA-F]+'
-				assert(#token:gsub('[^%.]','') < 2, 'malformed number')
-				local n = table{'0x', token}
-				if r:canbe'p' then
-					n:insert(r.lasttoken)
-					-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
-					n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
-				end
-				coroutine.yield(n:concat(), 'number')
-			else
-				local token = r:canbe'[%da-fA-F]+'
-				assert(token, 'malformed number')
-				coroutine.yield('0x'..token, 'number')
-			end
+			self:parseHexNumber()
 		else
-			local token = r:canbe'[%.%d]+'
-			assert(#token:gsub('[^%.]','') < 2, 'malformed number')
-			local n = table{token}
-			if r:canbe'e' then
-				n:insert(r.lasttoken)
-				n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
-			end
-			coroutine.yield(n:concat(), 'number')
+			self:parseDecNumber()
 		end
 --DEBUG: print('read number ['..start..', '..r.index..']: '..r.data:sub(start, r.index-1))
 		return true
 	end
+end
+
+function Tokenizer:parseHexNumber()
+	local r = self.r
+	local token = r:mustbe('[%da-fA-F]+', 'malformed number')
+	coroutine.yield('0x'..token, 'number')
+end
+
+function Tokenizer:parseDecNumber()
+	local r = self.r
+	local token = r:canbe'[%.%d]+'
+	assert(#token:gsub('[^%.]','') < 2, 'malformed number')
+	local n = table{token}
+	if r:canbe'e' then
+		n:insert(r.lasttoken)
+		n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+	end
+	coroutine.yield(n:concat(), 'number')
 end
 
 function Tokenizer:parseSymbol()
@@ -174,7 +169,6 @@ function Tokenizer:parseSymbol()
 		end
 	end
 end
-
 
 -- separate this in case someone has to modify the tokenizer symbols and keywords before starting
 function Tokenizer:start()
