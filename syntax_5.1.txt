@@ -1,6 +1,6 @@
-chunk ::=	{stat [';']} [laststat [';']]
+chunk ::=	{stat [';']} [laststat [';']] ;
 
-block ::=	chunk
+block ::=	chunk ;
 
 stat ::=	varlist '=' explist
 		| functioncall
@@ -13,21 +13,24 @@ stat ::=	varlist '=' explist
 		| 'function' funcname funcbody
 		| 'local' 'function' Name funcbody
 		| 'local' namelist ['=' explist]
+		;
 
 laststat ::= 'return' [explist]
 		| 'break'
+		;
 
-funcname ::= Name {'.' Name} [':' Name]
+funcname ::= Name {'.' Name} [':' Name] ;
 
-varlist ::= var {',' var}
+varlist ::= var {',' var} ;
 
 var ::=  Name
 		| prefixexp '[' exp ']'
 		| prefixexp '.' Name
+		;
 
-namelist ::= Name {',' Name}
+namelist ::= Name {',' Name} ;
 
-explist ::= {exp ','} exp
+explist ::= {exp ','} exp ;
 
 exp ::= 	'nil'
 		| 'false'
@@ -40,35 +43,42 @@ exp ::= 	'nil'
 		| tableconstructor
 		| exp binop exp
 		| unop exp
+		;
 
 prefixexp ::=	var
 		| functioncall
 		| '(' exp ')'
+		;
 
 functioncall ::= 	prefixexp args
 		| prefixexp ':' Name args
+		;
 
 args ::= 	'(' [explist] ')'
 		| tableconstructor
 		| LiteralString
+		;
 
-functiondef ::= 'function' funcbody
+functiondef ::= 'function' funcbody ;
 
-funcbody ::= '(' [parlist] ')' block 'end'
+funcbody ::= '(' [parlist] ')' block 'end' ;
 
 parlist ::= namelist [',' '...']
 		| '...'
+		;
 
-tableconstructor ::= '{' [fieldlist] '}'
+tableconstructor ::= '{' [fieldlist] '}' ;
 
-fieldlist ::= field {fieldsep field} [fieldsep]
+fieldlist ::= field {fieldsep field} [fieldsep] ;
 
 field ::= '[' exp ']' '=' exp
 		| Name '=' exp 
 		| exp
+		;
 
 fieldsep ::= ','
 		| ';'
+		;
 
 binop ::= '+'
 		| '-'
@@ -85,12 +95,13 @@ binop ::= '+'
 		| '~='
 		| 'and'
 		| 'or'
+		;
 
 unop ::= '-'
 		| not
 		| '#'
+		;
 
-
-Name ::= ... how to define valid names ...
-Numeral ::= ... how to define numerals ...
-LiteralString ::= how to define literal strings ...
+-- Name ::= ... how to define valid names ...
+-- Numeral ::= ... how to define numerals ...
+-- LiteralString ::= how to define literal strings ...

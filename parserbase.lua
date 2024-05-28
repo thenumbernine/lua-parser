@@ -3,6 +3,7 @@ TODO rename parser => luaparser and this to just 'parser'
 but then the lua parser is require 'parser.luaparser' ... hmmm
 --]]
 local class = require 'ext.class'
+local tolua = require 'ext.tolua'
 local ast = require 'parser.ast'
 
 local Parser = class()
@@ -22,7 +23,13 @@ function Parser:setData(data)
 	self.t = t
 
 	-- default entry point for parsing data sources
-	self.tree = self:parseTree()
+	assert(xpcall(function()
+		self.tree = self:parseTree()
+	end, function(err)
+		return err..'\n'
+			..self.t:getpos()..'\n'
+			..debug.traceback()
+	end))
 
 	-- now that we have the tree, build parents
 	-- ... since I don't do that during construction ...
@@ -32,7 +39,6 @@ function Parser:setData(data)
 		error("unexpected "..self.t.token)
 	end
 end
-
 
 function Parser:canbe(token, tokentype)	-- token is optional
 	assert(tokentype)
@@ -49,7 +55,7 @@ function Parser:mustbe(token, tokentype)
 	local lasttoken, lasttokentype = self.t.token, self.t.tokentype
 	self.lasttoken, self.lasttokentype = self:canbe(token, tokentype)
 	if not self.lasttoken then
-		error("expected token='"..token.."' tokentype="..tokentype.." but found token='"..tostring(lasttoken).."' type="..tostring(lasttokentype))
+		error("expected token="..tolua(token).." tokentype="..tolua(tokentype).." but found token="..tolua(lasttoken).." type="..tolua(lasttokentype))
 	end
 	return self.lasttoken, self.lasttokentype
 end

@@ -3,6 +3,7 @@ local ast = require 'parser.ast'
 local Tokenizer = require 'parser.tokenizer'
 local Parser = require 'parser.parserbase'
 
+
 local LuaTokenizer = Tokenizer:subclass()
 
 --[[
@@ -61,6 +62,7 @@ function LuaTokenizer:parseHexNumber(...)
 	end
 end
 
+
 local LuaParser = Parser:subclass()
 
 -- static function
@@ -89,28 +91,7 @@ function LuaParser:setData(data, source)
 	self.blockStack = table()
 	self.functionStack = table{'function-vararg'}
 
--- [[
 	LuaParser.super.setData(self, data)
---]]
---[[ just use Parser:setData
-	assert(data, "expected data")
-	data = tostring(data)
-	local t = self:buildTokenizer(data)
-	t:start()
-	self.t = t
-
-	-- default entry point for parsing data sources
-	self.tree = self:parseTree()
-
-	-- now that we have the tree, build parents
-	-- ... since I don't do that during construction ...
-	ast.refreshparents(self.tree)
-
-	if self.t.token then
-		error("unexpected "..self.t.token)
-	end
---]]
-	-- after parsing ...
 
 	-- last verify that all gotos went to all labels
 	for _,g in pairs(self.gotos) do
