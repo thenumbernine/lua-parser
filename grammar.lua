@@ -29,6 +29,7 @@ Grammar implementation:
 local table = require 'ext.table'
 local asserteq = require 'ext.assert'.eq
 local asserttype = require 'ext.assert'.type
+local assertindex = require 'ext.assert'.index
 local tolua = require 'ext.tolua'
 local Tokenizer = require 'parser.tokenizer'
 local Parser = require 'parser.parserbase'
@@ -56,6 +57,18 @@ function GrammarParser:setData(...)
 	-- our first rule will be the start, i.e. :parseTree()
 	-- subsequent rules become member functions
 	
+	local rulesForName = {}
+	-- builtin rules
+	rulesForName.Name = true
+	rulesForName.LiteralString = true
+	rulesForName.Numeral = true
+	for _,rule in ipairs(self.tree) do
+print(tolua(rule))
+		asserteq(rule[1], 'rule')
+		local name = asserttype(rule[2], 'string')
+		rulesForName[name] = rule
+	end
+
 	-- while we're here, traverse all rules and pick out all symbols and keywords
 	local keywords = {}
 	local symbols = {}
@@ -63,6 +76,8 @@ function GrammarParser:setData(...)
 		if node[1] == 'name' then
 			asserteq(#node, 2)
 			-- names in the grammar should always point to either other rules, or to builtin axiomatic rules (Name, Numeric, LiteralString)
+			local name = asserttype(node[2], 'string')
+			assertindex(rulesForName, name)
 		elseif node[1] == 'string' then
 			asserteq(#node, 2)
 			local s = asserttype(node[2], 'string')
@@ -86,8 +101,6 @@ function GrammarParser:setData(...)
 		end
 	end
 	for _,rule in ipairs(self.tree) do
-print(tolua(rule))
-		asserteq(rule[1], 'rule')
 		-- rule[2] is the rule name
 		-- rule[3] is the expression AST node
 		process(rule)
