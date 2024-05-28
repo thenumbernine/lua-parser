@@ -4,10 +4,17 @@ local ast = require 'parser.ast'
 local Tokenizer = require 'parser.tokenizer'
 
 local LuaTokenizer = Tokenizer:subclass()
-	
--- NOTICE this only needs to be initialized once per tokenizer, not per-data-source
--- however at the moment it does need to be initialized once-per-version (as the extra arg to Tokenizer)
--- maybe I should move it to static initialization and move version-based stuff to subclasses' static-init?
+
+--[[
+NOTICE this only needs to be initialized once per tokenizer, not per-data-source
+however at the moment it does need to be initialized once-per-version (as the extra arg to Tokenizer)
+maybe I should move it to static initialization and move version-based stuff to subclasses' static-init?
+
+So why 'symbols' vs 'keywords' ?
+'Keywords' consist of valid names (names like variables functions etc use)
+while 'symbols' consist of everything else. (can symbols contain letters that names can use? at the moment they do not.)
+For this reason, when parsing, keywords need separated spaces, while symbols do not (except for distinguishing between various-sized symbols, i.e. < < vs <<).
+--]]
 function LuaTokenizer:initSymbolsAndKeywords(version, ...)
 	self.symbols = table()
 
