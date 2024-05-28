@@ -1,27 +1,29 @@
 local table = require 'ext.table'
-local class = require 'ext.class'
 local string = require 'ext.string'
 local tolua = require 'ext.tolua'
 
-local ast = {}
+local ASTRootNode = require 'parser.astbase'
 
-local node = class()
+-- Lua-specific parent class:
+local LuaNode = ASTRootNode:subclass() 
 
-node.tostringmethods = {}	-- each class gets a unique one
-
--- returns ancestors as a table, including self
-function node:ancestors()
-	local n = self
-	local t = table()
-	repeat
-		t:insert(n)
-		n = n.parent
-	until not n
-	return t
+function LuaNode.exec(n, ...)
+	return assert(load(tostring(n), ...))
 end
 
-ast.node = node
+-- namespace table of all Lua AST nodes
+local ast = {}
 
+-- each class gets a unique one
+-- TODO not sure if this method is best (or if the member tables of too many node-subclasses gets too cluttered)
+-- versus a separate tostring object that has a single map with node-classes as keys (like I do in symmath.export)
+LuaNode.tostringmethods = {}
+
+ast.node = LuaNode
+
+-- TODO what's a more flexible way of iterating through all child fields?
+-- and what's a more flexible way of constructing AST node subclass, and of specifying their fields,
+--  especially with grammar rule construction?
 local fields = {
 	{'cond', 'one'},
 	{'var', 'one'},
@@ -44,10 +46,7 @@ local fields = {
 	{'span', 'field'},
 }
 
-function node.exec(n, ...)
-	return assert(load(tostring(n), ...))
-end
-ast.exec = node.exec
+ast.exec = LuaNode.exec
 
 --[[
 I need to fix this up better to handle short-circuiting, replacing, removing, etc...
@@ -62,7 +61,7 @@ local function traverseRecurse(
 	childFirstCallback,
 	parentNode
 )
-	if not ast.node:isa(node) then return node end
+	if not LuaNode:isa(node) then return node end
 	if parentFirstCallback then
 		local ret = parentFirstCallback(node, parentNode)
 		if ret ~= node then
@@ -111,14 +110,14 @@ local function traverse(node, ...)
 	return newnode
 end
 
-node.traverse = traverse
+LuaNode.traverse = traverse
 ast.traverse = traverse
 
-function node.copy(n)
+function LuaNode.copy(n)
 	local newn = {}
 	setmetatable(newn, getmetatable(n))
 	for i=1,#n do
-		newn[i] = node.copy(n[i])
+		newn[i] = LuaNode.copy(n[i])
 	end
 	for _,field in ipairs(fields) do
 		local name = field[1]
@@ -127,7 +126,7 @@ function node.copy(n)
 		if value then
 			if howmuch == 'one' then
 				if type(value) == 'table' then
-					newn[name] = node.copy(value)
+					newn[name] = LuaNode.copy(value)
 				else
 					newn[name] = value
 				end
@@ -135,7 +134,7 @@ function node.copy(n)
 				local newmany = {}
 				for k,v in ipairs(value) do
 					if type(v) == 'table' then
-						newmany[k] = node.copy(v)
+						newmany[k] = LuaNode.copy(v)
 					else
 						newmany[k] = v
 					end
@@ -150,7 +149,7 @@ function node.copy(n)
 	end
 	return newn
 end
-ast.copy = node.copy
+ast.copy = LuaNode.copy
 
 --[[
 flatten a function:
@@ -186,8 +185,8 @@ h ret = previous return value of h
 return something(g ret, h ret)
 
 --]]
-function node.flatten(f, varmap)
-	f = node.copy(f)
+function LuaNode.flatten(f, varmap)
+	f = LuaNode.copy(f)
 	traverseRecurse(f, function(n)
 		if type(n) == 'table'
 		and ast._call:isa(n)
@@ -201,12 +200,12 @@ function node.flatten(f, varmap)
 			then
 				local retexprs = {}
 				for i,e in ipairs(f[1].exprs) do
-					retexprs[i] = node.copy(e)
+					retexprs[i] = LuaNode.copy(e)
 					traverseRecurse(retexprs[i], function(v)
 						if type(v) == 'table'
 						and ast._arg:isa(v)
 						then
-							return node.copy(n.args[i])
+							return LuaNode.copy(n.args[i])
 						end
 					end)
 					retexprs[i] = ast._par(retexprs[i])
@@ -218,7 +217,7 @@ function node.flatten(f, varmap)
 	end)
 	return f
 end
-ast.flatten = node.flatten
+ast.flatten = LuaNode.flatten
 
 -- TODO something more flexible than this
 ast.spaceseparator = '\n'
@@ -249,10 +248,11 @@ local function setspan(node, span)
 	return node
 end
 
-local allclasses = table{node}
+local allclasses = table{LuaNode}
 ast.allclasses = allclasses
 local function nodeclass(contents, parent)
-	local newclass = class(parent or ast.node)
+	parent = parent or ast.LuaNode
+	local newclass = parent:subclass()
 	newclass.tostringmethods = {}
 	for k,v in pairs(contents) do
 		newclass[k] = v
@@ -283,7 +283,7 @@ end
 
 --statements
 
-local _stmt = class(node)
+local _stmt = LuaNode:subclass()
 ast._stmt = _stmt
 
 ast._assign = nodeclass({type = 'assign'}, _stmt)
@@ -616,7 +616,7 @@ function ast._indexself.tostringmethods:lua()
 	return tostring(self.expr)..':'..tostring(self.key)
 end
 
-ast._op = class(node)
+ast._op = LuaNode:subclass()
 
 for _,info in ipairs{
 	{'add','+'},

@@ -21,9 +21,9 @@ binop ::= `+` | `-`
 	- Prefix rules with "def" or something, because the end of an expression-list is either a | or a new rule.
 
 Grammar implementation:
-1) scan all rules for all literal strings/keywords.  sort them all by size, largest-to-smallest. 
-2) need to explicitly define some axiom rules. 
-	For Lua: Name, Numeral, LiteralString 
+1) scan all rules for all literal strings/keywords.  sort them all by size, largest-to-smallest.
+2) need to explicitly define some axiom rules.
+	For Lua: Name, Numeral, LiteralString
 
 --]]
 local path = require 'ext.path'
@@ -77,11 +77,11 @@ function GrammarParser:getcode(node)
 		return temp[[
 -- or
 (function()
-<? for i=2,#node do 
+<? for i=2,#node do
 	local child = node[i]
 ?>	local node = <?=tab(self:getcode(child))?>
 	if node then return node end
-<? end 
+<? end
 ?>end)()]]
 	elseif node[1] == 'optional' then	-- optinally a
 		return temp[[
@@ -93,7 +93,7 @@ function GrammarParser:getcode(node)
 (function()	-- multiple
 	local result = table()
 	repeat
-<? for i=2,#node do 
+<? for i=2,#node do
 	local child = node[i]
 ?>		local node = <?=tab(self:getcode(child))?>
 		if not node then break end
@@ -112,7 +112,7 @@ end)()]]
 			return temp[[
 (function()	-- expr
 	local result = table()
-<? for i=2,#node do 
+<? for i=2,#node do
 	local child = node[i]
 ?>	local node = <?=tab(self:getcode(child))?>
 <?	if child[1] ~= 'optional' then
@@ -123,7 +123,7 @@ end)()]]
 ?>	return result
 end)():unpack()]]
 		end
-	
+
 	-- for symbols and keywords when do we want to keep them in the AST, vs when do we want to just consume them?
 	elseif node[1] == 'name' then
 		asserteq(#node, 2)
@@ -154,7 +154,7 @@ function GrammarParser:setData(data, source, ...)
 	-- from here we can convert it into a parse structure
 	-- our first rule will be the start, i.e. :parseTree()
 	-- subsequent rules become member functions
-	
+
 	self.ruleForName = {}
 	-- builtin rules
 	self.ruleForName.Name = true
@@ -266,10 +266,10 @@ function GrammarParser:parseTree()
 	rules = table()
 	repeat
 		if not self.t.token then break end	-- nothing left = done
-		
+
 		local rule = self:parseRule()
 		if not rule then break end
-		
+
 		self:canbe(';', 'symbol')
 		rules:insert(rule)
 	until false
@@ -281,6 +281,8 @@ function GrammarParser:parseRule()
 	self:mustbe('::=', 'symbol')
 	local expr = self:parseExprOr()
 --print('got rule', name, tolua(expr))
+
+	-- TODO might as well create AST objects and override their :getcode() instead of making all the if/else conditions in GrammarParser:getcode()
 	return table{'rule', name, expr}
 end
 
@@ -324,7 +326,7 @@ function GrammarParser:parseExprList()
 			expr:insert{'string', self.lasttoken}
 		else
 			break
-		end	
+		end
 	until false
 	return expr
 end
