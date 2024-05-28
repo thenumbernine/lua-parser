@@ -2,6 +2,7 @@
 TODO rename ast.lua => luaast.lua or lua/ast.lua or something
 and rename astbase.lua => ast.lua
 --]]
+local table = require 'ext.table'
 local class = require 'ext.class'
 
 local node = class()
