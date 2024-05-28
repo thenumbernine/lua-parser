@@ -1,6 +1,7 @@
 local table = require 'ext.table'
 local class = require 'ext.class'
 local string = require 'ext.string'
+local assertlt = require 'ext.assert'.lt
 local DataReader = require 'parser.datareader'
 
 local Tokenizer = class()
@@ -151,7 +152,7 @@ end
 function Tokenizer:parseDecNumber()
 	local r = self.r
 	local token = r:canbe'[%.%d]+'
-	assert(#token:gsub('[^%.]','') < 2, 'malformed number')
+	assertlt(#token:gsub('[^%.]',''), 2, 'malformed number')
 	local n = table{token}
 	if r:canbe'e' then
 		n:insert(r.lasttoken)

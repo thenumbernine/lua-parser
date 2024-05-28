@@ -1,4 +1,10 @@
 local table = require 'ext.table'
+local asserteq = require 'ext.assert'.eq
+local assertne = require 'ext.assert'.ne
+local assertlt = require 'ext.assert'.lt
+local assertge = require 'ext.assert'.ge
+local assertle = require 'ext.assert'.le
+local assertindex = require 'ext.assert'.index
 local ast = require 'parser.ast'
 local Tokenizer = require 'parser.tokenizer'
 local Parser = require 'parser.parserbase'
@@ -49,7 +55,7 @@ function LuaTokenizer:parseHexNumber(...)
 	if self.version >= '5.2' then
 		-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
 		local token = r:canbe'[%.%da-fA-F]+'
-		assert(#token:gsub('[^%.]','') < 2, 'malformed number')
+		assertlt(#token:gsub('[^%.]',''), 2, 'malformed number')
 		local n = table{'0x', token}
 		if r:canbe'p' then
 			n:insert(r.lasttoken)
@@ -132,7 +138,7 @@ end
 function LuaParser:block(blockName)
 	if blockName then self.blockStack:insert(blockName) end
 	local chunk = self:chunk()
-	if blockName then assert(self.blockStack:remove() == blockName) end
+	if blockName then asserteq(self.blockStack:remove(), blockName) end
 	return chunk
 end
 function LuaParser:stat()
@@ -169,9 +175,10 @@ function LuaParser:stat()
 	elseif self:canbe('for', 'keyword') then
 		local namelist = assert(self:namelist())
 		if self:canbe('=', 'symbol') then
-			assert(#namelist == 1)
+			asserteq(#namelist, 1)
 			local explist = assert(self:explist())
-			assert(#explist >= 2 and #explist <= 3)
+			assertge(#explist, 2)
+			assertle(#explist, 3)
 			self:mustbe('do', 'keyword')
 			local block = assert(self:block'for =')
 			self:mustbe('end', 'keyword')
@@ -271,7 +278,7 @@ function LuaParser:stat()
 			local vars = table{prefixexp}
 			while self:canbe(',', 'symbol') do
 				local var = assert(self:prefixexp())
-				assert(var.type ~= 'call', "syntax error")
+				assertne(var.type, 'call', "syntax error")
 				vars:insert(var)
 			end
 			self:mustbe('=', 'symbol')
@@ -435,7 +442,7 @@ function LuaParser:exp_cmp()
 			['~='] = ast._ne,
 			['=='] = ast._eq,
 		}
-		a = assert(classForSymbol[self.lasttoken])(a, assert(self:exp_cmp()))
+		a = assertindex(classForSymbol, self.lasttoken)(a, assert(self:exp_cmp()))
 			:setspan{from = a.span.from, to = self:getloc()}
 	end
 	return a
@@ -478,7 +485,7 @@ function LuaParser:exp_shift()
 			['<<'] = ast._shl,
 			['>>'] = ast._shr,
 		}
-		local cl = assert(classForSymbol[self.lasttoken])
+		local cl = assertindex(classForSymbol, self.lasttoken)
 		local b = assert(self:exp_shift())
 		a = cl(a, b)
 			:setspan{from = a.span.from, to = self:getloc()}
@@ -505,7 +512,7 @@ function LuaParser:exp_addsub()
 			['+'] = ast._add,
 			['-'] = ast._sub,
 		}
-		local cl = assert(classForSymbol[self.lasttoken])
+		local cl = assertindex(classForSymbol, self.lasttoken)
 		local b = assert(self:exp_addsub())
 		a = cl(a, b)
 			:setspan{from = a.span.from, to = self:getloc()}
@@ -526,7 +533,7 @@ function LuaParser:exp_muldivmod()
 			['%'] = ast._mod,
 			['//'] = ast._idiv,
 		}
-		a = assert(classForSymbol[self.lasttoken])(a, assert(self:exp_muldivmod()))
+		a = assertindex(classForSymbol, self.lasttoken)(a, assert(self:exp_muldivmod()))
 			:setspan{from = a.span.from, to = self:getloc()}
 	end
 	return a
@@ -574,7 +581,7 @@ function LuaParser:subexp()
 
 	local from = self:getloc()
 	if self:canbe('...', 'symbol') then
-		assert(self.functionStack:last() == 'function-vararg')
+		asserteq(self.functionStack:last(), 'function-vararg')
 		return ast._vararg()
 			:setspan{from = from, to = self:getloc()}
 	end
@@ -705,7 +712,7 @@ function LuaParser:funcbody()
 	self:mustbe(')', 'symbol')
 	self.functionStack:insert(functionType)
 	local block = self:block(functionType)
-	assert(self.functionStack:remove() == functionType)
+	asserteq(self.functionStack:remove(), functionType)
 	self:mustbe('end', 'keyword')
 	return table{args, table.unpack(block)}
 end
