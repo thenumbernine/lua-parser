@@ -276,13 +276,33 @@ function GrammarParser:parseTree()
 	return rules
 end
 
+-- TODO for these rules (and for the rules that GrammarParser code-generates)
+-- I might as well create AST objects and override their :getcode() instead of making all the if/else conditions in GrammarParser:getcode()
+-- but then if I'm using AST objects, I might as well also name the fields instead of just [1]==type, [2]==name, etc
+
+local ASTNode = require 'parser.astbase'
+
+local GrammarASTNode = ASTNode:subclass()
+
+-- all grammar ast classes, key'd by rule-name
+local ast = {}
+
+ast._rule = GrammarASTNode:subclass()
+ast._rule.type = 'rule'
+
 function GrammarParser:parseRule()
+
+	-- can-be + capture + assign 'name'
 	local name = self:mustbe(nil, 'name')
+
+	-- must-be + ignore ... do we ever want to capture a must-be? maybe?
 	self:mustbe('::=', 'symbol')
+
+	-- TODO i'm overusing and improperly using the term 'expr'
+	-- can-be + capture + assign 'expr'
 	local expr = self:parseExprOr()
 --print('got rule', name, tolua(expr))
 
-	-- TODO might as well create AST objects and override their :getcode() instead of making all the if/else conditions in GrammarParser:getcode()
 	return table{'rule', name, expr}
 end
 

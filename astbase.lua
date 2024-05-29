@@ -5,10 +5,10 @@ and rename astbase.lua => ast.lua
 local table = require 'ext.table'
 local class = require 'ext.class'
 
-local node = class()
+local ASTNode = class()
 
 -- returns ancestors as a table, including self
-function node:ancestors()
+function ASTNode:ancestors()
 	local n = self
 	local t = table()
 	repeat
@@ -20,4 +20,4 @@ end
 
 -- TODO move traverse flatten etc here once the fields problem is sorted out
 
-return node
+return ASTNode

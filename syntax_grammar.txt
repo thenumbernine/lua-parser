@@ -1,0 +1,76 @@
+rules ::= rule { ';' rule }
+rule ::= name '::=' expr_or ;
+expr_or ::= expr_list {'|' expr_list} ;
+expr_list ::= 
+	  '{' expr_or '}'
+	| '[' expr_or ']'
+	| Name
+	| Numeral
+	| LiteralString
+;
+
+... how to also include named-captures into the grammar?
+
+rules ::= rule { ';' rule }
+rule ::= name=name '::=' expr=expr_or ;
+expr_or ::= exprs=(expr_list {'|' expr_list});
+expr_list ::= 
+	  type=multiple '{' expr_or '}'
+	| type=optional '[' expr_or ']'
+	| Name
+	| Numeral
+	| LiteralString
+;
+
+... which would then make the grammar more complex:
+Using the new rules:
+	field=token to capture and assign a single token to field 'field'
+	field=(token tokens...) to capture and assign multiple tokens
+	type=whatever to specify that, for this particular '|' branch, the AST node type
+	... maybe instead of type=, use some other syntax, to not collide with the field= syntax
+	... and maybe somehow syntax to distinguish when we want to capture tokens
+		like maybe a * prefix means "don't capture token"
+		or maybe simply no field= means no capture
+		though field=( ... ) means capture a list, and from there we might want to specify what in the list we don't want to capture
+
+
+What if I modeled the grammar grammar after the parser I already wrote, instead of after the grammars I wrote it after?
+
+-- type=block, self[i] = unpack(stat), return
+block ::= { stat } [return] ;
+
+-- type=return, self.exprs[i] = unpack(explist) (but maybe I should change from self.exprs[i] to self[i] ?)
+return ::= 'return' [explist] ;
+
+-- forward ... don't build a 'stat' node, just forward it back into block
+stat ::= 
+	  'local' local
+	| 'function' functionstmt
+	;
+
+-- type=local
+local ::= 'function' localfunction 
+	| localassign
+	;
+
+-- type=function
+-- in my current implementation, but maybe it's a bad idea to depend on 2 levels of AST to determine a local function vs a global function ?
+localfunction ::= Name funcbody ;
+
+-- type=assign
+-- but in my implementation I use 'assign' in a lot of places, and for this particular it is a local(assign(...))
+localassign ::= namelist ['=' explist] ;
+
+-- forward, rename type to 'function' (tho we're gonna see 'function' elsewhere) ...
+functionstmt ::= funcname funcbody ;
+
+-- forward ...
+funcname ::= Name {'.' Name} [':' Name] ;
+
+-- :funcbody() in my code returns a table
+-- whose first argument is the 'parlist' rule locally named 'args'
+-- and whose arguments 2...n are the statements in 'block'
+funcbody ::= '(' [parlist] ')' block 'end' ;
+
+-- parlist returns a table of type=var wrapping the arg name, or type=vararg
+parlist ::= namelist [',' '...'] | '...' ;
