@@ -1,8 +1,8 @@
 local table = require 'ext.table'
-local class = require 'ext.class'
 local string = require 'ext.string'
+local class = require 'ext.class'
 local assertlt = require 'ext.assert'.lt
-local DataReader = require 'parser.datareader'
+local DataReader = require 'parser.base.datareader'
 
 local Tokenizer = class()
 

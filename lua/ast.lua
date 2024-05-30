@@ -1,17 +1,28 @@
+--[[
+TODO ...
+... parser.base.ast returns the ASTNode root of all AST nodes
+... but parser.lua.ast (and maybe soon parser.grammar.ast) return a collection-of-nodes, which are key'd to the token ... hmm ...
+maybe for consistency I should have parser.lua.ast return the LuaNode, which is an ASTNode child, and parent of all Lua AST nodes ... 
+... and give that node a member htat holds a key/value map to all nodes per token ...
+--]]
 local table = require 'ext.table'
 local string = require 'ext.string'
 local tolua = require 'ext.tolua'
 
-local ASTRootNode = require 'parser.astbase'
+local ASTNode = require 'parser.base.ast'
 
 -- Lua-specific parent class:
-local LuaNode = ASTRootNode:subclass() 
+local LuaNode = ASTNode:subclass() 
 
 function LuaNode.exec(n, ...)
 	return assert(load(tostring(n), ...))
 end
 
 -- namespace table of all Lua AST nodes
+-- hmmmmmm TODO get rid of this maybe?
+-- or redefine its scope ...
+-- seems each Parser is going to need a unique one of these to collect all the classes and refresh their nodes respectively
+-- seems this is going to also contain info on how to traverse the 
 local ASTLuaClasses = {}
 
 -- each class gets a unique one

@@ -1,10 +1,5 @@
---[[
-TODO rename parser => luaparser and this to just 'parser'
-but then the lua parser is require 'parser.luaparser' ... hmmm
---]]
 local class = require 'ext.class'
 local tolua = require 'ext.tolua'
-local ast = require 'parser.ast'
 
 local Parser = class()
 
@@ -31,6 +26,10 @@ function Parser:setData(data)
 			..debug.traceback()
 	end))
 
+	-- TODO THIS IS STILL LUA-CENTRIC
+	-- and here's another need for each parser: an "ast" table to collect all possible node classes ...
+	local ast = require 'parser.lua.ast'
+	-- 
 	-- now that we have the tree, build parents
 	-- ... since I don't do that during construction ...
 	ast.refreshparents(self.tree)

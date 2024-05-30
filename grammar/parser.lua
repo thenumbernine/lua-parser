@@ -34,17 +34,9 @@ local asserttype = require 'ext.assert'.type
 local assertindex = require 'ext.assert'.index
 local tolua = require 'ext.tolua'
 local template = require 'template'
-local Tokenizer = require 'parser.tokenizer'
-local Parser = require 'parser.parserbase'
+local GrammarTokenizer = require 'parser.grammar.tokenizer'
+local Parser = require 'parser.base.parser'
 
-
-local GrammarTokenizer = Tokenizer:subclass()
-
-function GrammarTokenizer:initSymbolsAndKeywords()
-	for w in ([[ ::= | ; { } [ ] ]]):gmatch('%S+') do
-		self.symbols:insert(w)
-	end
-end
 
 local GrammarParser = Parser:subclass()
 
@@ -280,7 +272,7 @@ end
 -- I might as well create AST objects and override their :getcode() instead of making all the if/else conditions in GrammarParser:getcode()
 -- but then if I'm using AST objects, I might as well also name the fields instead of just [1]==type, [2]==name, etc
 
-local ASTNode = require 'parser.astbase'
+local ASTNode = require 'parser.base.ast'
 
 local GrammarASTNode = ASTNode:subclass()
 
