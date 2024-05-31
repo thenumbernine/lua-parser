@@ -41,9 +41,6 @@ and honestly if we do save all tokens, that's an easy case for in-order traversa
 --]]
 
 local function asttolua(x)
-	-- it would be a cleaner apply() function if I got rid of this edge case
-	-- but the mix of strings and nodes is pretty tightly wound into things ...
-	if type(x) == 'string' then error'here' end
 	return x:toLua()
 end
 

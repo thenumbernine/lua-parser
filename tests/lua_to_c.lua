@@ -26,7 +26,6 @@ end
 
 
 local function toC(x)
-	if type(x) == 'string' then error'here' end
 	if x.toC then return x:toC(toC) end
 	return x:serialize(toC)	-- hmm not as clean as I expected ...
 end
