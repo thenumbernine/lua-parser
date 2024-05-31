@@ -1,3 +1,5 @@
+simplest case for a grammar of grammers:
+
 rules ::= rule { ';' rule }
 rule ::= name '::=' expr_or ;
 expr_or ::= expr_list {'|' expr_list} ;
@@ -29,21 +31,32 @@ Using the new rules:
 	type=whatever to specify that, for this particular '|' branch, the AST node type
 	... maybe instead of type=, use some other syntax, to not collide with the field= syntax
 	... and maybe somehow syntax to distinguish when we want to capture tokens
-		like maybe a * prefix means "don't capture token"
+		like maybe a * means "don't capture token"
 		or maybe simply no field= means no capture
 		though field=( ... ) means capture a list, and from there we might want to specify what in the list we don't want to capture
 
 
 What if I modeled the grammar grammar after the parser I already wrote, instead of after the grammars I wrote it after?
+How about `*` suffix means "don't trap as a distinct AST, forward back one level instead"
+And `name=` means "assign this to a named field" ?  
+	or should I even use named fields?  
+	More flexible for tree traversal if I don't ... 
+	... and then per-class I could have member functions that return named versions of different fields, 
+		or even __index alias's?
 
--- type=block, self[i] = unpack(stat), return
+-- type=block, {stat} [return] will be assigned to self[i] as per default behavior
 block ::= { stat } [return] ;
 
--- type=return, self.exprs[i] = unpack(explist) (but maybe I should change from self.exprs[i] to self[i] ?)
+-- type=return, 
+--   currently self.exprs[i] = unpack(explist) 
+--   but maybe I should change from self.exprs[i] to self[i] ?
 return ::= 'return' [explist] ;
 
--- forward ... don't build a 'stat' node, just forward it back into block
-stat ::= 
+-- * after rule name means forward/unpack: don't build a 'stat' node, just forward it back into block.
+--  ...or should only the rule-references have *'s for unpacking?  
+--  But doing so with named fields is ambiguous ... more of an argument to get rid of all named fields.
+--  Should the * go on  the rule or on the reference-to-rule?
+stat* ::= 
 	  'local' local
 	| 'function' functionstmt
 	;
@@ -62,10 +75,10 @@ localfunction ::= Name funcbody ;
 localassign ::= namelist ['=' explist] ;
 
 -- forward, rename type to 'function' (tho we're gonna see 'function' elsewhere) ...
-functionstmt ::= funcname funcbody ;
+functionstmt* ::= funcname funcbody ;
 
 -- forward ...
-funcname ::= Name {'.' Name} [':' Name] ;
+funcname* ::= Name {'.' Name} [':' Name] ;
 
 -- :funcbody() in my code returns a table
 -- whose first argument is the 'parlist' rule locally named 'args'
@@ -74,3 +87,16 @@ funcbody ::= '(' [parlist] ')' block 'end' ;
 
 -- parlist returns a table of type=var wrapping the arg name, or type=vararg
 parlist ::= namelist [',' '...'] | '...' ;
+
+
+... what other projects are using this parser anyways:
+
+./netrefl/netfield_vec.lua:local ast = require 'parser.ast'
+./lua-to-batch/lua_to_batch.lua:local ast = require 'parser.ast'
+./vec/create.lua:local ast = require 'parser.ast'
+
+./sand-attack/verify-demo.lua:local parser = require 'parser'
+./dumpworld-from-2020/convert-mario-maps.lua:local parser = require 'parser'
+./lua-to-batch/lua_to_batch.lua:local parser = require 'parser'
+./zeta2d/convert-mario-maps.lua:local parser = require 'parser'
+
