@@ -100,5 +100,4 @@ parlist ::= namelist [',' '...'] | '...' ;
 ./lua-to-batch/lua_to_batch.lua:local parser = require 'parser'
 ./zeta2d/convert-mario-maps.lua:local parser = require 'parser'
 
-- fix tostringmethod, turn it into just toLua() and/or separate traversal
 - also fix args, use indexes whenever possible, use 1:1 with AST grammar whenver possible, justify flattening whenever possible, use aliases

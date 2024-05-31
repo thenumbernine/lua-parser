@@ -21,7 +21,7 @@ local allclasses = table()
 ast.allclasses = allclasses
 
 
--- Lua-specific parent class:
+-- Lua-specific parent class.  root of all other ast node classes in this file.
 local LuaNode = ASTNode:subclass()
 allclasses:insert(LuaNode)
 ast.node = LuaNode		-- assign to 'ast.node' to define it as the ast's parent-most node class
@@ -273,28 +273,26 @@ local function commasep(exprs, apply)
 end
 
 
--- TODO get rid of this function completely plz ... but it's convenient for capturing all children as I declare them ...
-local function nodeclass(contents, parent)
-	parent = parent or ast.node
-	local newclass = parent:subclass()
-	for k,v in pairs(contents) do
-		newclass[k] = v
-	end
-	allclasses:insert(newclass)
-	return newclass
-end
-ast.nodeclass = nodeclass
+local function nodeclass(type, parent, args)
+	parent = parent or LuaNode
+	local cl = parent:subclass()-- make class
 
-local function nodeclasstyped(type, parent, args)
-	args = args or {}
-	args.type = type					-- assign type
-	local cl = nodeclass(args, parent)	-- make class and add to 'allclasses'
-	ast['_'..type] = cl					-- add to namespace
+	if args then				-- copy in contents
+		for k,v in pairs(args) do
+			cl[k] = v
+		end
+	end
+	cl.type = type				-- copy type field
+
+	allclasses:insert(cl)		-- add to 'allclasses'
+
+	ast['_'..type] = cl			-- add to namespace
+
 	return cl
 end
 
 -- generic global stmt collection
-local _block = nodeclasstyped'block'
+local _block = nodeclass'block'
 function _block:init(...)
 	for i=1,select('#', ...) do
 		self[i] = select(i, ...)
@@ -306,16 +304,15 @@ end
 
 --statements
 
-local _stmt = LuaNode:subclass()
-ast._stmt = _stmt
+local _stmt = nodeclass'stmt'
 
 -- TODO 'vars' and 'exprs' should be nodes themselves ...
-ast._assign = nodeclasstyped('assign', _stmt)
-function ast._assign:init(vars, exprs)
+local _assign = nodeclass('assign', _stmt)
+function _assign:init(vars, exprs)
 	self.vars = table(vars)
 	self.exprs = table(exprs)
 end
-function ast._assign:serialize(apply)
+function _assign:serialize(apply)
 	return commasep(self.vars, apply)..'='..commasep(self.exprs, apply)
 end
 
@@ -323,35 +320,35 @@ end
 -- or should we infer?  _do(...) = {type = 'do', block = {type = 'block, ...}}
 -- or should we do neither?  _do(...) = {type = 'do', ...}
 -- neither for now
-ast._do = nodeclasstyped('do', _stmt)
-function ast._do:init(...)
+local _do = nodeclass('do', _stmt)
+function _do:init(...)
 	for i=1,select('#', ...) do
 		self[i] = select(i, ...)
 	end
 end
-function ast._do:serialize(apply)
+function _do:serialize(apply)
 	return 'do '..spacesep(self, apply)..' end'
 end
 
-ast._while = nodeclasstyped('while', _stmt)
-function ast._while:init(cond, ...)
+local _while = nodeclass('while', _stmt)
+function _while:init(cond, ...)
 	self.cond = cond
 	for i=1,select('#', ...) do
 		self[i] = select(i, ...)
 	end
 end
-function ast._while:serialize(apply)
+function _while:serialize(apply)
 	return 'while '..apply(self.cond)..' do '..spacesep(self, apply)..' end'
 end
 
-ast._repeat = nodeclasstyped('repeat', _stmt)
-function ast._repeat:init(cond, ...)
+local _repeat = nodeclass('repeat', _stmt)
+function _repeat:init(cond, ...)
 	self.cond = cond
 	for i=1,select('#', ...) do
 		self[i] = select(i, ...)
 	end
 end
-function ast._repeat:serialize(apply)
+function _repeat:serialize(apply)
 	return 'repeat '..spacesep(self, apply)..' until '..apply(self.cond)
 end
 
@@ -363,8 +360,8 @@ _if(_eq(a,b),
 	_else(...))
 --]]
 -- weird one, idk how to reformat
-ast._if = nodeclasstyped('if', _stmt)
-function ast._if:init(cond,...)
+local _if = nodeclass('if', _stmt)
+function _if:init(cond,...)
 	local elseifs = table()
 	local elsestmt, laststmt
 	for i=1,select('#', ...) do
@@ -386,7 +383,7 @@ function ast._if:init(cond,...)
 	self.elseifs = elseifs
 	self.elsestmt = elsestmt
 end
-function ast._if:serialize(apply)
+function _if:serialize(apply)
 	local s = 'if '..apply(self.cond)..' then '..spacesep(self, apply)
 	for _,ei in ipairs(self.elseifs) do
 		s = s .. apply(ei)
@@ -397,31 +394,31 @@ function ast._if:serialize(apply)
 end
 
 -- aux for _if
-ast._elseif = nodeclasstyped('elseif', _stmt)
-function ast._elseif:init(cond,...)
+local _elseif = nodeclass('elseif', _stmt)
+function _elseif:init(cond,...)
 	self.cond = cond
 	for i=1,select('#', ...) do
 		self[i] = select(i, ...)
 	end
 end
-function ast._elseif:serialize(apply)
+function _elseif:serialize(apply)
 	return ' elseif '..apply(self.cond)..' then '..spacesep(self, apply)
 end
 
 -- aux for _if
-ast._else = nodeclasstyped('else', _stmt)
-function ast._else:init(...)
+local _else = nodeclass('else', _stmt)
+function _else:init(...)
 	for i=1,select('#', ...) do
 		self[i] = select(i, ...)
 	end
 end
-function ast._else:serialize(apply)
+function _else:serialize(apply)
 	return ' else '..spacesep(self, apply)
 end
 
-ast._foreq = nodeclasstyped('foreq', _stmt)
+local _foreq = nodeclass('foreq', _stmt)
 -- step is optional
-function ast._foreq:init(var,min,max,step,...)
+function _foreq:init(var,min,max,step,...)
 	self.var = var
 	self.min = min
 	self.max = max
@@ -430,7 +427,7 @@ function ast._foreq:init(var,min,max,step,...)
 		self[i] = select(i, ...)
 	end
 end
-function ast._foreq:serialize(apply)
+function _foreq:serialize(apply)
 	local s = 'for '..apply(self.var)..' = '..apply(self.min)..','..apply(self.max)
 	if self.step then s = s..','..apply(self.step) end
 	s = s .. ' do '..spacesep(self, apply)..' end'
@@ -438,22 +435,22 @@ function ast._foreq:serialize(apply)
 end
 
 -- TODO 'vars' should be a node itself
-ast._forin = nodeclasstyped('forin', _stmt)
-function ast._forin:init(vars,iterexprs, ...)
+local _forin = nodeclass('forin', _stmt)
+function _forin:init(vars,iterexprs, ...)
 	self.vars = vars
 	self.iterexprs = iterexprs
 	for i=1,select('#', ...) do
 		self[i] = select(i, ...)
 	end
 end
-function ast._forin:serialize(apply)
+function _forin:serialize(apply)
 	return 'for '..commasep(self.vars, apply)..' in '..commasep(self.iterexprs, apply)..' do '..spacesep(self, apply)..' end'
 end
 
-ast._function = nodeclasstyped('function', _stmt)
+local _function = nodeclass('function', _stmt)
 -- name is optional
 -- TODO make 'args' a node
-function ast._function:init(name, args, ...)
+function _function:init(name, args, ...)
 	-- prep args...
 	for i=1,#args do
 		args[i].index = i
@@ -465,7 +462,7 @@ function ast._function:init(name, args, ...)
 		self[i] = select(i, ...)
 	end
 end
-function ast._function:serialize(apply)
+function _function:serialize(apply)
 	local s = 'function '
 	if self.name then s = s .. apply(self.name) end
 	s = s .. '('
@@ -475,13 +472,13 @@ function ast._function:serialize(apply)
 end
 
 -- aux for _function
-ast._arg = nodeclasstyped'arg'
-function ast._arg:init(index)
+local _arg = nodeclass'arg'
+function _arg:init(index)
 	self.index = index
 end
 -- params need to know what function they're in
 -- so they can reference the function's arg names
-function ast._arg:serialize(apply)
+function _arg:serialize(apply)
 	return 'arg'..self.index
 end
 
@@ -492,14 +489,14 @@ end
 -- the parser has to accept functions and variables as separate conditions
 --  I'm tempted to make them separate symbols here too ...
 -- exprs is a table containing: 1) a single function 2) a single assign statement 3) a list of variables
-ast._local = nodeclasstyped('local', _stmt)
-function ast._local:init(exprs)
+local _local = nodeclass('local', _stmt)
+function _local:init(exprs)
 	if ast._function:isa(exprs[1]) or ast._assign:isa(exprs[1]) then
 		assert(#exprs == 1, "local functions or local assignments must be the only child")
 	end
 	self.exprs = table(assert(exprs))
 end
-function ast._local:serialize(apply)
+function _local:serialize(apply)
 	if ast._function:isa(self.exprs[1]) or ast._assign:isa(self.exprs[1]) then
 		return 'local '..apply(self.exprs[1])
 	else
@@ -510,24 +507,24 @@ end
 -- control
 
 -- TODO either 'exprs' a node of its own, or flatten it into 'return'
-ast._return = nodeclasstyped('return', _stmt)
-function ast._return:init(...)
+local _return = nodeclass('return', _stmt)
+function _return:init(...)
 	self.exprs = {...}
 end
-function ast._return:serialize(apply)
+function _return:serialize(apply)
 	return 'return '..commasep(self.exprs, apply)
 end
 
-ast._break = nodeclasstyped('break', _stmt)
-function ast._break:serialize(apply) return 'break' end
+local _break = nodeclass('break', _stmt)
+function _break:serialize(apply) return 'break' end
 
 -- TODO 'args' a node of its own ?
-ast._call = nodeclasstyped'call'
-function ast._call:init(func, ...)
+local _call = nodeclass'call'
+function _call:init(func, ...)
 	self.func = func
 	self.args = {...}
 end
-function ast._call:serialize(apply)
+function _call:serialize(apply)
 	if #self.args == 1
 	and (ast._table:isa(self.args[1])
 		or ast._string:isa(self.args[1])
@@ -537,40 +534,46 @@ function ast._call:serialize(apply)
 	return apply(self.func)..'('..commasep(self.args, apply)..')'
 end
 
-ast._nil = nodeclasstyped'nil'
-ast._nil.const = true
-function ast._nil:serialize(apply) return 'nil' end
+local _nil = nodeclass'nil'
+_nil.const = true
+function _nil:serialize(apply) return 'nil' end
 
-ast._true = nodeclasstyped'boolean'
-ast._true.const = true
-ast._true.value = true
-function ast._true:serialize(apply) return 'true' end
+-- TODO this breaks the rule that ast._NAME.type == 'NAME'
+local _true = nodeclass'boolean'
+ast._true = _true
+ast._boolean = nil
+_true.const = true
+_true.value = true
+function _true:serialize(apply) return 'true' end
 
-ast._false = nodeclasstyped'boolean'
-ast._false.const = true
-ast._false.value = false
-function ast._false:serialize(apply) return 'false' end
+-- TODO this breaks the rule that ast._NAME.type == 'NAME'
+local _false = nodeclass'boolean'
+ast._false = _false
+ast._boolean = nil
+_false.const = true
+_false.value = false
+function _false:serialize(apply) return 'false' end
 
-ast._number = nodeclasstyped'number'
-function ast._number:init(value) self.value = value end
-function ast._number:serialize(apply) return self.value end
+local _number = nodeclass'number'
+function _number:init(value) self.value = value end
+function _number:serialize(apply) return self.value end
 
-ast._string = nodeclasstyped'string'
-function ast._string:init(value) self.value = value end
-function ast._string:serialize(apply)
+local _string = nodeclass'string'
+function _string:init(value) self.value = value end
+function _string:serialize(apply)
 	-- use ext.tolua's string serializer
 	return tolua(self.value)
 end
 
-ast._vararg = nodeclasstyped'vararg'
-function ast._vararg:serialize(apply) return '...' end
+local _vararg = nodeclass'vararg'
+function _vararg:serialize(apply) return '...' end
 
 -- TODO 'args' a node
-ast._table = nodeclasstyped'table'	-- single-element assigns
-function ast._table:init(args)
+local _table = nodeclass'table'	-- single-element assigns
+function _table:init(args)
 	self.args = table(assert(args))
 end
-function ast._table:serialize(apply)
+function _table:serialize(apply)
 	return '{'..self.args:mapi(function(arg)
 		-- if it's an assign then wrap the vars[1] with []'s
 		if ast._assign:isa(arg) then
@@ -582,12 +585,12 @@ function ast._table:serialize(apply)
 	end):concat(',')..'}'
 end
 
-ast._var = nodeclasstyped'var'	-- variable, lhs of ast._assign's, similar to _arg
-function ast._var:init(name, attrib)
+local _var = nodeclass'var'	-- variable, lhs of ast._assign's, similar to _arg
+function _var:init(name, attrib)
 	self.name = name
 	self.attrib = attrib
 end
-function ast._var:serialize(apply)
+function _var:serialize(apply)
 	local s = self.name
 	if self.attrib then
 		-- the extra space is needed for assignments, otherwise lua5.4 `local x<const>=1` chokes while `local x<const> =1` works
@@ -596,11 +599,14 @@ function ast._var:serialize(apply)
 	return s
 end
 
-ast._par = nodeclasstyped'parenthesis'
-function ast._par:init(expr)
+-- TODO this breaks the rule that ast._NAME.type == 'NAME'
+local _par = nodeclass'parenthesis'
+ast._par = _par
+ast._parenthesis = nil
+function _par:init(expr)
 	self.expr = expr
 end
-function ast._par:serialize(apply)
+function _par:serialize(apply)
 	return '('..apply(self.expr)..')'
 end
 
@@ -608,8 +614,8 @@ local function isLuaName(s)
 	return s:match'^[_%a][_%w]*$'
 end
 
-ast._index = nodeclasstyped'index'
-function ast._index:init(expr,key)
+local _index = nodeclass'index'
+function _index:init(expr,key)
 	self.expr = expr
 	-- helper add wrappers to some types:
 	if type(key) == 'string' then
@@ -619,7 +625,7 @@ function ast._index:init(expr,key)
 	end
 	self.key = key
 end
-function ast._index:serialize(apply)
+function _index:serialize(apply)
 -- TODO - if self.key is a string and has no funny chars the use a .$key instead of [$key]
 	if ast._string:isa(self.key)
 	and isLuaName(self.key.value)
@@ -632,17 +638,17 @@ end
 -- this isn't the () call itself, this is just the : dereference
 -- a:b(c) is _call(_indexself(_var'a', _var'b'), _var'c')
 -- technically this is a string lookup, however it is only valid as a lua name, so I'm just passing the Lua string itself
-ast._indexself = nodeclasstyped'indexself'
-function ast._indexself:init(expr,key)
+local _indexself = nodeclass'indexself'
+function _indexself:init(expr,key)
 	self.expr = assert(expr)
 	assert(isLuaName(key))
 	self.key = assert(key)
 end
-function ast._indexself:serialize(apply)
+function _indexself:serialize(apply)
 	return apply(self.expr)..':'..self.key
 end
 
-ast._op = LuaNode:subclass()
+local _op = nodeclass'op'
 
 for _,info in ipairs{
 	{'add','+'},
@@ -669,7 +675,8 @@ for _,info in ipairs{
 } do
 	local name = info[1]
 	local op = info[2]
-	local cl = nodeclass({type = info[1], op = op}, ast._op)
+	local cl = nodeclass(info[1], _op)
+	cl.op = op
 	ast['_'..name] = cl
 	-- TODO 'args' a node ... or just flatten it into this node ...
 	function cl:init(...)
@@ -688,7 +695,8 @@ for _,info in ipairs{
 } do
 	local name = info[1]
 	local op = info[2]
-	local cl = nodeclass{type = info[1], op = op}
+	local cl = nodeclass(info[1], _op)
+	cl.op = op
 	ast['_'..name] = cl
 	function cl:init(arg)
 		self.arg = arg
@@ -698,19 +706,19 @@ for _,info in ipairs{
 	end
 end
 
-ast._goto = nodeclasstyped('goto', _stmt)
-function ast._goto:init(name)
+local _goto = nodeclass('goto', _stmt)
+function _goto:init(name)
 	self.name = name
 end
-function ast._goto:serialize(apply)
+function _goto:serialize(apply)
 	return 'goto '..self.name
 end
 
-ast._label = nodeclasstyped('label', _stmt)
-function ast._label:init(name)
+local _label = nodeclass('label', _stmt)
+function _label:init(name)
 	self.name = name
 end
-function ast._label:serialize(apply)
+function _label:serialize(apply)
 	return '::'..self.name..'::'
 end
 

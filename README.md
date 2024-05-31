@@ -264,7 +264,6 @@ Unary operations:
 Some more useful functions in AST:
 - `ast.copy(node)` = equivalent of `node:copy()`
 - `ast.flatten(node, func, varmap)` = equivalent of `node:flatten(func, varmap)`
-- `ast.nodeclass` = class-creation function for use with the `ast` library.
 - `ast.refreshparents`
 - `ast.traverse`
 - `ast.tostringmethod` = this specifies the serialization method.  It is used to look up the serializer stored in `ast.tostringmethods`

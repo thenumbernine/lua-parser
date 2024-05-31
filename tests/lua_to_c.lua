@@ -27,7 +27,7 @@ end
 
 local function toC(x)
 	if x.toC then return x:toC(toC) end
-	return x:serialize(toC)	-- hmm not as clean as I expected ...
+	return x:serialize(toC)
 end
 --print('c:')
 
