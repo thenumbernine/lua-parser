@@ -1,0 +1,131 @@
+chunk ::= {stat [';']} [laststat [';']] ;
+
+block ::= chunk ;
+
+stat ::= varlist '=' explist
+	| functioncall
+	| 'do' block 'end'
+	| 'while' exp 'do' block 'end'
+	| 'repeat' block 'until' exp
+	| 'if' exp 'then' block {'elseif' exp 'then' block} ['else' block] 'end'
+	| 'for' Name '=' exp ',' exp [',' exp] 'do' block 'end'
+	| 'for' namelist 'in' explist 'do' block 'end'
+	| 'function' funcname funcbody
+	| 'local' 'function' Name funcbody
+	| 'local' namelist ['=' explist]
+	;
+
+laststat ::= 'return' [explist]
+	| 'break'
+	;
+
+funcname ::= Name {'.' Name} [':' Name] ;
+
+varlist ::= var {',' var} ;
+
+var ::=  Name
+	| prefixexp '[' exp ']'
+	| prefixexp '.' Name
+	;
+
+namelist ::= Name {',' Name} ;
+
+explist ::= {exp ','} exp ;
+
+exp ::= 	'nil'
+	| 'false'
+	| 'true'
+	| Numeral
+	| LiteralString
+	| '...'
+	| functiondef
+	| prefixexp
+	| tableconstructor
+	| exp binop exp
+	| unop exp
+	;
+
+prefixexp ::= var
+	| functioncall
+	| '(' exp ')'
+	;
+
+functioncall ::= 	prefixexp args
+	| prefixexp ':' Name args
+	;
+
+args ::= 	'(' [explist] ')'
+	| tableconstructor
+	| LiteralString
+	;
+
+functiondef ::= 'function' funcbody ;
+
+funcbody ::= '(' [parlist] ')' block 'end' ;
+
+parlist ::= namelist [',' '...']
+	| '...'
+	;
+
+tableconstructor ::= '{' [fieldlist] '}' ;
+
+fieldlist ::= field {fieldsep field} [fieldsep] ;
+
+field ::= '[' exp ']' '=' exp
+	| Name '=' exp 
+	| exp
+	;
+
+fieldsep ::= ','
+	| ';'
+	;
+
+-- TODO declare a parent-node 'op' somehow
+-- one downside to this system is .. you need one rule per unique ast node ...
+-- TODO all these should inherit from 'op'
+
+binop ::= add
+	| '-'
+	| '*'
+	| '/'
+	| '^'
+	| '%'
+	| '..'
+	| '<'
+	| '<='
+	| '>'
+	| '>='
+	| '=='
+	| '~='
+	| 'and'
+	| 'or'
+	;
+
+add ::= '+' ;
+sub ::= '-' ;
+mul ::= '*' ;
+div ::= '/' ;
+pow ::= '^' ;
+mod ::= '%' ;
+concat ::= '..' ;
+lt ::= '<' ;
+le ::= '<=' ;
+gt ::= '>' ;
+ge ::= '>=' ;
+eq ::= '==' ;
+ne ::= '~=' ;
+and ::= 'and' ;
+or ::= 'or' ;
+
+unop ::= unm
+	| not
+	| len
+	;
+
+unm ::= '-' ;
+not ::= 'not' ;
+len ::= '#' ;
+
+-- Name ::= ... how to define valid names ...
+-- Numeral ::= ... how to define numerals ...
+-- LiteralString ::= how to define literal strings ...

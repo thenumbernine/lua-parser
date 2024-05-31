@@ -124,7 +124,7 @@ local function tab(s)
 	return s:gsub('\n', '\n\t')
 end
 
-function GrammarParser:getcode(node)
+function GrammarParser:getcode(node, mustbe)
 	local function temp(s)
 		return tab(template(s, {
 			ast = ast,
@@ -154,10 +154,18 @@ function GrammarParser:getcode(node)
 	local result = table()
 	repeat
 <? for i,child in ipairs(node) do
-?>		local node = <?=tab(self:getcode(child))?>
-		if not node then break end	-- TODO a token rewind maybe?
-		result:insert(node)
-<? end
+		local chsrc = child
+		if ast._optional:isa(chsrc) then
+			chsrc = chsrc[1]
+		end
+?>
+		local node = <?=tab(self:getcode(chsrc))?>	<? -- multiple always canbe, ... or is it? ?>
+		if not node then break end	<? -- TODO a token rewind maybe? ?>
+<?
+		if not ast._string:isa(chsrc) then
+?>		result:insert(node)
+<?		end
+	end
 ?>	until false
 	return result
 end)()]]
@@ -170,13 +178,16 @@ end)()]]
 	local result = table()
 <? for i,child in ipairs(node) do
 	local argcode = tab(self:getcode(child))
-	if child.type ~= 'optional' then
+	local chsrc = child
+	if ast._optional:isa(chsrc) then
+		chsrc = chsrc[1]
+	else
 		argcode = 'assert('..argcode..')'
 	end
-	if ast._string:isa(child) then	-- don't keep
-?>	<?=argcode?>
+	if ast._string:isa(chsrc) then	-- don't keep
+?>	<?=argcode?>	-- nocapture <?=chsrc.type?>
 <?	else	-- keep
-?>	result:insert((<?=argcode?>)) -- optional
+?>	result:insert((<?=argcode?>)) -- <?=chsrc.type?>
 <?	end
 end
 ?>	return result
@@ -193,6 +204,8 @@ end)():unpack()]]
 		assertlen(node, 1)
 		local s = asserttype(node[1], 'string')
 		-- keyword / symbol
+		-- TODO this should be 'mustbe' unless its parent is 'optional' or 'multiple' ...
+		-- or maybe don't make that change here, but make it in the parent node that generates this code ...
 		if self.langKeywords[s] then
 			return "self:canbe('"..s.."', 'keyword')"
 		elseif self.langSymbols[s] then
@@ -380,11 +393,15 @@ function GrammarParser:parseExprList()
 			break
 		end
 	until false
+	-- unwrap
+	while #expr == 1 and ast._expr:isa(expr) do
+		expr = expr[1]
+	end
 	return expr
 end
 
 -- [[ test:
-local syntax51 = GrammarParser:fromFile'syntax_5.1.txt'
+local syntax51 = GrammarParser:fromFile'syntax_ast_5.1.txt'
 --]]
 
 return GrammarParser
