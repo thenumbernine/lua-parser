@@ -13,6 +13,9 @@ local LuaTokenizer = require 'parser.lua.tokenizer'
 
 local LuaParser = Parser:subclass()
 
+-- save the namespace here, for Parser:setData()
+LuaParser.ast = ast
+
 -- static function
 function LuaParser.parse(...)
 	return LuaParser(...).tree

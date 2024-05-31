@@ -2,7 +2,7 @@
 TODO ...
 ... parser.base.ast returns the ASTNode root of all AST nodes
 ... but parser.lua.ast (and maybe soon parser.grammar.ast) return a collection-of-nodes, which are key'd to the token ... hmm ...
-maybe for consistency I should have parser.lua.ast return the LuaNode, which is an ASTNode child, and parent of all Lua AST nodes ... 
+maybe for consistency I should have parser.lua.ast return the LuaNode, which is an ASTNode child, and parent of all Lua AST nodes ...
 ... and give that node a member htat holds a key/value map to all nodes per token ...
 --]]
 local table = require 'ext.table'
@@ -11,53 +11,87 @@ local tolua = require 'ext.tolua'
 
 local ASTNode = require 'parser.base.ast'
 
--- Lua-specific parent class:
-local LuaNode = ASTNode:subclass() 
-
-function LuaNode.exec(n, ...)
-	return assert(load(tostring(n), ...))
-end
 
 -- namespace table of all Lua AST nodes
--- hmmmmmm TODO get rid of this maybe?
--- or redefine its scope ...
--- seems each Parser is going to need a unique one of these to collect all the classes and refresh their nodes respectively
--- seems this is going to also contain info on how to traverse the 
-local ASTLuaClasses = {}
+-- TODO get rid of parser's dependency on this?  or somehow make the relation between parser rules and ast's closer, like generate the AST from the parser-rules?
+local ast = {}
 
--- each class gets a unique one
--- TODO not sure if this method is best (or if the member tables of too many node-subclasses gets too cluttered)
--- versus a separate tostring object that has a single map with node-classes as keys (like I do in symmath.export)
-LuaNode.tostringmethods = {}
+-- put all subclasses here
+local allclasses = table()
+ast.allclasses = allclasses
 
-ASTLuaClasses.node = LuaNode
+
+-- Lua-specific parent class:
+local LuaNode = ASTNode:subclass()
+allclasses:insert(LuaNode)
+ast.node = LuaNode		-- assign to 'ast.node' to define it as the ast's parent-most node class
+
+LuaNode.__concat = string.concat
+
+function LuaNode:setspan(span)
+	self.span = span
+	return self
+end
+
+
+--[[
+TODO ... how to make tostring traversal - or any traversal for that matter - modular
+this needs to go with 'flatten'
+and honestly if we do save all tokens, that's an easy case for in-order traversal and for easily reconstructing the syntax / prettyprint / tostring()
+--]]
+
+local function asttolua(x)
+	-- it would be a cleaner apply() function if I got rid of this edge case
+	-- but the mix of strings and nodes is pretty tightly wound into things ...
+	if type(x) == 'string' then error'here' end
+	return x:toLua()
+end
+
+function LuaNode:toLua()
+	return self:serialize(asttolua)	-- :serialize() impl provided by child classes
+end
+
+-- lua is the default serialization ... but change this function to change that
+function LuaNode:__tostring()
+	return self:toLua()
+end
+
+
+function LuaNode:exec(...)
+	return assert(load(self:toLua(), ...))
+end
+
 
 -- TODO what's a more flexible way of iterating through all child fields?
 -- and what's a more flexible way of constructing AST node subclass, and of specifying their fields,
 --  especially with grammar rule construction?
+-- ... how about instead make all fields indexed, and then for certain classes give them aliases into the fields?
+-- ... same with htmlparser?
+-- then in line with this, fields will either point to nodes, or point to tables to nodes?
+--  or maybe the tables-of-nodes should themselves be AST nodes?
 local fields = {
+	{'name', 'field'},
+	{'index', 'field'},
+	{'value', 'field'},
+	{'span', 'field'},
 	{'cond', 'one'},
 	{'var', 'one'},
 	{'min', 'one'},
 	{'max', 'one'},
 	{'step', 'one'},
-	{'vars', 'many'},
 	{'func', 'one'},		-- should this be a _function, or a string depicting a function?
-	{'args', 'many'},
 	{'arg', 'one'},
 	{'key', 'one'},
 	{'expr', 'one'},
-	{'exprs', 'many'},
 	{'stmt', 'one'},
+	{'args', 'many'},
+	{'exprs', 'many'},
 	{'elseifs', 'many'},
 	{'elsestmt', 'many'},
-	{'name', 'field'},
-	{'index', 'field'},
-	{'value', 'field'},
-	{'span', 'field'},
+	{'vars', 'many'},
 }
 
-ASTLuaClasses.exec = LuaNode.exec
+ast.exec = LuaNode.exec
 
 --[[
 I need to fix this up better to handle short-circuiting, replacing, removing, etc...
@@ -108,7 +142,7 @@ local function traverseRecurse(
 	return node
 end
 
-function ASTLuaClasses.refreshparents(node)
+function ast.refreshparents(node)
 	traverseRecurse(node, function(node, parent)
 		node.parent = parent
 		return node
@@ -117,12 +151,12 @@ end
 
 local function traverse(node, ...)
 	local newnode = traverseRecurse(node, ...)
-	ASTLuaClasses.refreshparents(newnode)
+	ast.refreshparents(newnode)
 	return newnode
 end
 
 LuaNode.traverse = traverse
-ASTLuaClasses.traverse = traverse
+ast.traverse = traverse
 
 function LuaNode.copy(n)
 	local newn = {}
@@ -160,7 +194,7 @@ function LuaNode.copy(n)
 	end
 	return newn
 end
-ASTLuaClasses.copy = LuaNode.copy
+ast.copy = LuaNode.copy
 
 --[[
 flatten a function:
@@ -200,146 +234,128 @@ function LuaNode.flatten(f, varmap)
 	f = LuaNode.copy(f)
 	traverseRecurse(f, function(n)
 		if type(n) == 'table'
-		and ASTLuaClasses._call:isa(n)
+		and ast._call:isa(n)
 		then
-			local funcname = tostring(n.func)	-- in case it's a var ... ?
+			local funcname = asttolua(n.func)	-- in case it's a var ... ? TODO modular asttolua => apply ?
 			assert(funcname, "can't flatten a function with anonymous calls")
 			local f = varmap[funcname]
 			if f
 			and #f == 1
-			and ASTLuaClasses._return:isa(f[1])
+			and ast._return:isa(f[1])
 			then
 				local retexprs = {}
 				for i,e in ipairs(f[1].exprs) do
 					retexprs[i] = LuaNode.copy(e)
 					traverseRecurse(retexprs[i], function(v)
 						if type(v) == 'table'
-						and ASTLuaClasses._arg:isa(v)
+						and ast._arg:isa(v)
 						then
 							return LuaNode.copy(n.args[i])
 						end
 					end)
-					retexprs[i] = ASTLuaClasses._par(retexprs[i])
+					retexprs[i] = ast._par(retexprs[i])
 				end
-				return ASTLuaClasses._block(table.unpack(retexprs))	-- TODO exprlist, and redo assign to be based on vars and exprs
+				return ast._block(table.unpack(retexprs))	-- TODO exprlist, and redo assign to be based on vars and exprs
 			end
 		end
 		return n
 	end)
 	return f
 end
-ASTLuaClasses.flatten = LuaNode.flatten
+ast.flatten = LuaNode.flatten
 
 -- TODO something more flexible than this
-ASTLuaClasses.spaceseparator = '\n'
+ast.spaceseparator = '\n'
 
-local function spacesep(stmts)
-	return table.mapi(stmts, tostring):concat(ASTLuaClasses.spaceseparator)
+local function spacesep(stmts, apply)
+	return table.mapi(stmts, apply):concat(ast.spaceseparator)
 end
 
-local function commasep(exprs)
-	return table.mapi(exprs, tostring):concat','
+local function commasep(exprs, apply)
+	return table.mapi(exprs, apply):concat','
 end
 
 
---[[
-make __tostring modular
-give each node class a lookup table for whatever the current 'tostringmethod' is
-then remove all __tostring methods and replace the base class __tostring with something to call into the lookup table
---]]
-ASTLuaClasses.tostringmethod = 'lua'
-local nodeToString = function(self)
-	local f = self.tostringmethods[ASTLuaClasses.tostringmethod]
-	if not f then error("failed to find tostringmethod for method "..tostring(ASTLuaClasses.tostringmethod).." for node of type "..tostring(self.type)) end
-	return f(self)
-end
-
-local function setspan(node, span)
-	node.span = span
-	return node
-end
-
-local allclasses = table{LuaNode}
-ASTLuaClasses.allclasses = allclasses
+-- TODO get rid of this function completely plz ... but it's convenient for capturing all children as I declare them ...
 local function nodeclass(contents, parent)
-	parent = parent or ASTLuaClasses.node
+	parent = parent or ast.node
 	local newclass = parent:subclass()
-	newclass.tostringmethods = {}
 	for k,v in pairs(contents) do
 		newclass[k] = v
 	end
-
-	-- TODO put in root-most ASTLuaClasses class
-	newclass.__tostring = nodeToString
-
-	newclass.__concat = string.concat
-
-	newclass.setspan = setspan
-
 	allclasses:insert(newclass)
 	return newclass
 end
-ASTLuaClasses.nodeclass = nodeclass
+ast.nodeclass = nodeclass
+
+local function nodeclasstyped(type, parent, args)
+	args = args or {}
+	args.type = type					-- assign type
+	local cl = nodeclass(args, parent)	-- make class and add to 'allclasses'
+	ast['_'..type] = cl					-- add to namespace
+	return cl
+end
 
 -- generic global stmt collection
-ASTLuaClasses._block = nodeclass{type = 'block'}
-function ASTLuaClasses._block:init(...)
-	for i,stmt in ipairs{...} do
-		self[i] = stmt
+local _block = nodeclasstyped'block'
+function _block:init(...)
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
 	end
 end
-function ASTLuaClasses._block.tostringmethods:lua()
-	return spacesep(self)
+function _block:serialize(apply)
+	return spacesep(self, apply)
 end
 
 --statements
 
 local _stmt = LuaNode:subclass()
-ASTLuaClasses._stmt = _stmt
+ast._stmt = _stmt
 
-ASTLuaClasses._assign = nodeclass({type = 'assign'}, _stmt)
-function ASTLuaClasses._assign:init(vars, exprs)
+-- TODO 'vars' and 'exprs' should be nodes themselves ...
+ast._assign = nodeclasstyped('assign', _stmt)
+function ast._assign:init(vars, exprs)
 	self.vars = table(vars)
 	self.exprs = table(exprs)
 end
-function ASTLuaClasses._assign.tostringmethods:lua()
-	return commasep(self.vars)..'='..commasep(self.exprs)
+function ast._assign:serialize(apply)
+	return commasep(self.vars, apply)..'='..commasep(self.exprs, apply)
 end
 
 -- should we impose construction constraints _do(_block(...))
 -- or should we infer?  _do(...) = {type = 'do', block = {type = 'block, ...}}
 -- or should we do neither?  _do(...) = {type = 'do', ...}
 -- neither for now
-ASTLuaClasses._do = nodeclass({type = 'do'}, _stmt)
-function ASTLuaClasses._do:init(...)
-	for i,stmt in ipairs{...} do
-		self[i] = stmt
+ast._do = nodeclasstyped('do', _stmt)
+function ast._do:init(...)
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
 	end
 end
-function ASTLuaClasses._do.tostringmethods:lua()
-	return 'do '..spacesep(self)..' end'
+function ast._do:serialize(apply)
+	return 'do '..spacesep(self, apply)..' end'
 end
 
-ASTLuaClasses._while = nodeclass({type = 'while'}, _stmt)
-function ASTLuaClasses._while:init(cond, ...)
+ast._while = nodeclasstyped('while', _stmt)
+function ast._while:init(cond, ...)
 	self.cond = cond
-	for i,stmt in ipairs{...} do
-		self[i] = stmt
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
 	end
 end
-function ASTLuaClasses._while.tostringmethods:lua()
-	return 'while '..tostring(self.cond)..' do '..spacesep(self)..' end'
+function ast._while:serialize(apply)
+	return 'while '..apply(self.cond)..' do '..spacesep(self, apply)..' end'
 end
 
-ASTLuaClasses._repeat = nodeclass({type = 'repeat'}, _stmt)
-function ASTLuaClasses._repeat:init(cond, ...)
+ast._repeat = nodeclasstyped('repeat', _stmt)
+function ast._repeat:init(cond, ...)
 	self.cond = cond
-	for i,stmt in ipairs{...} do
-		self[i] = stmt
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
 	end
 end
-function ASTLuaClasses._repeat.tostringmethods:lua()
-	return 'repeat '..spacesep(self)..' until '..tostring(self.cond)
+function ast._repeat:serialize(apply)
+	return 'repeat '..spacesep(self, apply)..' until '..apply(self.cond)
 end
 
 --[[
@@ -349,14 +365,16 @@ _if(_eq(a,b),
 	_elseif(...),
 	_else(...))
 --]]
-ASTLuaClasses._if = nodeclass({type = 'if'}, _stmt)
-function ASTLuaClasses._if:init(cond,...)
+-- weird one, idk how to reformat
+ast._if = nodeclasstyped('if', _stmt)
+function ast._if:init(cond,...)
 	local elseifs = table()
 	local elsestmt, laststmt
-	for _,stmt in ipairs{...} do
-		if ASTLuaClasses._elseif:isa(stmt) then
+	for i=1,select('#', ...) do
+		local stmt = select(i, ...)
+		if ast._elseif:isa(stmt) then
 			elseifs:insert(stmt)
-		elseif ASTLuaClasses._else:isa(stmt) then
+		elseif ast._else:isa(stmt) then
 			assert(not elsestmt)
 			elsestmt = stmt -- and remove
 		else
@@ -371,72 +389,74 @@ function ASTLuaClasses._if:init(cond,...)
 	self.elseifs = elseifs
 	self.elsestmt = elsestmt
 end
-function ASTLuaClasses._if.tostringmethods:lua()
-	local s = 'if '..tostring(self.cond)..' then '..spacesep(self)
+function ast._if:serialize(apply)
+	local s = 'if '..apply(self.cond)..' then '..spacesep(self, apply)
 	for _,ei in ipairs(self.elseifs) do
-		s = s .. tostring(ei)
+		s = s .. apply(ei)
 	end
-	if self.elsestmt then s = s .. tostring(self.elsestmt) end
+	if self.elsestmt then s = s .. apply(self.elsestmt) end
 	s = s .. ' end'
 	return s
 end
 
 -- aux for _if
-ASTLuaClasses._elseif = nodeclass({type = 'elseif'}, _stmt)
-function ASTLuaClasses._elseif:init(cond,...)
+ast._elseif = nodeclasstyped('elseif', _stmt)
+function ast._elseif:init(cond,...)
 	self.cond = cond
-	for i,stmt in ipairs{...} do
-		self[i] = stmt
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
 	end
 end
-function ASTLuaClasses._elseif.tostringmethods:lua()
-	return ' elseif '..tostring(self.cond)..' then '..spacesep(self)
+function ast._elseif:serialize(apply)
+	return ' elseif '..apply(self.cond)..' then '..spacesep(self, apply)
 end
 
 -- aux for _if
-ASTLuaClasses._else = nodeclass({type = 'else'}, _stmt)
-function ASTLuaClasses._else:init(...)
-	for i,stmt in ipairs{...} do
-		self[i] = stmt
+ast._else = nodeclasstyped('else', _stmt)
+function ast._else:init(...)
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
 	end
 end
-function ASTLuaClasses._else.tostringmethods:lua()
-	return ' else '..spacesep(self)
+function ast._else:serialize(apply)
+	return ' else '..spacesep(self, apply)
 end
 
-ASTLuaClasses._foreq = nodeclass({type = 'foreq'}, _stmt)
+ast._foreq = nodeclasstyped('foreq', _stmt)
 -- step is optional
-function ASTLuaClasses._foreq:init(var,min,max,step,...)
+function ast._foreq:init(var,min,max,step,...)
 	self.var = var
 	self.min = min
 	self.max = max
 	self.step = step
-	for i,stmt in ipairs{...} do
-		self[i] = stmt
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
 	end
 end
-function ASTLuaClasses._foreq.tostringmethods:lua()
-	local s = 'for '..tostring(self.var)..' = '..tostring(self.min)..','..tostring(self.max)
-	if self.step then s = s..','..tostring(self.step) end
-	s = s .. ' do '..spacesep(self)..' end'
+function ast._foreq:serialize(apply)
+	local s = 'for '..apply(self.var)..' = '..apply(self.min)..','..apply(self.max)
+	if self.step then s = s..','..apply(self.step) end
+	s = s .. ' do '..spacesep(self, apply)..' end'
 	return s
 end
 
-ASTLuaClasses._forin = nodeclass({type = 'forin'}, _stmt)
-function ASTLuaClasses._forin:init(vars,iterexprs,...)
+-- TODO 'vars' should be a node itself
+ast._forin = nodeclasstyped('forin', _stmt)
+function ast._forin:init(vars,iterexprs, ...)
 	self.vars = vars
 	self.iterexprs = iterexprs
-	for i,stmt in ipairs{...} do
-		self[i] = stmt
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
 	end
 end
-function ASTLuaClasses._forin.tostringmethods:lua()
-	return 'for '..commasep(self.vars)..' in '..commasep(self.iterexprs)..' do '..spacesep(self)..' end'
+function ast._forin:serialize(apply)
+	return 'for '..commasep(self.vars, apply)..' in '..commasep(self.iterexprs, apply)..' do '..spacesep(self, apply)..' end'
 end
 
-ASTLuaClasses._function = nodeclass({type = 'function'}, _stmt)
+ast._function = nodeclasstyped('function', _stmt)
 -- name is optional
-function ASTLuaClasses._function:init(name, args, ...)
+-- TODO make 'args' a node
+function ast._function:init(name, args, ...)
 	-- prep args...
 	for i=1,#args do
 		args[i].index = i
@@ -444,27 +464,27 @@ function ASTLuaClasses._function:init(name, args, ...)
 	end
 	self.name = name
 	self.args = args
-	for i,stmt in ipairs{...} do
-		self[i] = stmt
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
 	end
 end
-function ASTLuaClasses._function.tostringmethods:lua()
+function ast._function:serialize(apply)
 	local s = 'function '
-	if self.name then s = s .. tostring(self.name) end
+	if self.name then s = s .. apply(self.name) end
 	s = s .. '('
-		.. commasep(table.mapi(self.args, tostring))
-		.. ') ' .. spacesep(self) .. ' end'
+		.. table.mapi(self.args, apply):concat','
+		.. ') ' .. spacesep(self, apply) .. ' end'
 	return s
 end
 
 -- aux for _function
-ASTLuaClasses._arg = nodeclass{type = 'arg'}
-function ASTLuaClasses._arg:init(index)
+ast._arg = nodeclasstyped'arg'
+function ast._arg:init(index)
 	self.index = index
 end
 -- params need to know what function they're in
 -- so they can reference the function's arg names
-function ASTLuaClasses._arg.tostringmethods:lua()
+function ast._arg:serialize(apply)
 	return 'arg'..self.index
 end
 
@@ -475,104 +495,102 @@ end
 -- the parser has to accept functions and variables as separate conditions
 --  I'm tempted to make them separate symbols here too ...
 -- exprs is a table containing: 1) a single function 2) a single assign statement 3) a list of variables
-ASTLuaClasses._local = nodeclass({type = 'local'}, _stmt)
-function ASTLuaClasses._local:init(exprs)
-	if ASTLuaClasses._function:isa(exprs[1]) or ASTLuaClasses._assign:isa(exprs[1]) then
+ast._local = nodeclasstyped('local', _stmt)
+function ast._local:init(exprs)
+	if ast._function:isa(exprs[1]) or ast._assign:isa(exprs[1]) then
 		assert(#exprs == 1, "local functions or local assignments must be the only child")
 	end
 	self.exprs = table(assert(exprs))
 end
-function ASTLuaClasses._local.tostringmethods:lua()
-	if ASTLuaClasses._function:isa(self.exprs[1]) or ASTLuaClasses._assign:isa(self.exprs[1]) then
-		return 'local '..tostring(self.exprs[1])
+function ast._local:serialize(apply)
+	if ast._function:isa(self.exprs[1]) or ast._assign:isa(self.exprs[1]) then
+		return 'local '..apply(self.exprs[1])
 	else
-		return 'local '..commasep(self.exprs)
+		return 'local '..commasep(self.exprs, apply)
 	end
 end
 
 -- control
 
-ASTLuaClasses._return = nodeclass({type = 'return'}, _stmt)
-function ASTLuaClasses._return:init(...)
+-- TODO either 'exprs' a node of its own, or flatten it into 'return'
+ast._return = nodeclasstyped('return', _stmt)
+function ast._return:init(...)
 	self.exprs = {...}
 end
-function ASTLuaClasses._return.tostringmethods:lua()
-	return 'return '..commasep(self.exprs)
+function ast._return:serialize(apply)
+	return 'return '..commasep(self.exprs, apply)
 end
 
-ASTLuaClasses._break = nodeclass({type = 'break'}, _stmt)
-function ASTLuaClasses._break.tostringmethods:lua() return 'break' end
+ast._break = nodeclasstyped('break', _stmt)
+function ast._break:serialize(apply) return 'break' end
 
-ASTLuaClasses._call = nodeclass{type = 'call'}
-function ASTLuaClasses._call:init(func, ...)
+-- TODO 'args' a node of its own ?
+ast._call = nodeclasstyped'call'
+function ast._call:init(func, ...)
 	self.func = func
 	self.args = {...}
 end
-function ASTLuaClasses._call.tostringmethods:lua()
+function ast._call:serialize(apply)
 	if #self.args == 1
-	and (ASTLuaClasses._table:isa(self.args[1])
-		or ASTLuaClasses._string:isa(self.args[1])
+	and (ast._table:isa(self.args[1])
+		or ast._string:isa(self.args[1])
 	) then
-		return tostring(self.func)..tostring(self.args[1])
+		return apply(self.func)..apply(self.args[1])
 	end
-	return tostring(self.func)..'('..commasep(self.args)..')'
+	return apply(self.func)..'('..commasep(self.args, apply)..')'
 end
 
--- please don't change these
-ASTLuaClasses._nil = nodeclass{
-	type = 'nil',
-	const = true,
-	tostringmethods = {lua = function() return 'nil' end},
-}
-ASTLuaClasses._true = nodeclass{
-	type = 'boolean',
-	const = true,
-	value = true,
-	tostringmethods = {lua = function() return 'true' end},
-}
-ASTLuaClasses._false = nodeclass{
-	type = 'boolean',
-	const = true,
-	value = false,
-	tostringmethods = {lua = function() return 'false' end},
-}
+ast._nil = nodeclasstyped'nil'
+ast._nil.const = true
+function ast._nil:serialize(apply) return 'nil' end
 
-ASTLuaClasses._number = nodeclass{type = 'number'}
-function ASTLuaClasses._number:init(value) self.value = value end
-function ASTLuaClasses._number.tostringmethods:lua() return self.value end
+ast._true = nodeclasstyped'boolean'
+ast._true.const = true
+ast._true.value = true
+function ast._true:serialize(apply) return 'true' end
 
-ASTLuaClasses._string = nodeclass{type = 'string'}
-function ASTLuaClasses._string:init(value) self.value = value end
-function ASTLuaClasses._string.tostringmethods:lua()
+ast._false = nodeclasstyped'boolean'
+ast._false.const = true
+ast._false.value = false
+function ast._false:serialize(apply) return 'false' end
+
+ast._number = nodeclasstyped'number'
+function ast._number:init(value) self.value = value end
+function ast._number:serialize(apply) return self.value end
+
+ast._string = nodeclasstyped'string'
+function ast._string:init(value) self.value = value end
+function ast._string:serialize(apply)
 	-- use ext.tolua's string serializer
 	return tolua(self.value)
 end
 
-ASTLuaClasses._vararg = nodeclass{type = 'vararg'}
-function ASTLuaClasses._vararg.tostringmethods:lua() return '...' end
+ast._vararg = nodeclasstyped'vararg'
+function ast._vararg:serialize(apply) return '...' end
 
-ASTLuaClasses._table = nodeclass{type = 'table'}	-- single-element assigns
-function ASTLuaClasses._table:init(args)
+-- TODO 'args' a node
+ast._table = nodeclasstyped'table'	-- single-element assigns
+function ast._table:init(args)
 	self.args = table(assert(args))
 end
-function ASTLuaClasses._table.tostringmethods:lua()
+function ast._table:serialize(apply)
 	return '{'..self.args:mapi(function(arg)
 		-- if it's an assign then wrap the vars[1] with []'s
-		if ASTLuaClasses._assign:isa(arg) then
+		if ast._assign:isa(arg) then
 			assert(#arg.vars == 1)
 			assert(#arg.exprs == 1)
-			return '[' .. tostring(arg.vars[1]) .. '] = '..tostring(arg.exprs[1])
+			return '[' .. apply(arg.vars[1]) .. '] = '..apply(arg.exprs[1])
 		end
-		return tostring(arg)
+		return apply(arg)
 	end):concat(',')..'}'
 end
 
-ASTLuaClasses._var = nodeclass{type = 'var'}	-- variable, lhs of ASTLuaClasses._assign's, similar to _arg
-function ASTLuaClasses._var:init(name, attrib)
+ast._var = nodeclasstyped'var'	-- variable, lhs of ast._assign's, similar to _arg
+function ast._var:init(name, attrib)
 	self.name = name
 	self.attrib = attrib
 end
-function ASTLuaClasses._var.tostringmethods:lua()
+function ast._var:serialize(apply)
 	local s = self.name
 	if self.attrib then
 		-- the extra space is needed for assignments, otherwise lua5.4 `local x<const>=1` chokes while `local x<const> =1` works
@@ -581,53 +599,53 @@ function ASTLuaClasses._var.tostringmethods:lua()
 	return s
 end
 
-ASTLuaClasses._par = nodeclass{type = 'parenthesis'}
-function ASTLuaClasses._par:init(expr)
+ast._par = nodeclasstyped'parenthesis'
+function ast._par:init(expr)
 	self.expr = expr
 end
-function ASTLuaClasses._par.tostringmethods:lua()
-	return '('..tostring(self.expr)..')'
+function ast._par:serialize(apply)
+	return '('..apply(self.expr)..')'
 end
 
 local function isLuaName(s)
 	return s:match'^[_%a][_%w]*$'
 end
 
-ASTLuaClasses._index = nodeclass{type = 'index'}
-function ASTLuaClasses._index:init(expr,key)
+ast._index = nodeclasstyped'index'
+function ast._index:init(expr,key)
 	self.expr = expr
 	-- helper add wrappers to some types:
 	if type(key) == 'string' then
-		key = ASTLuaClasses._string(key)
+		key = ast._string(key)
 	elseif type(key) == 'number' then
-		key = ASTLuaClasses._number(key)
+		key = ast._number(key)
 	end
 	self.key = key
 end
-function ASTLuaClasses._index.tostringmethods:lua()
+function ast._index:serialize(apply)
 -- TODO - if self.key is a string and has no funny chars the use a .$key instead of [$key]
-	if ASTLuaClasses._string:isa(self.key)
+	if ast._string:isa(self.key)
 	and isLuaName(self.key.value)
 	then
-		return tostring(self.expr)..'.'..self.key.value
+		return apply(self.expr)..'.'..self.key.value
 	end
-	return tostring(self.expr)..'['..tostring(self.key)..']'
+	return apply(self.expr)..'['..apply(self.key)..']'
 end
 
 -- this isn't the () call itself, this is just the : dereference
 -- a:b(c) is _call(_indexself(_var'a', _var'b'), _var'c')
 -- technically this is a string lookup, however it is only valid as a lua name, so I'm just passing the Lua string itself
-ASTLuaClasses._indexself = nodeclass{type = 'indexself'}
-function ASTLuaClasses._indexself:init(expr,key)
+ast._indexself = nodeclasstyped'indexself'
+function ast._indexself:init(expr,key)
 	self.expr = assert(expr)
 	assert(isLuaName(key))
 	self.key = assert(key)
 end
-function ASTLuaClasses._indexself.tostringmethods:lua()
-	return tostring(self.expr)..':'..tostring(self.key)
+function ast._indexself:serialize(apply)
+	return apply(self.expr)..':'..self.key
 end
 
-ASTLuaClasses._op = LuaNode:subclass()
+ast._op = LuaNode:subclass()
 
 for _,info in ipairs{
 	{'add','+'},
@@ -654,13 +672,14 @@ for _,info in ipairs{
 } do
 	local name = info[1]
 	local op = info[2]
-	local cl = nodeclass({type = info[1], op = op}, ASTLuaClasses._op)
-	ASTLuaClasses['_'..name] = cl
+	local cl = nodeclass({type = info[1], op = op}, ast._op)
+	ast['_'..name] = cl
+	-- TODO 'args' a node ... or just flatten it into this node ...
 	function cl:init(...)
 		self.args = {...}
 	end
-	function cl.tostringmethods:lua()
-		return table.mapi(self.args, tostring):concat(' '..self.op..' ') -- spaces required for 'and' and 'or'
+	function cl:serialize(apply)
+		return table.mapi(self.args, apply):concat(' '..self.op..' ') -- spaces required for 'and' and 'or'
 	end
 end
 
@@ -673,28 +692,28 @@ for _,info in ipairs{
 	local name = info[1]
 	local op = info[2]
 	local cl = nodeclass{type = info[1], op = op}
-	ASTLuaClasses['_'..name] = cl
+	ast['_'..name] = cl
 	function cl:init(arg)
 		self.arg = arg
 	end
-	function cl.tostringmethods:lua()
-		return ' '..self.op..' '..tostring(self.arg)	-- spaces required for 'not'
+	function cl:serialize(apply)
+		return ' '..self.op..' '..apply(self.arg)	-- spaces required for 'not'
 	end
 end
 
-ASTLuaClasses._goto = nodeclass({type = 'goto'}, _stmt)
-function ASTLuaClasses._goto:init(name)
+ast._goto = nodeclasstyped('goto', _stmt)
+function ast._goto:init(name)
 	self.name = name
 end
-function ASTLuaClasses._goto.tostringmethods:lua()
+function ast._goto:serialize(apply)
 	return 'goto '..self.name
 end
 
-ASTLuaClasses._label = nodeclass({type = 'label'}, _stmt)
-function ASTLuaClasses._label:init(name)
+ast._label = nodeclasstyped('label', _stmt)
+function ast._label:init(name)
 	self.name = name
 end
-function ASTLuaClasses._label.tostringmethods:lua()
+function ast._label:serialize(apply)
 	return '::'..self.name..'::'
 end
 
@@ -839,4 +858,4 @@ then we could do tree traversing and graph inferencing
 and do some real inline optimization
 --]]
 
-return ASTLuaClasses
+return ast

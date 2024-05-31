@@ -24,8 +24,8 @@ This is shorthand for `Parser(data, version, source).tree`
 The `Parser` object has a few more functions to it corresponding with internal use while parsing.
 `source` is a description of the source, i.e. filename, which is included in some nodes (functions) for information on where they are declared.
 
-`ast = require 'parser.ast'`
-This is the AST (abstract syntax tree) library, 
+`ast = require 'parser.lua.ast'`
+This is the AST (abstract syntax tree) library,
 it hold a collection of AST classes, each representing a different token in the Lua syntax.
 
 
@@ -42,8 +42,9 @@ Each has the following properties:
 
 `n:flatten(func, varmap)` = flattens / inlines the contents of all function call of this function.  Used for performance optimizations.
 
-`node.tostringmethods[serializationMethod] = function(self) ... end` serializes this node, where `serializationMethod` is the current `ast.tostringmethod`.
-The default `ast.tostringmethod` is set to `'lua'`, and by default `node.tostringmethods.lua` is provided for all classes in `ast`.
+`n:toLua()` = generate Lua code.  same as the node's `__tostring`.
+
+`n:serialize(apply)` = apply a to-string serialization function to the AST.
 
 
 `ast.allclasses` holds an integer-indexed table of all listed classes.

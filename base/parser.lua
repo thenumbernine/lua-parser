@@ -25,14 +25,10 @@ function Parser:setData(data)
 			..self.t:getpos()..'\n'
 			..debug.traceback()
 	end))
-
-	-- TODO THIS IS STILL LUA-CENTRIC
-	-- and here's another need for each parser: an "ast" table to collect all possible node classes ...
-	local ast = require 'parser.lua.ast'
 	-- 
 	-- now that we have the tree, build parents
 	-- ... since I don't do that during construction ...
-	ast.refreshparents(self.tree)
+	self.ast.refreshparents(self.tree)
 
 	if self.t.token then
 		error("unexpected "..self.t.token)

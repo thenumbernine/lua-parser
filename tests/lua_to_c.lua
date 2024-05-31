@@ -1,6 +1,6 @@
 #!/usr/bin/env lua
 local parser = require 'parser'
-local ast = require 'parser.ast'
+local ast = require 'parser.lua.ast'
 local path = require 'ext.path'
 local table = require 'ext.table'
 
@@ -15,23 +15,32 @@ local tabs = -1	-- because everything is in one block
 function tab()
 	return ('\t'):rep(tabs)
 end
-function tabblock(t)
+function tabblock(t, apply)
 	tabs = tabs + 1
 	local s = table(t):mapi(function(expr)
-		return tab() .. tostring(expr)
+		return tab() .. apply(expr)
 	end):concat';\n'
 	tabs = tabs - 1
 	return s..';\n'
 end
 
--- make lua output the default for nodes' c outputw
-local names = table()
-for name,nc in pairs(ast) do
-	if ast.node:isa(nc) then
-		names:insert(name)
-		nc.tostringmethods.c = nc.tostringmethods.lua
+
+local function toC(x)
+	if type(x) == 'string' then error'here' end
+	if x.toC then return x:toC(toC) end
+	return x:serialize(toC)	-- hmm not as clean as I expected ...
+end
+--print('c:')
+
+for _,cl in ipairs(ast.allclasses) do
+	function cl:toC()
+		return self:serialize(toC)
 	end
 end
+
+
+-- make lua output the default for nodes' c outputw
+local names = ast.allclasses:mapi(function(cl) return cl.type end)
 for _,info in ipairs{
 	{'concat','+'},
 	{'and','&&'},
@@ -39,32 +48,34 @@ for _,info in ipairs{
 	{'ne','!='},
 } do
 	local name, op = table.unpack(info)
-	ast['_'..name].tostringmethods.c = function(self) 
-		return table(self.args):mapi(tostring):concat(' '..op..' ')
+	-- hmm, can I override serialize but only for specific apply()'s ?
+	-- I guess if I want to test apply == my new custom one vs otherwise call super ...
+	ast['_'..name].serialize = function(self, apply)
+		return table(self.args):mapi(apply):concat(' '..op..' ')
 	end
 end
-function ast._not.tostringmethods:c()
-	return '!'..tostring(self[1])
+function ast._not:serialize(apply)
+	return '!'..apply(self[1])
 end
-function ast._len.tostringmethods:c()
-	return tostring(self[1])..'.size()';
+function ast._len:serialize(apply)
+	return apply(self[1])..'.size()';
 end
-function ast._assign.tostringmethods:c()
+function ast._assign:serialize(apply)
 	local s = table()
 	for i=1,#self.vars do
 		if self.exprs[i] then
-			s:insert(tostring(self.vars[i])..' = '..tostring(self.exprs[i]))
+			s:insert(apply(self.vars[i])..' = '..apply(self.exprs[i]))
 		else
-			s:insert(tostring(self.vars[i]))
+			s:insert(apply(self.vars[i]))
 		end
 	end
 	return s:concat', '
 end
-function ast._block.tostringmethods:c()
-	return tabblock(self)
+function ast._block:serialize(apply)
+	return tabblock(self, apply)
 end
-function ast._call.tostringmethods:c()
-	local s = tostring(self.func)..'('..table.mapi(self.args, tostring):concat', '..')'
+function ast._call:serialize(apply)
+	local s = apply(self.func)..'('..table.mapi(self.args, apply):concat', '..')'
 	if self.func.name == 'require' then
 		if self.args[1].type == 'string' then
 			-- ok here we add the require file based on our lua path
@@ -77,54 +88,54 @@ function ast._call.tostringmethods:c()
 	end
 	return s
 end
-function ast._foreq.tostringmethods:c()
+function ast._foreq:serialize(apply)
 	local s = 'for ('..cobjtype..' '..self.var..' = '..self.min..'; '..self.var..' < '..self.max..'; '
 	if self.step then
 		s = s .. self.var..' += '..self.step
 	else
 		s = s .. '++'..self.var
 	end
-	s = s ..') {\n' .. tabblock(self) .. tab() .. '}'
+	s = s ..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 	return s
 end
-function ast._forin.tostringmethods:c()
-	return 'for ('..table(self.vars):mapi(tostring):concat', '..' in '..table(self.iterexprs):mapi(tostring):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+function ast._forin:serialize(apply)
+	return 'for ('..table(self.vars):mapi(apply):concat', '..' in '..table(self.iterexprs):mapi(apply):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 end
-function ast._function.tostringmethods:c()
+function ast._function:serialize(apply)
 	if self.name then
 		-- global-scope def?
-		--return cobjtype..' '..self.name..'('..table(self.args):mapi(function(arg) return cobjtype..' '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+		--return cobjtype..' '..self.name..'('..table(self.args):mapi(function(arg) return cobjtype..' '..apply(arg) end):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 		-- local-scope named function def ...
-		return cobjtype..' '..self.name..' = []('..table(self.args):mapi(function(arg) return cobjtype..' '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+		return cobjtype..' '..self.name..' = []('..table(self.args):mapi(function(arg) return cobjtype..' '..apply(arg) end):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 	else
 		-- lambdas?
-		return '[]('..table(self.args):mapi(function(arg) return cobjtype..' '..tostring(arg) end):concat', '..') {\n' .. tabblock(self) .. tab() .. '}'
+		return '[]('..table(self.args):mapi(function(arg) return cobjtype..' '..apply(arg) end):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 	end
 end
-function ast._if.tostringmethods:c()
-	local s = 'if ('..self.cond..') {\n' .. tabblock(self) .. tab() .. '}'
+function ast._if:serialize(apply)
+	local s = 'if ('..self.cond..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 	for _,ei in ipairs(self.elseifs) do
 		s = s .. ei
 	end
 	if self.elsestmt then s = s .. self.elsestmt end
 	return s
 end
-function ast._elseif.tostringmethods:c()
-	return ' else if ('..self.cond..') {\n' .. tabblock(self) .. tab() .. '}'
+function ast._elseif:serialize(apply)
+	return ' else if ('..self.cond..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 end
-function ast._else.tostringmethods:c()
-	return ' else {\n' .. tabblock(self) .. tab() .. '}'
+function ast._else:serialize(apply)
+	return ' else {\n' .. tabblock(self, apply) .. tab() .. '}'
 end
-function ast._index.tostringmethods:c()
-	return tostring(self.expr)..'['..tostring(self.key)..']'
+function ast._index:serialize(apply)
+	return apply(self.expr)..'['..apply(self.key)..']'
 end
-function ast._indexself.tostringmethods:c()
-	return tostring(self.expr)..'.'..tostring(self.key)
+function ast._indexself:serialize(apply)
+	return apply(self.expr)..'.'..apply(self.key)
 end
-function ast._local.tostringmethods:c()
+function ast._local:serialize(apply)
 	if self.exprs[1].type == 'function' or self.exprs[1].type == 'assign' then
 		-- if exprs[1] is a multi-assign then an 'cobjtype' needs to prefix each new declaration
-		return cobjtype..' '..tostring(self.exprs[1])
+		return cobjtype..' '..apply(self.exprs[1])
 	else
 		local s = table()
 		for i=1,#self.exprs do
@@ -133,10 +144,10 @@ function ast._local.tostringmethods:c()
 		return s:concat'\n'
 	end
 end
-function ast._vararg.tostringmethods:c()
+function ast._vararg:serialize(apply)
 	return 'reserved_vararg'	-- reserved name?
 end
-function ast._var.tostringmethods:c()
+function ast._var:serialize(apply)
 	if cppReservedWord[self.name] then
 		return 'cppreserved_' .. self.name
 	end
@@ -144,10 +155,6 @@ function ast._var.tostringmethods:c()
 end
 --print(names:sort():concat' ')
 
-
-
-ast.tostringmethod = 'c'
---print('c:')
 
 local function addtab(s)
 	return '\t'..(s:gsub('\n', '\n\t'))	-- tab
@@ -159,10 +166,10 @@ local function luaFileToCpp(fn)
 	local luacode = assert(path(fn):exists(), "failed to find "..tostring(fn))
 	local luacode = assert(path(fn):read(), "failed to find "..tostring(fn))
 	local tree = parser.parse(luacode)
-	local cppcode = tostring(tree)
+	local cppcode = tree:toC()
 	cppcode = '//file: '..fn..'\n'..cppcode
 	cppcode = addtab(cppcode)
-	return cppcode 
+	return cppcode
 end
 
 
@@ -208,16 +215,16 @@ int main(int argc, char** argv) {
 			return "nil";
 		}
 		//or use getTypeIndex()
-		// or better yet, rewrite our x.details to be a std::variant, 
+		// or better yet, rewrite our x.details to be a std::variant,
 		// and map the variant index to a type,
 		// then just store type info in that extra arra
 	};
-	
+
 	table = _G["table"] = Object::Map();
 
 	table["concat"] = [](VarArg arg) -> Object {
 		if (!arg[1].is_table()) error("expected a table");
-	//TODO FINISHME	
+	//TODO FINISHME
 		// list, sep, i
 		std::ostringstream s;
 		std::string sep = "";
@@ -232,7 +239,7 @@ int main(int argc, char** argv) {
 	require = _G["require"] = [&](std::string const & s) -> Object {
 		Object x = _G["package"]["loaded"][s];
 		if (x != nil) return x;
-	
+
 		x = _G["cppmodules"][s];
 		if (x != nil) {
 			x = x();
@@ -242,7 +249,7 @@ int main(int argc, char** argv) {
 
 		return error(Object("idk how to load ") + s);
 	};
-	
+
 	_G["cppmodules"] = Object::Map();
 ]]
 
@@ -259,7 +266,7 @@ for _,req in ipairs(requires) do
 	_G["cppmodules"]["]]..req..[["] = []() -> Object {
 ]])
 		print(addtab(luaFileToCpp(fn)))
-	
+
 		print[[
 	};
 ]]
