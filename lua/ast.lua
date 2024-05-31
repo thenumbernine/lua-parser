@@ -45,7 +45,11 @@ local function asttolua(x)
 end
 
 function LuaNode:toLua()
-	return self:serialize(asttolua)	-- :serialize() impl provided by child classes
+	-- :serialize() impl provided by child classes
+	-- :serialize() should call traversal in-order of parsing (why I want to make it auto and assoc wth the parser and grammar and rule-generated ast node classes)
+	-- that means serialize() itself should never call serialize() but only call the apply() function passed into it (for modularity's sake)
+	-- it might mean i should capture all nodes too, even those that are fixed, like keywords and symbols, for the sake of reassmbling the syntax 
+	return self:serialize(asttolua)
 end
 
 -- lua is the default serialization ... but change this function to change that
@@ -290,6 +294,7 @@ local function nodeclass(type, parent, args)
 
 	return cl
 end
+ast.nodeclass = nodeclass
 
 -- generic global stmt collection
 local _block = nodeclass'block'

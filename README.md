@@ -271,6 +271,7 @@ Some more useful functions in AST:
 - `ast.flatten(node, func, varmap)` = equivalent of `node:flatten(func, varmap)`
 - `ast.refreshparents`
 - `ast.traverse`
+- `ast.nodeclass(type, parent, args)`
 - `ast.tostringmethod` = this specifies the serialization method.  It is used to look up the serializer stored in `ast.tostringmethods`
 
 ### TODO:

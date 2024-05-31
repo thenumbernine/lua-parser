@@ -15,7 +15,7 @@ local tabs = -1	-- because everything is in one block
 function tab()
 	return ('\t'):rep(tabs)
 end
-function tabblock(t, apply)
+local function tabblock(t, apply)
 	tabs = tabs + 1
 	local s = table(t):mapi(function(expr)
 		return tab() .. apply(expr)
@@ -24,22 +24,20 @@ function tabblock(t, apply)
 	return s..';\n'
 end
 
-
 local function toC(x)
 	if x.toC then return x:toC(toC) end
 	return x:serialize(toC)
 end
---print('c:')
 
 for _,cl in ipairs(ast.allclasses) do
-	function cl:toC()
-		return self:serialize(toC)
+	-- weakness to this design ...i need to always keep specifying the above toC() wrapper, or I have to make a seprate member function...
+	function cl:toC(apply)
+		return self:serialize(apply)
 	end
 end
 
 
 -- make lua output the default for nodes' c outputw
-local names = ast.allclasses:mapi(function(cl) return cl.type end)
 for _,info in ipairs{
 	{'concat','+'},
 	{'and','&&'},
@@ -49,17 +47,17 @@ for _,info in ipairs{
 	local name, op = table.unpack(info)
 	-- hmm, can I override serialize but only for specific apply()'s ?
 	-- I guess if I want to test apply == my new custom one vs otherwise call super ...
-	ast['_'..name].serialize = function(self, apply)
+	ast['_'..name].toC = function(self, apply)
 		return table(self.args):mapi(apply):concat(' '..op..' ')
 	end
 end
-function ast._not:serialize(apply)
+function ast._not:toC(apply)
 	return '!'..apply(self[1])
 end
-function ast._len:serialize(apply)
+function ast._len:toC(apply)
 	return apply(self[1])..'.size()';
 end
-function ast._assign:serialize(apply)
+function ast._assign:toC(apply)
 	local s = table()
 	for i=1,#self.vars do
 		if self.exprs[i] then
@@ -70,10 +68,10 @@ function ast._assign:serialize(apply)
 	end
 	return s:concat', '
 end
-function ast._block:serialize(apply)
+function ast._block:toC(apply)
 	return tabblock(self, apply)
 end
-function ast._call:serialize(apply)
+function ast._call:toC(apply)
 	local s = apply(self.func)..'('..table.mapi(self.args, apply):concat', '..')'
 	if self.func.name == 'require' then
 		if self.args[1].type == 'string' then
@@ -87,7 +85,7 @@ function ast._call:serialize(apply)
 	end
 	return s
 end
-function ast._foreq:serialize(apply)
+function ast._foreq:toC(apply)
 	local s = 'for ('..cobjtype..' '..self.var..' = '..self.min..'; '..self.var..' < '..self.max..'; '
 	if self.step then
 		s = s .. self.var..' += '..self.step
@@ -97,10 +95,10 @@ function ast._foreq:serialize(apply)
 	s = s ..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 	return s
 end
-function ast._forin:serialize(apply)
+function ast._forin:toC(apply)
 	return 'for ('..table(self.vars):mapi(apply):concat', '..' in '..table(self.iterexprs):mapi(apply):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 end
-function ast._function:serialize(apply)
+function ast._function:toC(apply)
 	if self.name then
 		-- global-scope def?
 		--return cobjtype..' '..self.name..'('..table(self.args):mapi(function(arg) return cobjtype..' '..apply(arg) end):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
@@ -111,7 +109,7 @@ function ast._function:serialize(apply)
 		return '[]('..table(self.args):mapi(function(arg) return cobjtype..' '..apply(arg) end):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 	end
 end
-function ast._if:serialize(apply)
+function ast._if:toC(apply)
 	local s = 'if ('..self.cond..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 	for _,ei in ipairs(self.elseifs) do
 		s = s .. ei
@@ -119,19 +117,19 @@ function ast._if:serialize(apply)
 	if self.elsestmt then s = s .. self.elsestmt end
 	return s
 end
-function ast._elseif:serialize(apply)
+function ast._elseif:toC(apply)
 	return ' else if ('..self.cond..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 end
-function ast._else:serialize(apply)
+function ast._else:toC(apply)
 	return ' else {\n' .. tabblock(self, apply) .. tab() .. '}'
 end
-function ast._index:serialize(apply)
+function ast._index:toC(apply)
 	return apply(self.expr)..'['..apply(self.key)..']'
 end
-function ast._indexself:serialize(apply)
+function ast._indexself:toC(apply)
 	return apply(self.expr)..'.'..apply(self.key)
 end
-function ast._local:serialize(apply)
+function ast._local:toC(apply)
 	if self.exprs[1].type == 'function' or self.exprs[1].type == 'assign' then
 		-- if exprs[1] is a multi-assign then an 'cobjtype' needs to prefix each new declaration
 		return cobjtype..' '..apply(self.exprs[1])
@@ -143,16 +141,15 @@ function ast._local:serialize(apply)
 		return s:concat'\n'
 	end
 end
-function ast._vararg:serialize(apply)
+function ast._vararg:toC(apply)
 	return 'reserved_vararg'	-- reserved name?
 end
-function ast._var:serialize(apply)
+function ast._var:toC(apply)
 	if cppReservedWord[self.name] then
 		return 'cppreserved_' .. self.name
 	end
 	return self.name
 end
---print(names:sort():concat' ')
 
 
 local function addtab(s)
@@ -165,7 +162,7 @@ local function luaFileToCpp(fn)
 	local luacode = assert(path(fn):exists(), "failed to find "..tostring(fn))
 	local luacode = assert(path(fn):read(), "failed to find "..tostring(fn))
 	local tree = parser.parse(luacode)
-	local cppcode = tree:toC()
+	local cppcode = tree:toC(toC)
 	cppcode = '//file: '..fn..'\n'..cppcode
 	cppcode = addtab(cppcode)
 	return cppcode
