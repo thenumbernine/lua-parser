@@ -6,7 +6,6 @@ maybe for consistency I should have parser.lua.ast return the LuaNode, which is 
 ... and give that node a member htat holds a key/value map to all nodes per token ...
 --]]
 local table = require 'ext.table'
-local string = require 'ext.string'
 local tolua = require 'ext.tolua'
 
 local ASTNode = require 'parser.base.ast'
@@ -24,14 +23,9 @@ ast.allclasses = allclasses
 -- Lua-specific parent class.  root of all other ast node classes in this file.
 local LuaNode = ASTNode:subclass()
 allclasses:insert(LuaNode)
-ast.node = LuaNode		-- assign to 'ast.node' to define it as the ast's parent-most node class
 
-LuaNode.__concat = string.concat
-
-function LuaNode:setspan(span)
-	self.span = span
-	return self
-end
+-- assign to 'ast.node' to define it as the Lua ast's parent-most node class
+ast.node = LuaNode
 
 
 --[[
@@ -325,6 +319,7 @@ end
 -- or should we infer?  _do(...) = {type = 'do', block = {type = 'block, ...}}
 -- or should we do neither?  _do(...) = {type = 'do', ...}
 -- neither for now
+-- but that means _do and _block are identical ...
 local _do = nodeclass('do', _stmt)
 function _do:init(...)
 	for i=1,select('#', ...) do

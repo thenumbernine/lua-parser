@@ -30,6 +30,7 @@ local path = require 'ext.path'
 local table = require 'ext.table'
 local class = require 'ext.class'
 local asserteq = require 'ext.assert'.eq
+local assertlen = require 'ext.assert'.len
 local asserttype = require 'ext.assert'.type
 local assertindex = require 'ext.assert'.index
 local tolua = require 'ext.tolua'
@@ -38,7 +39,75 @@ local GrammarTokenizer = require 'parser.grammar.tokenizer'
 local Parser = require 'parser.base.parser'
 
 
+-- all grammar ast classes, key'd by rule-name
+local ast = {}
+
+-- hmm ... move this to ASTNode root eventually
+ast.refreshparents = require 'parser.lua.ast'.refreshparents
+
+-- TODO for these rules (and for the rules that GrammarParser code-generates)
+-- I might as well create AST objects and override their :getcode() instead of making all the if/else conditions in GrammarParser:getcode()
+
+local ASTNode = require 'parser.base.ast'
+
+
+local GrammarASTNode = ASTNode:subclass()
+
+function GrammarASTNode:init(...)
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
+	end
+end
+
+GrammarASTNode.insert = table.insert
+GrammarASTNode.append = table.append
+
+local function nodeclass(type)
+	local cl = GrammarASTNode:subclass()
+	cl.type = type
+	ast['_'..type] = cl
+	return cl
+end
+
+local _rule = nodeclass'rule'
+-- how to alias?
+_rule.__index = function(self, k)
+	if k == 'name' then return self[1] end
+	if k == 'expr' then return self[2] end
+	--return _rule.super.__index(self, k)
+	return _rule.super.__index[k]
+end
+
+
+local _expr = nodeclass'expr'
+local _or = nodeclass'or'
+local _multiple = nodeclass'multiple'
+local _optional = nodeclass'optional'
+
+local _name = nodeclass'name'
+local _number = nodeclass'number'
+local _string = nodeclass'string'
+
+--[[ hmm why does this get errors about {"stat"} ...
+_name.__index = function(self, k)
+	if k == 'value' then return self[1] end
+	return _name.super.__index[k]
+end
+
+_number.__index = function(self, k)
+	if k == 'value' then return self[1] end
+	return _number.super.__index[k]
+end
+
+_string.__index = function(self, k)
+	if k == 'value' then return self[1] end
+	return _string.super.__index[k]
+end
+--]]
+
+
 local GrammarParser = Parser:subclass()
+GrammarParser.ast = ast
 
 -- static method, call with :
 function GrammarParser:fromFile(fn)
@@ -51,80 +120,78 @@ end
 
 local Rule = class()
 
-function GrammarParser:getcode(node)
-	local function tab(s)
-		return s:gsub('\n', '\n\t')
-	end
+local function tab(s)
+	return s:gsub('\n', '\n\t')
+end
 
+function GrammarParser:getcode(node)
 	local function temp(s)
-		return template(s, {
+		return tab(template(s, {
+			ast = ast,
 			tolua = tolua,
 			self = self,
 			node = node,
 			tab = tab,
-		})
+		}))
 	end
 
-	if node[1] == 'or' then	-- a or b or c or d ...
+	if ast._or:isa(node) then	-- a or b or c or d ...
 		return temp[[
 -- or
 (function()
-<? for i=2,#node do
-	local child = node[i]
+<? for _,child in ipairs(node) do
 ?>	local node = <?=tab(self:getcode(child))?>
 	if node then return node end
 <? end
 ?>end)()]]
-	elseif node[1] == 'optional' then	-- optinally a
-		return temp[[
--- optional
-<?=tab(self:getcode(node[2]))
-?>]]
-	elseif node[1] == 'multiple' then 	-- a a a a ...
+	elseif ast._optional:isa(node) then	-- optinally a
+		assertlen(node, 1)
+		return self:getcode(node[1])
+		-- optional is only different in that, after the optional code, we don't need any assert()'s / mustbe()'s
+	elseif ast._multiple:isa(node) then 	-- a a a a ...
 		return temp[[
 (function()	-- multiple
 	local result = table()
 	repeat
-<? for i=2,#node do
-	local child = node[i]
+<? for i,child in ipairs(node) do
 ?>		local node = <?=tab(self:getcode(child))?>
-		if not node then break end
+		if not node then break end	-- TODO a token rewind maybe?
 		result:insert(node)
 <? end
 ?>	until false
 	return result
 end)()]]
-	elseif node[1] == 'expr' then		-- list of strings / rules, process list sequentially
-		if #node == 2 then
-			return temp[[
---expr
-<?=tab(self:getcode(node[2]))?>
-]]
+	elseif ast._expr:isa(node) then		-- list of strings / rules, process list sequentially
+		if #node == 1 then
+			return self:getcode(node[1])
 		else
 			return temp[[
 (function()	-- expr
 	local result = table()
-<? for i=2,#node do
-	local child = node[i]
-?>	local node = <?=tab(self:getcode(child))?>
-<?	if child[1] ~= 'optional' then
-?>	assert(node) -- not optional
+<? for i,child in ipairs(node) do
+	local argcode = tab(self:getcode(child))
+	if child.type ~= 'optional' then
+		argcode = 'assert('..argcode..')'
+	end
+	if ast._string:isa(child) then	-- don't keep
+?>	<?=argcode?>
+<?	else	-- keep
+?>	result:insert((<?=argcode?>)) -- optional
 <?	end
-?>	result:insert(node)
-<? end
+end
 ?>	return result
 end)():unpack()]]
 		end
 
 	-- for symbols and keywords when do we want to keep them in the AST, vs when do we want to just consume them?
-	elseif node[1] == 'name' then
-		asserteq(#node, 2)
-		local name = asserttype(node[2], 'string')
+	elseif ast._name:isa(node) then
+		assertlen(node, 1)
+		local name = asserttype(node[1], 'string')
 		assertindex(self.ruleForName, name)
 		return 'self:parse_'..name..'()'
-	elseif node[1] == 'string' then
-		asserteq(#node, 2)
-		local s = asserttype(node[2], 'string')
+	elseif ast._string:isa(node) then
+		assertlen(node, 1)
+		local s = asserttype(node[1], 'string')
 		-- keyword / symbol
 		if self.langKeywords[s] then
 			return "self:canbe('"..s.."', 'keyword')"
@@ -134,7 +201,7 @@ end)():unpack()]]
 			error("found a string that wasn't a keyword or a symbol: "..tolua(s))
 		end
 	else
-		error("need to handle grammar type "..tolua(node[1]))
+		error("need to handle grammar type "..tolua(node.type).." "..tolua(node))
 	end
 	return ''
 end
@@ -153,35 +220,26 @@ function GrammarParser:setData(data, source, ...)
 	self.ruleForName.LiteralString = true
 	self.ruleForName.Numeral = true
 	for _,rule in ipairs(self.tree) do
-		asserteq(#rule, 3)
-		--[[ TODO should I convert from indexed to named fields here?
-		asserteq(rule[1], 'rule')
-		rule.name = rule[2]
-		rule.expr = rule[3]
-		rule[1] = nil
-		rule[2] = nil
-		rule[3] = nil
-		--]]
-		self.ruleForName[rule[2]] = rule
+		assertlen(rule, 2)
+		self.ruleForName[rule.name] = rule
 	end
 
 	-- while we're here, traverse all rules and pick out all symbols and keywords
 	self.langKeywords = {}
 	self.langSymbols = {}
 	local function process(node)
-		local nodetype = node[1]
-		if nodetype == 'name' then
-			asserteq(#node, 2)
+		if ast._name:isa(node) then
+			assertlen(node, 1)
 			-- names in the grammar should always point to either other rules, or to builtin axiomatic rules (Name, Numeric, LiteralString)
-			local name = asserttype(node[2], 'string')
+			local name = asserttype(node[1], 'string')
 			local rule = self.ruleForName[name]
 			if not rule then
 				error("rule referenced but not defined: "..tolua(name))
 			end
 			-- TODO replace the element in the table with the AST? that'd remove the DAG property of the AST.  no more pretty `tolua()` output.
-		elseif nodetype == 'string' then
-			asserteq(#node, 2)
-			local s = asserttype(node[2], 'string')
+		elseif ast._string:isa(node) then
+			assertlen(node, 1)
+			local s = asserttype(node[1], 'string')
 
 			-- keywords vs symbols are parsed separately
 			-- keywords must be space-separated, and for now are only letters -- no symbol characters used (allowed?)
@@ -194,16 +252,13 @@ function GrammarParser:setData(data, source, ...)
 			end
 		end
 
-		for i=2,#node do
-			local child = node[i]
+		for i,child in ipairs(node) do
 			if type(child) == 'table' then
 				process(child)
 			end
 		end
 	end
 	for _,rule in ipairs(self.tree) do
-		-- rule[2] is the rule name
-		-- rule[3] is the expression AST node
 		process(rule)
 	end
 
@@ -229,15 +284,12 @@ function <?=parserClassName?>:buildTokenizer(data)
 end
 
 function <?=parserClassName?>:parseTree()
-	return <?=parserClassName?>:parse_<?=rules[1][2]?>()
+	return <?=parserClassName?>:parse_<?=rules[1][1]?>()
 end
 
 <? for _,rule in ipairs(rules) do ?>
---[[
-<?=tolua(rule[3])?>
---]]
-function <?=parserClassName?>:parse_<?=rule[2]?>()
-	return table{<?=tolua(rule[2])?>, <?=self:getcode(rule[3])?>}
+function <?=parserClassName?>:parse_<?=rule.name?>()
+	return ast._<?=rule.name?>(<?=self:getcode(rule.expr)?>)
 end
 <? end ?>
 ]=], {
@@ -268,20 +320,6 @@ function GrammarParser:parseTree()
 	return rules
 end
 
--- TODO for these rules (and for the rules that GrammarParser code-generates)
--- I might as well create AST objects and override their :getcode() instead of making all the if/else conditions in GrammarParser:getcode()
--- but then if I'm using AST objects, I might as well also name the fields instead of just [1]==type, [2]==name, etc
-
-local ASTNode = require 'parser.base.ast'
-
-local GrammarASTNode = ASTNode:subclass()
-
--- all grammar ast classes, key'd by rule-name
-local ast = {}
-
-ast._rule = GrammarASTNode:subclass()
-ast._rule.type = 'rule'
-
 function GrammarParser:parseRule()
 
 	-- can-be + capture + assign 'name'
@@ -295,7 +333,7 @@ function GrammarParser:parseRule()
 	local expr = self:parseExprOr()
 --print('got rule', name, tolua(expr))
 
-	return table{'rule', name, expr}
+	return ast._rule(name, expr)
 end
 
 function GrammarParser:parseExprOr()
@@ -305,12 +343,14 @@ function GrammarParser:parseExprOr()
 	if self:canbe('|', 'symbol') then
 		local expr2 = self:parseExprOr()
 		if not orexpr then
-			orexpr = table{'or', expr}
+			orexpr = ast._or(expr)
 			expr = orexpr
 		end
-		if expr2[1] == 'or' then
+		if ast._or:isa(expr2) then
 			-- merge or's
-			orexpr:append(expr2:sub(2))
+			for i,child in ipairs(expr2) do
+				orexpr:insert(child)
+			end
 		else
 			orexpr:insert(expr2)
 		end
@@ -319,23 +359,23 @@ function GrammarParser:parseExprOr()
 end
 
 function GrammarParser:parseExprList()
-	local expr = table{'expr'}
+	local expr = ast._expr()
 	repeat
 		if self:canbe('{', 'symbol') then
 			local expr2 = self:parseExprOr()
-			--assert(expr2[1] ~= 'multiple') -- no {{ }} allowed, just { }
+			--assert(not ast._multiple:isa(expr2)) -- no {{ }} allowed, just { }
 			self:mustbe('}', 'symbol')
-			expr:insert(table{'multiple', expr2})
+			expr:insert(ast._multiple(expr2))
 		elseif self:canbe('[', 'symbol') then
 			local expr2 = self:parseExprOr()
 			self:mustbe(']', 'symbol')
-			expr:insert(table{'optional', expr2})
+			expr:insert(ast._optional(expr2))
 		elseif self:canbe(nil, 'name') then
-			expr:insert{'name', self.lasttoken}
+			expr:insert(ast._name(self.lasttoken))
 		elseif self:canbe(nil, 'number') then
-			expr:insert{'number', self.lasttoken}
+			expr:insert(ast._number(self.lasttoken))
 		elseif self:canbe(nil, 'string') then
-			expr:insert{'string', self.lasttoken}
+			expr:insert(ast._string(self.lasttoken))
 		else
 			break
 		end

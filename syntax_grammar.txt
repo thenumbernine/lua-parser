@@ -103,3 +103,8 @@ parlist ::= namelist [',' '...'] | '...' ;
 TODO
 - how does specifying rule class hierarchy work?  things like how 'true' and 'false' literal ast node are subclasses of 'boolean' ast node
 - also fix args, use indexes whenever possible, use 1:1 with AST grammar whenver possible, justify flattening whenever possible, use aliases
+- merge :serialize() and :traverse()
+	- do something about implicit keywords/symbols that are read but not saved (save them? keep track of where they are?)
+	- auto grammar -> ast node class generation
+	- auto grammar -> parser code generation
+- move all this stuff into base/ast.lua
