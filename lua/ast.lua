@@ -538,18 +538,14 @@ local _nil = nodeclass'nil'
 _nil.const = true
 function _nil:serialize(apply) return 'nil' end
 
--- TODO this breaks the rule that ast._NAME.type == 'NAME'
-local _true = nodeclass'boolean'
-ast._true = _true
-ast._boolean = nil
+local _boolean = nodeclass'boolean'
+
+local _true = nodeclass('true', _boolean)
 _true.const = true
 _true.value = true
 function _true:serialize(apply) return 'true' end
 
--- TODO this breaks the rule that ast._NAME.type == 'NAME'
-local _false = nodeclass'boolean'
-ast._false = _false
-ast._boolean = nil
+local _false = nodeclass('false', _boolean)
 _false.const = true
 _false.value = false
 function _false:serialize(apply) return 'false' end
@@ -599,8 +595,7 @@ function _var:serialize(apply)
 	return s
 end
 
--- TODO this breaks the rule that ast._NAME.type == 'NAME'
-local _par = nodeclass'parenthesis'
+local _par = nodeclass'par'
 ast._par = _par
 ast._parenthesis = nil
 function _par:init(expr)

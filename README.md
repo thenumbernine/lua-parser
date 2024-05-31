@@ -165,18 +165,23 @@ A `func(...)` function-call expression.<br>
 A `nil` literal expression.<br>
 `n.type == 'nil'`.<br>
 `n.const == true`.<br>
+<r>
+`n = ast._boolean()`<br>
+The parent class of the `true`/`false` AST nodes.
 <br>
 `n = ast._true()`<br>
 A `true` boolean literal expression<br>
-`n.type == 'boolean'`.<br>
+`n.type == 'true'`.<br>
 `n.const == true`.<br>
 `n.value == true`.<br>
+`ast._boolean:isa(n)` evaluates to `true`<br>
 <br>
 `n = ast._false()`<br>
 A `false` boolean literal expression<br>
-`n.type == 'boolean'`.<br>
+`n.type == 'true'`.<br>
 `n.const == true`.<br>
 `n.value == false`.<br>
+`ast._boolean:isa(n)` evaluates to `true`<br>
 <br>
 `n = ast._number(value)`<br>
 A numeric literal expression.<br>
@@ -206,7 +211,7 @@ A variable reference expression.<br>
 <br>
 `n = ast._par(expr)`<br>
 A `( ... )` parenthesis expression.<br>
-`n.type == 'parenthesis'`.<br>
+`n.type == 'par'`.<br>
 `n.expr =` the expression within the parenthesis.<br>
 <br>
 `n = ast._index(expr, key)`<br>

@@ -100,4 +100,6 @@ parlist ::= namelist [',' '...'] | '...' ;
 ./lua-to-batch/lua_to_batch.lua:local parser = require 'parser'
 ./zeta2d/convert-mario-maps.lua:local parser = require 'parser'
 
+TODO
+- how does specifying rule class hierarchy work?  things like how 'true' and 'false' literal ast node are subclasses of 'boolean' ast node
 - also fix args, use indexes whenever possible, use 1:1 with AST grammar whenver possible, justify flattening whenever possible, use aliases
