@@ -38,6 +38,10 @@ local template = require 'template'
 local GrammarTokenizer = require 'parser.grammar.tokenizer'
 local Parser = require 'parser.base.parser'
 
+local function tab(s)
+	return s:gsub('\n', '\n\t')
+end
+
 
 -- all grammar ast classes, key'd by rule-name
 local ast = {}
@@ -50,7 +54,6 @@ ast.refreshparents = require 'parser.lua.ast'.refreshparents
 
 local ASTNode = require 'parser.base.ast'
 
-
 local GrammarASTNode = ASTNode:subclass()
 
 function GrammarASTNode:init(...)
@@ -61,6 +64,10 @@ end
 
 GrammarASTNode.insert = table.insert
 GrammarASTNode.append = table.append
+
+function GrammarASTNode:getcode(parser)
+	error("need to handle grammar type "..tolua(self.type).." "..tolua(self))
+end
 
 -- how many places really use this?  and why not just search for underscore fields?
 ast.allclasses = table()
@@ -83,14 +90,124 @@ _rule.__index = function(self, k)
 end
 
 
-local _expr = nodeclass'expr'
+-- :getcode(parser) will generate the code for inserting into the current created node,
+-- the current created node is assumed to be named 'result'
+
 local _or = nodeclass'or'
-local _multiple = nodeclass'multiple'
+function _or:getcode(parser)
+	return template([[
+-- or
+-- TODO push rewind point here?
+repeat
+<? for _,child in ipairs(node) do
+?>
+	local oldlen = #result
+	do
+		<?=tab(tab(child:getcode(parser)))?>
+	end
+	if #result == oldlen then
+		-- nothing was added? then break.
+		-- TODO rewind token here?
+		break
+	end
+<? end
+?>until true]],
+	{
+		node = self,
+		parser = parser,
+		tab = tab,
+	})
+end
+
 local _optional = nodeclass'optional'
+-- optional is only different in that, after the optional code, we don't need any assert()'s / mustbe()'s
+function _optional:getcode(parser)
+	assertlen(self, 1)
+	return self[1]:getcode(parser)
+end
+
+local _multiple = nodeclass'multiple'
+function _multiple:getcode(parser)
+	return template([[
+-- multiple
+repeat
+<?
+for i,child in ipairs(node) do
+	local chsrc = child
+	if ast._optional:isa(chsrc) then
+		chsrc = chsrc[1]
+	end
+?>
+	local oldlen = #result
+	do
+		<?=tab(tab(chsrc:getcode(parser)))?>	<? -- multiple always canbe, ... or is it? ?>
+	end
+	if #result == oldlen then
+		-- didn't get anything
+		-- TODO a token rewind maybe?
+		break
+	end
+<?
+end
+?>until false]],
+	{
+		node = self,
+		parser = parser,
+		ast = ast,
+		tab = tab,
+	})
+end
+
+-- expr just encapsulates multiple child exprs?  hmm seems it does close to nothing.
+local _expr = nodeclass'expr'
+function _expr:getcode(parser)
+	if #self == 1 then return self[1]:getcode(parser) end
+	return template([[
+-- expr
+<? for i,child in ipairs(node) do
+	local chsrc = child
+	if ast._optional:isa(chsrc) then
+		chsrc = chsrc[1]
+	end
+?><?=chsrc:getcode(parser)?>
+<?end
+?>]],
+	{
+		node = self,
+		parser = parser,
+		ast = ast,
+		tab = tab,
+	})
+end
+
 local _capture = nodeclass'capture'
+function _capture:getcode(parser)
+	return '-- capture'
+end
+
 local _name = nodeclass'name'
-local _number = nodeclass'number'
+function _name:getcode(parser)
+	assertlen(self, 1)
+	local name = asserttype(self[1], 'string')
+	assertindex(parser.ruleForName, name)
+	return 'result:insert(self:parse_'..name..'())'
+end
+
 local _string = nodeclass'string'
+function _string:getcode(parser)
+	assertlen(self, 1)
+	local s = asserttype(self[1], 'string')
+	-- keyword / symbol
+	-- TODO this should be 'mustbe' unless its parent is 'optional' or 'multiple' ...
+	-- or maybe don't make that change here, but make it in the parent node that generates this code ...
+	if parser.langKeywords[s] then
+		return "self:canbe('"..s.."', 'keyword')"
+	elseif parser.langSymbols[s] then
+		return "self:canbe('"..s.."', 'symbol')"
+	else
+		error("found a string that wasn't a keyword or a symbol: "..tolua(s))
+	end
+end
 
 --[[ hmm why does this get errors about {"stat"} ...
 _name.__index = function(self, k)
@@ -120,112 +237,6 @@ end
 
 function GrammarParser:buildTokenizer(data)
 	return GrammarTokenizer(data)
-end
-
-local Rule = class()
-
-local function tab(s)
-	return s:gsub('\n', '\n\t')
-end
-
--- TODO
--- hmm maybe a better design is to build the node obj, then just add subexprs to it as we go ... no distinguishing of parts by this code ...
--- and then maybe add to the grammar ( ) to capture parts into separate sub-tables ?
--- and then add to the grammar key= named/alias'd fields?
-function GrammarParser:getcode(node, mustbe)
-	local function temp(s)
-		return tab(template(s, {
-			ast = ast,
-			tolua = tolua,
-			self = self,
-			node = node,
-			tab = tab,
-		}))
-	end
-
-	if ast._or:isa(node) then	-- a or b or c or d ...
-		return temp[[
--- or
-(function()
-<? for _,child in ipairs(node) do
-?>	local node = <?=tab(self:getcode(child))?>
-	if node then return node end
-<? end
-?>end)()]]
-	elseif ast._optional:isa(node) then	-- optinally a
-		assertlen(node, 1)
-		return self:getcode(node[1])
-		-- optional is only different in that, after the optional code, we don't need any assert()'s / mustbe()'s
-	elseif ast._multiple:isa(node) then 	-- a a a a ...
-		return temp[[
-(function()	-- multiple
-	local result = table()
-	repeat
-<? for i,child in ipairs(node) do
-		local chsrc = child
-		if ast._optional:isa(chsrc) then
-			chsrc = chsrc[1]
-		end
-?>
-		local node = <?=tab(self:getcode(chsrc))?>	<? -- multiple always canbe, ... or is it? ?>
-		if not node then break end	<? -- TODO a token rewind maybe? ?>
-<?
-		if true then -- not ast._string:isa(chsrc) then -- don't keep
-?>		result:insert(node)
-<?		end
-	end
-?>	until false
-	return result
-end)()]]
-	elseif ast._expr:isa(node) then		-- list of strings / rules, process list sequentially
-		if #node == 1 then
-			return self:getcode(node[1])
-		else
-			return temp[[
-(function()	-- expr
-	local result = table()
-<? for i,child in ipairs(node) do
-	local argcode = tab(self:getcode(child))
-	local chsrc = child
-	if ast._optional:isa(chsrc) then
-		chsrc = chsrc[1]
-	else
-		argcode = 'assert('..argcode..')'
-	end
-	if false then -- ast._string:isa(chsrc) then	-- don't keep
-?>	<?=argcode?>	-- nocapture <?=chsrc.type?>
-<?	else	-- keep
-?>	result:insert((<?=argcode?>)) -- <?=chsrc.type?>
-<?	end
-end
-?>	return result
-end)():unpack()]]
-		end
-	elseif ast._capture:isa(node) then
-		return '-- capture\n'
-	-- for symbols and keywords when do we want to keep them in the AST, vs when do we want to just consume them?
-	elseif ast._name:isa(node) then
-		assertlen(node, 1)
-		local name = asserttype(node[1], 'string')
-		assertindex(self.ruleForName, name)
-		return 'self:parse_'..name..'()'
-	elseif ast._string:isa(node) then
-		assertlen(node, 1)
-		local s = asserttype(node[1], 'string')
-		-- keyword / symbol
-		-- TODO this should be 'mustbe' unless its parent is 'optional' or 'multiple' ...
-		-- or maybe don't make that change here, but make it in the parent node that generates this code ...
-		if self.langKeywords[s] then
-			return "self:canbe('"..s.."', 'keyword')"
-		elseif self.langSymbols[s] then
-			return "self:canbe('"..s.."', 'symbol')"
-		else
-			error("found a string that wasn't a keyword or a symbol: "..tolua(s))
-		end
-	else
-		error("need to handle grammar type "..tolua(node.type).." "..tolua(node))
-	end
-	return ''
 end
 
 function GrammarParser:setData(data, source, ...)
@@ -301,12 +312,21 @@ local table = require 'ext.table'
 local ASTNode = require 'parser.base.ast'
 local Tokenizer = require 'parser.base.tokenizer'
 
+local ast = {}
+ast.allclasses = table()
 
 local <?=rootASTClassName?> = ASTNode:subclass()
 
-local ast = {}
+local function nodeclass(args, parent)
+	parent = parent or <?=rootASTClassName?>
+	local cl = parent:subclass(args)
+	ast['_'..cl.type] = cl
+	ast.allclasses:insert(cl)
+	return cl
+end
+
 <? for _,rule in ipairs(rules) do
-?>ast._<?=rule.name?> = <?=rootASTClassName?>:subclass{type=<?=tolua(rule.name)?>}
+?>local _<?=rule.name?> = nodeclass{type=<?=tolua(rule.name)?>}
 <? end
 ?>
 
@@ -325,7 +345,9 @@ end
 
 <? for _,rule in ipairs(rules) do ?>
 function <?=parserClassName?>:parse_<?=rule.name?>()
-	return ast._<?=rule.name?>(<?=self:getcode(rule.expr)?>)
+	local result = ast._<?=rule.name?>()
+	<?=tab(rule.expr:getcode(self))?>
+	return result
 end
 <? end ?>
 ]=], {
@@ -335,6 +357,7 @@ end
 		-- self
 		self = self,
 		-- locals
+		tab = tab,
 		source = source,
 		rules = self.tree,
 		rootASTClassName = rootASTClassName,
