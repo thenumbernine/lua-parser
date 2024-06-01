@@ -13,6 +13,7 @@ local ASTNode = require 'parser.base.ast'
 
 -- namespace table of all Lua AST nodes
 -- TODO get rid of parser's dependency on this?  or somehow make the relation between parser rules and ast's closer, like generate the AST from the parser-rules?
+-- another TODO how about just storing subclasses as `._type` , then the 'ast' usage outside this file can be just echanged with LuaASTNode itself, and the file can return a class, and lots of things can be simplified
 local ast = {}
 
 -- put all subclasses here
