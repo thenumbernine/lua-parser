@@ -108,3 +108,29 @@ TODO
 	- auto grammar -> ast node class generation
 	- auto grammar -> parser code generation
 - move all this stuff into base/ast.lua
+
+
+-- symbols/keywords aren't captured, so ';' isn't captured
+-- so all the `rule` objs get put into an `ast._rule`, integer-indexed
+rules ::= rule { ';' rule } ;
+-- mind you regenerating code with optional elements means deciding where to re-insert them
+-- so regenerating the code means either save all the tokens, or it means ... idk what other options ...
+rules ::= rule { ';'* rule } ;
+-- maybe I should denote them optional with a * suffix or something, and then keep two lists: one of read tokens (for regeneration) and another of indexed tokens via labels or () for capturing or something
+rules ::= rules+=rule { ';' rules+=rule } ;
+
+-- `name=name` means to alias the first capture as 'name'
+-- symbols/keywords aren't captured, so '::=' isn't captured
+rule ::= name=name '::='* expr_or ;
+
+expr_or ::= expr_list {'|' expr_list} ;
+expr_list ::=
+	  '(' expr_or ')'	-- parenthesis mean capture as a separate subtable (otherwise all captured expressions go into [i])
+	| '{' expr_or '}'	-- means multiple
+	| '[' expr_or ']'	-- means optional
+	| Name
+	| Numeral
+	| LiteralString
+;
+
+

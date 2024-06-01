@@ -62,10 +62,14 @@ end
 GrammarASTNode.insert = table.insert
 GrammarASTNode.append = table.append
 
+-- how many places really use this?  and why not just search for underscore fields?
+ast.allclasses = table()
+
 local function nodeclass(type)
 	local cl = GrammarASTNode:subclass()
 	cl.type = type
 	ast['_'..type] = cl
+	ast.allclasses:insert(cl)
 	return cl
 end
 
@@ -83,7 +87,7 @@ local _expr = nodeclass'expr'
 local _or = nodeclass'or'
 local _multiple = nodeclass'multiple'
 local _optional = nodeclass'optional'
-
+local _capture = nodeclass'capture'
 local _name = nodeclass'name'
 local _number = nodeclass'number'
 local _string = nodeclass'string'
@@ -197,7 +201,8 @@ end
 ?>	return result
 end)():unpack()]]
 		end
-
+	elseif ast._capture:isa(node) then
+		return '-- capture\n'
 	-- for symbols and keywords when do we want to keep them in the AST, vs when do we want to just consume them?
 	elseif ast._name:isa(node) then
 		assertlen(node, 1)
@@ -302,7 +307,7 @@ local <?=rootASTClassName?> = ASTNode:subclass()
 local ast = {}
 <? for _,rule in ipairs(rules) do
 ?>ast._<?=rule.name?> = <?=rootASTClassName?>:subclass{type=<?=tolua(rule.name)?>}
-<? end 
+<? end
 ?>
 
 local <?=tokenizerClassName?> = Tokenizer:subclass()
@@ -402,6 +407,10 @@ function GrammarParser:parseExprList()
 			local expr2 = self:parseExprOr()
 			self:mustbe(']', 'symbol')
 			expr:insert(ast._optional(expr2))
+		elseif self:canbe('(', 'symbol') then
+			local expr2 = self:parseExprOr()
+			self:mustbe(')', 'symbol')
+			expr:insert(ast._capture(expr2))
 		elseif self:canbe(nil, 'name') then
 			expr:insert(ast._name(self.lasttoken))
 		elseif self:canbe(nil, 'number') then
