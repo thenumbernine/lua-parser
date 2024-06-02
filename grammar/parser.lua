@@ -166,10 +166,12 @@ function _expr:getcode(parser)
 -- expr
 <? for i,child in ipairs(node) do
 	local chsrc = child
+	local canbe
 	if ast._optional:isa(chsrc) then
 		chsrc = chsrc[1]
+		canbe = true
 	end
-?><?=chsrc:getcode(parser)?>
+?><?=chsrc:getcode(parser, canbe)?>
 <?end
 ?>]],
 	{
@@ -194,16 +196,17 @@ function _name:getcode(parser)
 end
 
 local _string = nodeclass'string'
-function _string:getcode(parser)
+function _string:getcode(parser, canbe)
 	assertlen(self, 1)
 	local s = asserttype(self[1], 'string')
 	-- keyword / symbol
 	-- TODO this should be 'mustbe' unless its parent is 'optional' or 'multiple' ...
 	-- or maybe don't make that change here, but make it in the parent node that generates this code ...
+	local canmust = canbe and 'canbe' or 'mustbe'
 	if parser.langKeywords[s] then
-		return "self:canbe('"..s.."', 'keyword')"
+		return "self:"..canmust.."('"..s.."', 'keyword')"
 	elseif parser.langSymbols[s] then
-		return "self:canbe('"..s.."', 'symbol')"
+		return "self:"..canmust.."('"..s.."', 'symbol')"
 	else
 		error("found a string that wasn't a keyword or a symbol: "..tolua(s))
 	end

@@ -1,16 +1,30 @@
+-- TODO declare a parent-node 'op' somehow
+-- one downside to this system is .. you need one rule per unique ast node ...
+-- TODO all these should inherit from 'op'
+-- another TODO ...
+-- ... all these were originally implemented as `if token found then build the node` 
+-- but for the auto generation, I think I have to build the node, then bail if something doesn't match ...
+-- ... and that means no more 'mustbe' ? since instead it'll just be returning nil?
+-- or should I keep the old design?  but that means changing the code-generation ...
+-- hmm but that means pushing the first matched token of each rule back into the calling rule as a ...
+-- 	`if canbe(symbol) then parse_nextrule()`
+-- that might mean I need to assert every rule only has "or" on its topmost, and then next, every expression starts with a keyword/symbol
+--
+-- or how about I just generate a FSM?  that seems to be trendy.
+
 block ::= {stat [';']} [laststat [';']] ;
 
-stat ::= varlist '=' explist
-	| functioncall
-	| 'do' block 'end'
-	| 'while' exp 'do' block 'end'
-	| 'repeat' block 'until' exp
-	| 'if' exp 'then' block {'elseif' exp 'then' block} ['else' block] 'end'
+stat ::= 'local' 'function' Name funcbody
+	| 'local' namelist ['=' explist]
+	| 'function' funcname funcbody
 	| 'for' Name '=' exp ',' exp [',' exp] 'do' block 'end'
 	| 'for' namelist 'in' explist 'do' block 'end'
-	| 'function' funcname funcbody
-	| 'local' 'function' Name funcbody
-	| 'local' namelist ['=' explist]
+	| 'if' exp 'then' block {'elseif' exp 'then' block} ['else' block] 'end'
+	| 'repeat' block 'until' exp
+	| 'while' exp 'do' block 'end'
+	| 'do' block 'end'
+	| functioncall
+	| varlist '=' explist
 	;
 
 laststat ::= 'return' [explist]
@@ -48,7 +62,7 @@ prefixexp ::= var
 	| '(' exp ')'
 	;
 
-functioncall ::= 	prefixexp args
+functioncall ::= prefixexp args
 	| prefixexp ':' Name args
 	;
 
@@ -77,10 +91,6 @@ field ::= '[' exp ']' '=' exp
 fieldsep ::= ','
 	| ';'
 	;
-
--- TODO declare a parent-node 'op' somehow
--- one downside to this system is .. you need one rule per unique ast node ...
--- TODO all these should inherit from 'op'
 
 binop ::= add
 	| '-'
