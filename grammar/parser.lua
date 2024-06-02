@@ -55,6 +55,7 @@ ast.refreshparents = require 'parser.lua.ast'.refreshparents
 local ASTNode = require 'parser.base.ast'
 
 local GrammarASTNode = ASTNode:subclass()
+ast._node = GrammarASTNode 
 
 function GrammarASTNode:init(...)
 	for i=1,select('#', ...) do
@@ -81,14 +82,16 @@ local function nodeclass(type)
 end
 
 local _rule = nodeclass'rule'
--- how to alias?
+--[[ how to alias? hmm, don't do this or :isa won't work ...
 _rule.__index = function(self, k)
 	if k == 'name' then return self[1] end
 	if k == 'expr' then return self[2] end
 	--return _rule.super.__index(self, k)
 	return _rule.super.__index[k]
 end
-
+--]]
+function _rule:name() return self[1] end
+function _rule:expr() return self[2] end
 
 -- :getcode(parser) will generate the code for inserting into the current created node,
 -- the current created node is assumed to be named 'result'
@@ -229,6 +232,10 @@ _string.__index = function(self, k)
 end
 --]]
 
+function _name:value() return self[1] end
+function _string:value() return self[1] end
+--function _number:value() return self[1] end
+
 
 local GrammarParser = Parser:subclass()
 GrammarParser.ast = ast
@@ -257,7 +264,7 @@ function GrammarParser:setData(data, source, ...)
 	self.ruleForName.Numeral = true
 	for _,rule in ipairs(self.tree) do
 		assertlen(rule, 2)
-		self.ruleForName[rule.name] = rule
+		self.ruleForName[rule:name()] = rule
 	end
 
 	-- while we're here, traverse all rules and pick out all symbols and keywords
@@ -267,7 +274,7 @@ function GrammarParser:setData(data, source, ...)
 		if ast._name:isa(node) then
 			assertlen(node, 1)
 			-- names in the grammar should always point to either other rules, or to builtin axiomatic rules (Name, Numeric, LiteralString)
-			local name = asserttype(node[1], 'string')
+			local name = asserttype(node:value(), 'string')
 			local rule = self.ruleForName[name]
 			if not rule then
 				error("rule referenced but not defined: "..tolua(name))
@@ -275,7 +282,7 @@ function GrammarParser:setData(data, source, ...)
 			-- TODO replace the element in the table with the AST? that'd remove the DAG property of the AST.  no more pretty `tolua()` output.
 		elseif ast._string:isa(node) then
 			assertlen(node, 1)
-			local s = asserttype(node[1], 'string')
+			local s = asserttype(node:value(), 'string')
 
 			-- keywords vs symbols are parsed separately
 			-- keywords must be space-separated, and for now are only letters -- no symbol characters used (allowed?)
@@ -329,7 +336,7 @@ local function nodeclass(args, parent)
 end
 
 <? for _,rule in ipairs(rules) do
-?>local _<?=rule.name?> = nodeclass{type=<?=tolua(rule.name)?>}
+?>local _<?=rule:name()?> = nodeclass{type=<?=tolua(rule:name())?>}
 <? end
 ?>
 
@@ -343,13 +350,13 @@ function <?=parserClassName?>:buildTokenizer(data)
 end
 
 function <?=parserClassName?>:parseTree()
-	return <?=parserClassName?>:parse_<?=rules[1][1]?>()
+	return <?=parserClassName?>:parse_<?=rules[1]:name()?>()
 end
 
 <? for _,rule in ipairs(rules) do ?>
-function <?=parserClassName?>:parse_<?=rule.name?>()
-	local result = ast._<?=rule.name?>()
-	<?=tab(rule.expr:getcode(self))?>
+function <?=parserClassName?>:parse_<?=rule:name()?>()
+	local result = ast._<?=rule:name()?>()
+	<?=tab(rule:expr():getcode(self))?>
 	return result
 end
 <? end ?>
@@ -367,6 +374,133 @@ end
 		tokenizerClassName = tokenizerClassName,
 		parserClassName = parserClassName,
 	}))
+
+	local edges = {}
+
+	local validTokenTypes = {
+		start = true,
+		['end'] = true,
+		keyword = true,	-- word, unquoted, reserved token
+		name = true,	-- word, unquoted, not-reserved
+		symbol = true,	-- non-alphanumeric token
+		number = true,	-- number
+		string = true,
+	}
+
+	local function tokenAndTypeToStr(tokenPair)
+		return table.concat(tokenPair, ' ')
+	end
+
+	local addRule
+	local currentRule 	-- for debugging only
+
+	local addExpr
+
+	local function addList(prevTokenPair, node, i)
+		if i > #node then return table{prevTokenPair} end
+		local nextTokenPairs = addExpr(prevTokenPair, node[i])
+		local resultPairs = table()
+		for _,nextTokenPair in ipairs(nextTokenPairs) do
+			resultPairs:append(addList(nextTokenPair, node, i+1))
+		end
+		return resultPairs
+	end
+
+	local function addEdge(prevTokenPair, nextTokenPair)
+		local prevTokenType, prevToken = table.unpack(prevTokenPair)
+		assert(type(prevToken) == 'string' or type(prevToken) == 'nil')
+		assertindex(validTokenTypes, prevTokenType)
+		local prevstr = tokenAndTypeToStr{prevTokenType, prevToken}
+		
+		local nextTokenType, nextToken = table.unpack(nextTokenPair)
+		assert(type(nextToken) == 'string' or type(nextToken) == 'nil')
+		assertindex(validTokenTypes, nextTokenType)
+		local nextstr = tokenAndTypeToStr{nextTokenType, nextToken}
+		
+		-- do the real edge-add
+		edges[prevstr] = edges[prevstr] or {}
+		-- TODO here , assign any ast's being generated, and somehow assign the previously accumulated tokens and their captures
+		edges[prevstr][nextstr] = {}
+print('in', currentRule, 'adding '..prevstr..' -> '..nextstr)
+	end
+
+	addExpr = function(prevTokenPair, node)
+		local prevTokenType, prevToken = table.unpack(prevTokenPair)
+		assert(type(prevToken) == 'string' or type(prevToken) == 'nil')
+		assertindex(validTokenTypes, prevTokenType)
+		assert(ast._node:isa(node))
+--DEBUG: print('adding', node.type)		
+		if ast._rule:isa(node) then
+			-- don't handle rules here ... or should I?  I could just insert 'addRule' here ...
+			error'here'			
+		elseif ast._or:isa(node) then
+			local nextTokens = table()
+			for _,option in ipairs(node) do
+				nextTokens:append(addExpr(prevTokenPair, option))
+			end
+			return nextTokens
+		elseif ast._optional:isa(node) then
+			-- TODO make this just like multiple except multiple should have the final connect back to the first, this shouldn't
+			local nextTokenPairs = table{prevTokenPair}
+			nextTokenPairs:append(addExpr(prevTokenPair, node[1]))
+			return nextTokenPairs
+		elseif ast._multiple:isa(node) then	-- zero-or-more ...
+			local nextTokenPairs = table{prevTokenPair}
+			nextTokenPairs:append(addList(prevTokenPair, node, 1))
+			return nextTokenPairs
+		--elseif ast._capture:isa(node) then
+		elseif ast._expr:isa(node) then
+			return addList(prevTokenPair, node, 1)
+		elseif ast._name:isa(node) then
+			local ruleName = node:value()
+			local nextRule = assertindex(self.ruleForName, ruleName)
+			if nextRule == true then
+				-- if the next rule is a builtin rule ... ?
+				local nextTokenType = assertindex({
+					Name = 'name',
+					Numeral = 'number',
+					LiteralString = 'string',
+				}, ruleName)
+				local nextTokenPair = {nextTokenType}
+				addEdge(prevTokenPair, nextTokenPair)
+				return table{nextTokenPair}
+			else
+				return addRule(prevTokenPair, nextRule)
+			end
+		elseif ast._string:isa(node) then
+			local nextToken = node:value()
+			local nextTokenType = nextToken:match'%a' and 'keyword' or 'symbol'
+			local nextTokenPair = {nextTokenType, nextToken}
+			addEdge(prevTokenPair, nextTokenPair)
+			return table{nextTokenPair}
+		end
+		error('here in rule '..currentRule..' with node '..node.type)
+	end
+
+	local rulesProcessed = {}
+	addRule = function(prevTokenPair, rule)
+		asserttype(rule, 'table')
+		assert(ast._rule:isa(rule))
+		currentRule = rule:name()
+		rulesProcessed[rule:name()] = rulesProcessed[rule:name()] or {}
+		local prevstr = tokenAndTypeToStr(prevTokenPair)
+		local nextTokenPairs = rulesProcessed[rule:name()][prevstr]
+		if not nextTokenPairs then
+--DEBUG: print('adding rule', rule:name(), prevstr)
+			nextTokenPairs = addExpr(prevTokenPair, rule:expr())
+asserttype(nextTokenPairs, 'table')
+			rulesProcessed[rule:name()][prevstr] = nextTokenPairs
+		end
+		return nextTokenPairs
+	end
+
+	-- construct DAG ...
+assert(ast._rule:isa(self.tree[1]))	
+	for _,nextTokenPair in ipairs(addRule({'start'}, self.tree[1])) do
+		addEdge(nextTokenPair, {'end'})
+	end
+
+	print(tolua(edges))
 end
 
 function GrammarParser:parseTree()
@@ -378,13 +512,13 @@ function GrammarParser:parseTree()
 		if not rule then break end
 
 		self:canbe(';', 'symbol')
+assert(ast._rule:isa(rule))
 		rules:insert(rule)
 	until false
 	return rules
 end
 
 function GrammarParser:parseRule()
-
 	-- can-be + capture + assign 'name'
 	local name = self:mustbe(nil, 'name')
 
@@ -394,7 +528,6 @@ function GrammarParser:parseRule()
 	-- TODO i'm overusing and improperly using the term 'expr'
 	-- can-be + capture + assign 'expr'
 	local expr = self:parseExprOr()
---print('got rule', name, tolua(expr))
 
 	return ast._rule(name, expr)
 end
