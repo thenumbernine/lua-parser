@@ -28,7 +28,7 @@ function LuaParser:init(data, version, source, useluajit)
 		-- TODO unified load shim layer , esp for lua 5.1 ...
 		-- TODO TODO if langfix's load has been replaced then this will segfault...
 		local _load = loadstring or load
-		useluajit = false--_load'return 1LL'
+		useluajit = _load'return 1LL'
 	end
 	self.useluajit = not not useluajit
 	if data then
