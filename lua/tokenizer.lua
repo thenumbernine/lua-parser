@@ -1,5 +1,5 @@
 local table = require 'ext.table'
-local assertlt = require 'ext.assert'.lt
+local assertle = require 'ext.assert'.le
 local Tokenizer = require 'parser.base.tokenizer'
 
 local LuaTokenizer = Tokenizer:subclass()
@@ -14,10 +14,11 @@ So why 'symbols' vs 'keywords' ?
 while 'symbols' consist of everything else. (can symbols contain letters that names can use? at the moment they do not.)
 For this reason, when parsing, keywords need separated spaces, while symbols do not (except for distinguishing between various-sized symbols, i.e. < < vs <<).
 --]]
-function LuaTokenizer:initSymbolsAndKeywords(version, ...)
+function LuaTokenizer:initSymbolsAndKeywords(version, useluajit)
 	-- store later for parseHexNumber
 	self.version = assert(version)
-
+	self.useluajit = useluajit
+	
 	for w in ([[... .. == ~= <= >= + - * / % ^ # < > = ( ) { } [ ] ; : , .]]):gmatch('%S+') do
 		self.symbols:insert(w)
 	end
@@ -47,17 +48,53 @@ function LuaTokenizer:parseHexNumber(...)
 	if self.version >= '5.2' then
 		-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
 		local token = r:canbe'[%.%da-fA-F]+'
-		assertlt(#token:gsub('[^%.]',''), 2, 'malformed number')
+		local numdots = #token:gsub('[^%.]','')
+		assertle(numdots, 1, 'malformed number')
 		local n = table{'0x', token}
 		if r:canbe'p' then
 			n:insert(r.lasttoken)
 			-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
 			n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+		elseif numdots == 0 and self.useluajit then
+			if r:canbe'LL' then
+				n:insert'LL'
+			elseif r:canbe'ULL' then
+				n:insert'ULL'
+			end
 		end
 		coroutine.yield(n:concat(), 'number')
 	else
-		return LuaTokenizer.super.parseHexNumber(self, ...)
+		--return LuaTokenizer.super.parseHexNumber(self, ...)
+		local token = r:mustbe('[%da-fA-F]+', 'malformed number')
+		local n = table{'0x', token}
+		if self.useluajit then
+			if r:canbe'LL' then
+				n:insert'LL'
+			elseif r:canbe'ULL' then
+				n:insert'ULL'
+			end
+		end
+		coroutine.yield(n:concat(), 'number')
 	end
+end
+
+function LuaTokenizer:parseDecNumber()
+	local r = self.r
+	local token = r:canbe'[%.%d]+'
+	local numdots = #token:gsub('[^%.]','')
+	assertle(numdots, 1, 'malformed number')
+	local n = table{token}
+	if r:canbe'e' then
+		n:insert(r.lasttoken)
+		n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+	elseif numdots == 0 and self.useluajit then
+		if r:canbe'LL' then
+			n:insert'LL'
+		elseif r:canbe'ULL' then
+			n:insert'ULL'
+		end
+	end
+	coroutine.yield(n:concat(), 'number')
 end
 
 return LuaTokenizer

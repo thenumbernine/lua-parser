@@ -1,7 +1,6 @@
 local table = require 'ext.table'
 local asserteq = require 'ext.assert'.eq
 local assertne = require 'ext.assert'.ne
-local assertlt = require 'ext.assert'.lt
 local assertge = require 'ext.assert'.ge
 local assertle = require 'ext.assert'.le
 local assertindex = require 'ext.assert'.index
@@ -21,8 +20,15 @@ function LuaParser.parse(...)
 	return LuaParser(...).tree
 end
 
-function LuaParser:init(data, version, source)
+-- TODO API, maybe (data, source, version, useluajit)
+function LuaParser:init(data, version, source, useluajit)
 	self.version = version or _VERSION:match'^Lua (.*)$'
+	if useluajit == nil then
+		-- TODO unified load shim layer , esp for lua 5.1 ...
+		local _load = loadstring or load
+		useluajit = _load'return 1LL'	-- I could test for _G.jit's presence, but what if luajit is compiled with jit off but still has LL language feature on ...
+	end
+	self.useluajit = not not useluajit
 	if data then
 		self:setData(data, source)
 	end
@@ -51,7 +57,7 @@ function LuaParser:setData(data, source)
 end
 
 function LuaParser:buildTokenizer(data)
-	return LuaTokenizer(data, self.version)
+	return LuaTokenizer(data, self.version, self.useluajit)
 end
 
 -- default entry point for parsing data sources
