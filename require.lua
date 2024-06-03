@@ -1,6 +1,8 @@
 --[[
 use this file to insert a parser hook into the require() function
 from there, you can register callbacks to do whatever you want with the parsed Lua
+
+TODO ext.load() might be a better replacement for this, not dependent on parser, and more flexible...
 --]]
 
 local Parser = require 'parser'
