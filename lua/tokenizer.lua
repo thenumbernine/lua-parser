@@ -31,7 +31,7 @@ function LuaTokenizer:initSymbolsAndKeywords(version, ...)
 		self.keywords['goto'] = true
 	end
 	
-	if version >= '5.2' then
+	if version >= '5.3' then
 		self.symbols:insert'//'
 		self.symbols:insert'~'
 		self.symbols:insert'&'
