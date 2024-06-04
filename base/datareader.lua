@@ -67,6 +67,7 @@ end
 function DataReader:readblock()
 	if not self:canbe('%[=*%[') then return end
 	local eq = assert(self.lasttoken:match('^%[(=*)%[$'))
+	self:canbe'\n'	-- if the first character is a newline then skip it
 	local start = self.index
 	if not self:seekpast('%]'..eq..'%]') then
 		error("expected closing block")

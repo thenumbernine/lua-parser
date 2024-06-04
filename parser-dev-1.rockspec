@@ -1,10 +1,10 @@
 package = "parser"
 version = "dev-1"
 source = {
-   url = "git+https://github.com/thenumbernine/lua-parser.git"
+   url = "git+https://github.com/thenumbernine/lua-parser"
 }
 description = {
-   summary = "Lua parser written in Lua.",
+   summary = "Lua Parser written in Lua.",
    detailed = [[
 Lua parser written in Lua.
 Parses to an abstract syntax tree representation.
@@ -27,9 +27,15 @@ dependencies = {
 build = {
    type = "builtin",
    modules = {
-      ["parser.ast"] = "ast.lua",
       ["parser"] = "parser.lua",
-      ["parser.require"] = "require.lua",
+      ['parser.base.ast'] = "base/ast.lua",
+      ['parser.base.datareader'] = "base/datareader.lua",
+      ['parser.base.parser'] = "base/parser.lua",
+      ['parser.base.tokenizer'] = "base/tokenizer.lua"
+      ["parser.load_xform"] = "load_xform.lua",
+      ['parser.lua.ast'] = "lua/ast.lua",
+      ['parser.lua.parser'] = "lua/parser.lua",
+      ['parser.lua.tokenizer'] = "lua/tokenizer.lua"
       ["parser.tests.flatten"] = "tests/flatten.lua",
       ["parser.tests.lua_to_c"] = "tests/lua_to_c.lua",
       ["parser.tests.lua_to_c_test"] = "tests/lua_to_c_test.lua",

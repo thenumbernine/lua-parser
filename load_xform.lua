@@ -1,13 +1,17 @@
---[[
-parser.require only overrides the require statement, and is deprecated.
-parser.load_xorm modifies the load(), and loadfile() and require() to go along with it.
---]]
+-- parser.load_xorm uses ext.load to modify the load(), loadfile() and require() functions
 local showcode = require 'template.showcode'
 local LuaParser = require 'parser.lua.parser'
 
 local callbacks = setmetatable({}, {__index=table})
 
 require 'ext.load'.xforms:insert(function(d, source)
+--DEBUG:print()
+--DEBUG:print(debug.traceback())
+--DEBUG:print'!!! BEFORE PARSE !!!'
+--DEBUG:print('parser.load_xform source: '..source)
+--DEBUG:print(showcode(d))
+--DEBUG:print()
+
 	local parser
 	local result, code = xpcall(function()
 		parser = LuaParser()
@@ -17,13 +21,6 @@ require 'ext.load'.xforms:insert(function(d, source)
 			cb(tree)
 		end
 		local result = tostring(tree)
---[[
-print()
-print(debug.traceback())
-print('parser.load_xform source: '..source)
-print(showcode(result))
-print()
---]]
 		return result
 	end, function(err)
 		return
@@ -35,6 +32,14 @@ print()
 			..debug.traceback()
 	end)
 	if not result then error(code) end
+
+--DEBUG:print()
+--DEBUG:print(debug.traceback())
+--DEBUG:print'!!! AFTER PARSE !!!'
+--DEBUG:print('parser.load_xform source: '..source)
+--DEBUG:print(showcode(code))
+--DEBUG:print()
+
 	return code
 end)
 

@@ -285,7 +285,7 @@ Some more useful functions in AST:
 - https://github.com/thenumbernine/lua-template
 
 While I was at it, I added a require() replacement for parsing Lua scripts and registering callbacks,
-so any other script can say `"require 'parser.require'.callbacks:insert(function(tree) ... modify the parse tree ... end)"`
+so any other script can say `"require 'parser.load_xform':insert(function(tree) ... modify the parse tree ... end)"`
 and voila, Lua preprocessor in Lua!
 
 `minify_tests.txt` taken from the tests at https://github.com/stravant/LuaMinify
