@@ -4,6 +4,7 @@ from there, you can register callbacks to do whatever you want with the parsed L
 
 TODO ext.load() might be a better replacement for this, not dependent on parser, and more flexible...
 --]]
+io.stderr:write'This is deprecated in favor of ext.load.\n'
 
 local Parser = require 'parser'
 
@@ -12,11 +13,12 @@ local oldrequire = assert(require)
 require = setmetatable({
 	callbacks = setmetatable({}, {__index=table}),
 	totalLines = 0,
-	oldrequire = oldrequire, 
+	oldrequire = oldrequire,
 }, {
 	__call = function(self, m, ...)
 		local result = package.loaded[m]
 		if result ~= nil then return result end
+		-- searchers[1]
 		local result = package.preload[m]
 		local err = {"module '"..m.."' not found:"}
 		if result ~= nil then
@@ -24,6 +26,7 @@ require = setmetatable({
 			package.loaded[m] = result
 			return result
 		end
+		-- searchers[2]
 		table.insert(err, "\tno field package.preload['"..m.."']")
 		for path in package.path:gmatch'[^;]+' do
 			local fn = path:gsub('%?', (m:gsub('%.', '/')))
@@ -45,7 +48,7 @@ require = setmetatable({
 					if not result then
 						error('\n\t'..fn..' at '..parser.t:getpos()..'\n'..tree)
 					end
-				
+
 					for _,cb in ipairs(self.callbacks) do
 						cb(tree)
 					end
@@ -65,6 +68,7 @@ print('...parsed '..fn..' total lines:',self.totalLines)
 			end
 			table.insert(err, "\tno field '"..fn.."'")
 		end
+		-- searchers[3]
 		for path in package.cpath:gmatch'[^;]+' do
 			local fn = path:gsub('%?', (m:gsub('%.', '/')))
 			local f = io.open(fn, 'rb')
@@ -76,7 +80,8 @@ print('...parsed '..fn..' total lines:',self.totalLines)
 			end
 			table.insert(err, "\tno field '"..fn.."'")
 		end
+		-- searchers[4] is being skipped
 		error(table.concat(err, '\n'))
 	end
 })
-return require 
+return require
