@@ -106,9 +106,11 @@ function LuaParser:parse_stat()
 		if self:canbe('function', 'keyword') then
 			local name = self:mustbe(nil, 'name')
 			return ast._local{
-				self:makeFunction(name, table.unpack(assert(self:parse_funcbody())))
-					:setspan{from = ffrom , to = self:getloc()}
-				}:setspan{from = from , to = self:getloc()}
+				self:makeFunction(
+					ast._var(name),
+					table.unpack(assert(self:parse_funcbody()))
+				):setspan{from = ffrom , to = self:getloc()}
+			}:setspan{from = from , to = self:getloc()}
 		else
 			local afrom = self:getloc()
 			local namelist = assert(self:parse_attnamelist())
