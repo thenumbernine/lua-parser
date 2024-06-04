@@ -19,13 +19,12 @@ require 'ext.load'.xforms:insert(function(d, source)
 	end, function(err)
 		return tostring(source)
 			-- TODO move this into LuaParser itself's error generation
-			..' at '..parser.t:getpos()..'\n'
+			..(parser and (' at '..parser.t:getpos()..'\n') or '')
 			..err..'\n'
 			..debug.traceback()
 	end)
 	if not result then error(code) end
 	return code
-
 end)
 
 return callbacks

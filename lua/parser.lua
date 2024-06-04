@@ -27,8 +27,11 @@ function LuaParser:init(data, version, source, useluajit)
 		-- I could test for _G.jit's presence, but what if luajit is compiled with jit off but still has LL language feature on ...
 		-- TODO unified load shim layer , esp for lua 5.1 ...
 		-- TODO TODO if langfix's load has been replaced then this will segfault...
-		local _load = loadstring or load
-		useluajit = _load'return 1LL'
+		-- we are detecting LL / ULL suffix, but using load to do so causes some recursion problems (since in some cases I've already overridden load() via ext.load and parser.load_xform ...)
+		--local _load = loadstring or load
+		--useluajit = _load'return 1LL'
+		-- ... so instead, for now just assume jit's presence implies luajit implies LL / ULL for parsing
+		useluajit = not not _G.jit
 	end
 	self.useluajit = not not useluajit
 	if data then
