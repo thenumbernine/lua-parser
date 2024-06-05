@@ -645,6 +645,13 @@ function _indexself:serialize(apply)
 end
 
 local _op = nodeclass'op'
+-- TODO 'args' a node ... or just flatten it into this node ...
+function _op:init(...)
+	self.args = {...}
+end
+function _op:serialize(apply)
+	return table.mapi(self.args, apply):concat(' '..self.op..' ') -- spaces required for 'and' and 'or'
+end
 
 for _,info in ipairs{
 	{'add','+'},
@@ -669,18 +676,9 @@ for _,info in ipairs{
 	{'shl', '<<'},	-- 5.3+
 	{'shr', '>>'},	-- 5.3+
 } do
-	local name = info[1]
 	local op = info[2]
 	local cl = nodeclass(info[1], _op)
 	cl.op = op
-	ast['_'..name] = cl
-	-- TODO 'args' a node ... or just flatten it into this node ...
-	function cl:init(...)
-		self.args = {...}
-	end
-	function cl:serialize(apply)
-		return table.mapi(self.args, apply):concat(' '..self.op..' ') -- spaces required for 'and' and 'or'
-	end
 end
 
 for _,info in ipairs{
