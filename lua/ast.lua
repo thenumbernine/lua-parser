@@ -687,11 +687,9 @@ for _,info in ipairs{
 	{'len','#'},
 	{'bnot','~'},		-- 5.3+
 } do
-	local name = info[1]
 	local op = info[2]
 	local cl = nodeclass(info[1], _op)
 	cl.op = op
-	ast['_'..name] = cl
 	function cl:init(arg)
 		self.arg = arg
 	end

@@ -241,11 +241,15 @@ function LuaParser:parse_stat()
 				assertne(var.type, 'call', "syntax error")
 				vars:insert(var)
 			end
-			self:mustbe('=', 'symbol')
-			return ast._assign(vars, assert(self:parse_explist()))
-				:setspan{from = from, to = self:getloc()}
+			return self:parse_assign(vars, from)
 		end
 	end
+end
+
+function LuaParser:parse_assign(vars, from)
+	self:mustbe('=', 'symbol')
+	return ast._assign(vars, assert(self:parse_explist()))
+		:setspan{from = from, to = self:getloc()}
 end
 
 -- 'laststat' in 5.1, 'retstat' in 5.2+
