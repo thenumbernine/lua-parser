@@ -36,7 +36,8 @@ function Tokenizer:init(data, ...)
 end
 
 function Tokenizer:skipWhiteSpaces()
-	self.r:canbe'%s+'
+	local r = self.r
+	r:canbe'%s+'
 --DEBUG: print('read space ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
 end
 
@@ -80,7 +81,7 @@ function Tokenizer:parseQuoteString()
 	local r = self.r
 	if r:canbe'["\']' then
 --DEBUG: print('read quote string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
---local start = r.index-#r.lasttoken
+--DEBUG: local start = r.index-#r.lasttoken
 		local quote = r.lasttoken
 		local s = table()
 		while true do
@@ -127,7 +128,7 @@ function Tokenizer:parseNumber()
 	then 								-- otherwise I want it to continue to the next 'else'
 		-- lua doesn't consider the - to be a part of the number literal
 		-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
---local start = r.index
+--DEBUG: local start = r.index
 		if r:canbe'0[xX]' then
 			self:parseHexNumber()
 		else

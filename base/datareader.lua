@@ -36,8 +36,7 @@ function DataReader:init(data)
 
 	-- skip past initial #'s
 	if self.data:sub(1,1) == '#' then
-		self.index = self.data:find'\n' + 1
-		self.line = self.line + 1
+		self:seekto'\n'
 	end
 end
 
