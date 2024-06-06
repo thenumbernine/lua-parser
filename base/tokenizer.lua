@@ -14,7 +14,7 @@ function Tokenizer:init(data, ...)
 	self.symbols = table(self.symbols)
 	self.keywords = table(self.keywords):setmetatable(nil)
 	self:initSymbolsAndKeywords(...)
-	
+
 	self.r = DataReader(data)
 	self.gettokenthread = coroutine.create(function()
 		local r = self.r
@@ -22,8 +22,8 @@ function Tokenizer:init(data, ...)
 		while not r:done() do
 			self:skipWhiteSpaces()
 			if r:done() then break end
-			
-			if self:parseComment() then 
+
+			if self:parseComment() then
 			elseif self:parseString() then
 			elseif self:parseName() then
 			elseif self:parseNumber() then
@@ -36,10 +36,8 @@ function Tokenizer:init(data, ...)
 end
 
 function Tokenizer:skipWhiteSpaces()
-	local r = self.r
-	while r:canbe'%s+' do
+	self.r:canbe'%s+'
 --DEBUG: print('read space ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
-	end
 end
 
 -- Lua-specific comments (tho changing the comment symbol is easy ...)
@@ -224,4 +222,4 @@ function Tokenizer:getloc()
 	return {line = self.prev2line, col = self.prev2col, index = self.prev2index}
 end
 
-return Tokenizer 
+return Tokenizer

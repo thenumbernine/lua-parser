@@ -120,7 +120,7 @@ function LuaParser:parse_stat()
 			if self:canbe('=', 'symbol') then
 				local explist = assert(self:parse_explist())
 				local assign = ast._assign(namelist, explist)
-					:setspan{from = from, to = self:getloc()}
+					:setspan{from = ffrom, to = self:getloc()}
 				return ast._local{assign}
 					:setspan{from = from, to = self:getloc()}
 			else

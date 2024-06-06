@@ -1,18 +1,19 @@
 --[[
-parser.base.ast returns the ASTNode root of all AST nodes
+parser.base.ast returns the BaseAST root of all AST nodes
 
 TODO ...
 ... but parser.lua.ast (and maybe soon parser.grammar.ast) return a collection-of-nodes, which are key'd to the token ... hmm ...
-maybe for consistency I should have parser.lua.ast return the LuaNode, which is an ASTNode child, and parent of all Lua AST nodes ...
+maybe for consistency I should have parser.lua.ast return the LuaAST, which is an BaseAST child, and parent of all Lua AST nodes ...
 ... and give that node a member htat holds a key/value map to all nodes per token ...
 But using a namespace is definitely convenient, especially with all the member subclasses and methods that go in it (traverse, nodeclass, etc)
 ... though these can easily turn into member fields and member methods
 
+tempting to replace the 'ast' namespace with just LuaAST itself, and keep the convention that keys beginning with `_` are subclasses...
 --]]
 local table = require 'ext.table'
 local tolua = require 'ext.tolua'
 
-local ASTNode = require 'parser.base.ast'
+local BaseAST = require 'parser.base.ast'
 
 
 -- namespace table of all Lua AST nodes
@@ -21,10 +22,10 @@ local ASTNode = require 'parser.base.ast'
 local ast = {}
 
 -- Lua-specific parent class.  root of all other ast node classes in this file.
-local LuaNode = ASTNode:subclass()
+local LuaAST = BaseAST:subclass()
 
 -- assign to 'ast.node' to define it as the Lua ast's parent-most node class
-ast.node = LuaNode
+ast.node = LuaAST
 
 --[[
 TODO ... how to make tostring traversal - or any traversal for that matter - modular
@@ -36,7 +37,7 @@ local function asttolua(x)
 	return x:toLua()
 end
 
-function LuaNode:toLua()
+function LuaAST:toLua()
 	-- :serialize() impl provided by child classes
 	-- :serialize() should call traversal in-order of parsing (why I want to make it auto and assoc wth the parser and grammar and rule-generated ast node classes)
 	-- that means serialize() itself should never call serialize() but only call the apply() function passed into it (for modularity's sake)
@@ -45,12 +46,12 @@ function LuaNode:toLua()
 end
 
 -- lua is the default serialization ... but change this function to change that
-function LuaNode:__tostring()
+function LuaAST:__tostring()
 	return self:toLua()
 end
 
 
-function LuaNode:exec(...)
+function LuaAST:exec(...)
 	return assert(load(self:toLua(), ...))
 end
 
@@ -84,7 +85,7 @@ local fields = {
 	{'vars', 'many'},
 }
 
-ast.exec = LuaNode.exec
+ast.exec = LuaAST.exec
 
 --[[
 I need to fix this up better to handle short-circuiting, replacing, removing, etc...
@@ -99,7 +100,7 @@ local function traverseRecurse(
 	childFirstCallback,
 	parentNode
 )
-	if not LuaNode:isa(node) then return node end
+	if not LuaAST:isa(node) then return node end
 	if parentFirstCallback then
 		local ret = parentFirstCallback(node, parentNode)
 		if ret ~= node then
@@ -148,14 +149,14 @@ local function traverse(node, ...)
 	return newnode
 end
 
-LuaNode.traverse = traverse
+LuaAST.traverse = traverse
 ast.traverse = traverse
 
-function LuaNode.copy(n)
+function LuaAST.copy(n)
 	local newn = {}
 	setmetatable(newn, getmetatable(n))
 	for i=1,#n do
-		newn[i] = LuaNode.copy(n[i])
+		newn[i] = LuaAST.copy(n[i])
 	end
 	for _,field in ipairs(fields) do
 		local name = field[1]
@@ -164,7 +165,7 @@ function LuaNode.copy(n)
 		if value then
 			if howmuch == 'one' then
 				if type(value) == 'table' then
-					newn[name] = LuaNode.copy(value)
+					newn[name] = LuaAST.copy(value)
 				else
 					newn[name] = value
 				end
@@ -172,7 +173,7 @@ function LuaNode.copy(n)
 				local newmany = {}
 				for k,v in ipairs(value) do
 					if type(v) == 'table' then
-						newmany[k] = LuaNode.copy(v)
+						newmany[k] = LuaAST.copy(v)
 					else
 						newmany[k] = v
 					end
@@ -187,7 +188,7 @@ function LuaNode.copy(n)
 	end
 	return newn
 end
-ast.copy = LuaNode.copy
+ast.copy = LuaAST.copy
 
 --[[
 flatten a function:
@@ -223,8 +224,8 @@ h ret = previous return value of h
 return something(g ret, h ret)
 
 --]]
-function LuaNode.flatten(f, varmap)
-	f = LuaNode.copy(f)
+function LuaAST.flatten(f, varmap)
+	f = LuaAST.copy(f)
 	traverseRecurse(f, function(n)
 		if type(n) == 'table'
 		and ast._call:isa(n)
@@ -238,10 +239,10 @@ function LuaNode.flatten(f, varmap)
 			then
 				local retexprs = {}
 				for i,e in ipairs(f[1].exprs) do
-					retexprs[i] = LuaNode.copy(e)
+					retexprs[i] = LuaAST.copy(e)
 					traverseRecurse(retexprs[i], function(v)
 						if ast._arg:isa(v) then
-							return LuaNode.copy(n.args[i])
+							return LuaAST.copy(n.args[i])
 						end
 					end)
 					retexprs[i] = ast._par(retexprs[i])
@@ -253,7 +254,7 @@ function LuaNode.flatten(f, varmap)
 	end)
 	return f
 end
-ast.flatten = LuaNode.flatten
+ast.flatten = LuaAST.flatten
 
 -- TODO something more flexible than this
 ast.spaceseparator = '\n'
@@ -268,15 +269,10 @@ end
 
 
 local function nodeclass(type, parent, args)
-	parent = parent or LuaNode
-	local cl = parent:subclass()-- make class
-	if args then				-- copy in contents
-		for k,v in pairs(args) do
-			cl[k] = v
-		end
-	end
-	cl.type = type				-- copy type field
-	ast['_'..type] = cl			-- add to namespace
+	parent = parent or LuaAST
+	local cl = parent:subclass(args)
+	cl.type = type
+	ast['_'..type] = cl
 	return cl
 end
 ast.nodeclass = nodeclass

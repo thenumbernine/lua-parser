@@ -2,17 +2,17 @@ local table = require 'ext.table'
 local string = require 'ext.string'
 local class = require 'ext.class'
 
-local ASTNode = class()
+local BaseAST = class()
 
-ASTNode.__concat = string.concat
+BaseAST.__concat = string.concat
 
-function ASTNode:setspan(span)
+function BaseAST:setspan(span)
 	self.span = span
 	return self
 end
 
 -- returns ancestors as a table, including self
-function ASTNode:ancestors()
+function BaseAST:ancestors()
 	local n = self
 	local t = table()
 	repeat
@@ -24,4 +24,4 @@ end
 
 -- TODO move traverse flatten etc here once the fields problem is sorted out
 
-return ASTNode
+return BaseAST
