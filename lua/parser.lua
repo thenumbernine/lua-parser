@@ -71,6 +71,7 @@ function LuaParser:parseTree()
 end
 
 function LuaParser:parse_chunk()
+	local ast = self.ast
 	local from = self:getloc()
 	local stmts = table()
 	repeat
@@ -100,6 +101,7 @@ function LuaParser:parse_block(blockName)
 end
 
 function LuaParser:parse_stat()
+	local ast = self.ast
 	if self.version >= '5.2' then
 		repeat until not self:canbe(';', 'symbol')
 	end
@@ -247,6 +249,7 @@ function LuaParser:parse_stat()
 end
 
 function LuaParser:parse_assign(vars, from)
+	local ast = self.ast
 	self:mustbe('=', 'symbol')
 	return ast._assign(vars, assert(self:parse_explist()))
 		:setspan{from = from, to = self:getloc()}
@@ -254,6 +257,7 @@ end
 
 -- 'laststat' in 5.1, 'retstat' in 5.2+
 function LuaParser:parse_retstat()
+	local ast = self.ast
 	local from = self:getloc()
 	-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
 	-- that means only handle 'break' here in 5.1
@@ -274,6 +278,7 @@ end
 -- verify we're in a loop, then return the break
 
 function LuaParser:parse_break()
+	local ast = self.ast
 	local from = self:getloc()
 	if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
 		error("break not inside loop")
@@ -284,6 +289,7 @@ end
 
 
 function LuaParser:parse_funcname()
+	local ast = self.ast
 	if not self:canbe(nil, 'name') then return end
 	local from = self:getloc()
 	local name = ast._var(self.lasttoken)
@@ -304,6 +310,7 @@ function LuaParser:parse_funcname()
 end
 
 function LuaParser:parse_namelist()
+	local ast = self.ast
 	local from = self:getloc()
 	local name = self:canbe(nil, 'name')
 	if not name then return end
@@ -323,6 +330,7 @@ end
 -- same as above but with optional attributes
 
 function LuaParser:parse_attnamelist()
+	local ast = self.ast
 	local from = self:getloc()
 	local name = self:canbe(nil, 'name')
 	if not name then return end
@@ -375,6 +383,7 @@ function LuaParser:parse_exp()
 end
 
 function LuaParser:parse_exp_or()
+	local ast = self.ast
 	local a = self:parse_exp_and()
 	if not a then return end
 	if self:canbe('or', 'keyword') then
@@ -385,6 +394,7 @@ function LuaParser:parse_exp_or()
 end
 
 function LuaParser:parse_exp_and()
+	local ast = self.ast
 	local a = self:parse_exp_cmp()
 	if not a then return end
 	if self:canbe('and', 'keyword') then
@@ -395,6 +405,7 @@ function LuaParser:parse_exp_and()
 end
 
 function LuaParser:parse_exp_cmp()
+	local ast = self.ast
 	local a
 	if self.version >= '5.3' then
 		a = self:parse_exp_bor()
@@ -425,6 +436,7 @@ end
 -- BEGIN 5.3+ ONLY:
 
 function LuaParser:parse_exp_bor()
+	local ast = self.ast
 	local a = self:parse_exp_bxor()
 	if not a then return end
 	if self:canbe('|', 'symbol') then
@@ -435,6 +447,7 @@ function LuaParser:parse_exp_bor()
 end
 
 function LuaParser:parse_exp_bxor()
+	local ast = self.ast
 	local a = self:parse_exp_band()
 	if not a then return end
 	if self:canbe('~', 'symbol') then
@@ -445,6 +458,7 @@ function LuaParser:parse_exp_bxor()
 end
 
 function LuaParser:parse_exp_band()
+	local ast = self.ast
 	local a = self:parse_exp_shift()
 	if not a then return end
 	if self:canbe('&', 'symbol') then
@@ -455,6 +469,7 @@ function LuaParser:parse_exp_band()
 end
 
 function LuaParser:parse_exp_shift()
+	local ast = self.ast
 	local a = self:parse_exp_concat()
 	if not a then return end
 	if self:canbe('<<', 'symbol')
@@ -474,6 +489,7 @@ end
 -- END 5.3+ ONLY:
 
 function LuaParser:parse_exp_concat()
+	local ast = self.ast
 	local a = self:parse_exp_addsub()
 	if not a then return end
 	if self:canbe('..', 'symbol') then
@@ -484,6 +500,7 @@ function LuaParser:parse_exp_concat()
 end
 
 function LuaParser:parse_exp_addsub()
+	local ast = self.ast
 	local a = self:parse_exp_muldivmod()
 	if not a then return end
 	if self:canbe('+', 'symbol')
@@ -502,6 +519,7 @@ function LuaParser:parse_exp_addsub()
 end
 
 function LuaParser:parse_exp_muldivmod()
+	local ast = self.ast
 	local a = self:parse_exp_unary()
 	if not a then return end
 	if self:canbe('*', 'symbol')
@@ -522,6 +540,7 @@ function LuaParser:parse_exp_muldivmod()
 end
 
 function LuaParser:parse_exp_unary()
+	local ast = self.ast
 	local from = self:getloc()
 	if self:canbe('not', 'keyword') then
 		return ast._not(assert(self:parse_exp_unary()))
@@ -545,6 +564,7 @@ function LuaParser:parse_exp_unary()
 end
 
 function LuaParser:parse_exp_pow()
+	local ast = self.ast
 	local a = self:parse_subexp()
 	if not a then return end
 	if self:canbe('^', 'symbol') then
@@ -555,6 +575,7 @@ function LuaParser:parse_exp_pow()
 end
 
 function LuaParser:parse_subexp()
+	local ast = self.ast
 	local tableconstructor = self:parse_tableconstructor()
 	if tableconstructor then return tableconstructor end
 
@@ -606,6 +627,7 @@ prefixexp ::= (Name {'[' exp ']' | `.` Name | [`:` Name] args} | `(` exp `)`) {a
 --]]
 
 function LuaParser:parse_prefixexp()
+	local ast = self.ast
 	local prefixexp
 	local from = self:getloc()
 
@@ -660,6 +682,7 @@ end
 -- returns a table of the args -- particularly an empty table if no args were found
 
 function LuaParser:parse_args()
+	local ast = self.ast
 	local from = self:getloc()
 	if self:canbe(nil, 'string') then
 		return {
@@ -680,6 +703,7 @@ end
 -- helper which also includes the line and col in the function object
 
 function LuaParser:makeFunction(...)
+	local ast = self.ast
 	local f = ast._function(...) -- no :setspan(), this is done by the caller
 	f.line, f.col = self.t:getlinecol()
 	f.source = self.source
@@ -709,6 +733,7 @@ function LuaParser:parse_funcbody()
 end
 
 function LuaParser:parse_parlist()	-- matches namelist() with ... as a terminator
+	local ast = self.ast
 	local from = self:getloc()
 	if self:canbe('...', 'symbol') then
 		return table{
@@ -740,6 +765,7 @@ function LuaParser:parse_parlist()	-- matches namelist() with ... as a terminato
 end
 
 function LuaParser:parse_tableconstructor()
+	local ast = self.ast
 	local from = self:getloc()
 	if not self:canbe('{', 'symbol') then return end
 	local fields = self:parse_fieldlist()
@@ -762,6 +788,7 @@ function LuaParser:parse_fieldlist()
 end
 
 function LuaParser:parse_field()
+	local ast = self.ast
 	local from = self:getloc()
 	if self:canbe('[', 'symbol') then
 		local keyexp = assert(self:parse_exp())
