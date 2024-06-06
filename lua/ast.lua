@@ -43,7 +43,7 @@ function LuaNode:toLua()
 	-- :serialize() impl provided by child classes
 	-- :serialize() should call traversal in-order of parsing (why I want to make it auto and assoc wth the parser and grammar and rule-generated ast node classes)
 	-- that means serialize() itself should never call serialize() but only call the apply() function passed into it (for modularity's sake)
-	-- it might mean i should capture all nodes too, even those that are fixed, like keywords and symbols, for the sake of reassmbling the syntax 
+	-- it might mean i should capture all nodes too, even those that are fixed, like keywords and symbols, for the sake of reassmbling the syntax
 	return self:serialize(asttolua)
 end
 
@@ -243,9 +243,7 @@ function LuaNode.flatten(f, varmap)
 				for i,e in ipairs(f[1].exprs) do
 					retexprs[i] = LuaNode.copy(e)
 					traverseRecurse(retexprs[i], function(v)
-						if type(v) == 'table'
-						and ast._arg:isa(v)
-						then
+						if ast._arg:isa(v) then
 							return LuaNode.copy(n.args[i])
 						end
 					end)
@@ -332,6 +330,7 @@ function _do:serialize(apply)
 end
 
 local _while = nodeclass('while', _stmt)
+-- TODO just make self[1] into the cond ...
 function _while:init(cond, ...)
 	self.cond = cond
 	for i=1,select('#', ...) do
@@ -343,6 +342,7 @@ function _while:serialize(apply)
 end
 
 local _repeat = nodeclass('repeat', _stmt)
+-- TODO just make self[1] into the cond ...
 function _repeat:init(cond, ...)
 	self.cond = cond
 	for i=1,select('#', ...) do
@@ -362,6 +362,7 @@ _if(_eq(a,b),
 --]]
 -- weird one, idk how to reformat
 local _if = nodeclass('if', _stmt)
+-- TODO maybe just assert the node types and store them as-is in self[i]
 function _if:init(cond,...)
 	local elseifs = table()
 	local elsestmt, laststmt
@@ -396,6 +397,7 @@ end
 
 -- aux for _if
 local _elseif = nodeclass('elseif', _stmt)
+-- TODO just make self[1] into the cond ...
 function _elseif:init(cond,...)
 	self.cond = cond
 	for i=1,select('#', ...) do
@@ -419,6 +421,12 @@ end
 
 local _foreq = nodeclass('foreq', _stmt)
 -- step is optional
+-- TODO just make self[1..4] into the var, min, max, step ...
+-- ... this means we can possibly have a nil child mid-sequence ...
+-- .. hmm ...
+-- ... which is better:
+-- *) requiring table.max for integer iteration instead of ipairs
+-- *) or using fields instead of integer indexes?
 function _foreq:init(var,min,max,step,...)
 	self.var = var
 	self.min = min
@@ -437,7 +445,7 @@ end
 
 -- TODO 'vars' should be a node itself
 local _forin = nodeclass('forin', _stmt)
-function _forin:init(vars,iterexprs, ...)
+function _forin:init(vars, iterexprs, ...)
 	self.vars = vars
 	self.iterexprs = iterexprs
 	for i=1,select('#', ...) do
@@ -474,6 +482,7 @@ end
 
 -- aux for _function
 local _arg = nodeclass'arg'
+-- TODO just self[1] ?
 function _arg:init(index)
 	self.index = index
 end
@@ -491,6 +500,7 @@ end
 --  I'm tempted to make them separate symbols here too ...
 -- exprs is a table containing: 1) a single function 2) a single assign statement 3) a list of variables
 local _local = nodeclass('local', _stmt)
+-- TODO just self[1] instead of self.exprs[i]
 function _local:init(exprs)
 	if ast._function:isa(exprs[1]) or ast._assign:isa(exprs[1]) then
 		assert(#exprs == 1, "local functions or local assignments must be the only child")
@@ -507,8 +517,8 @@ end
 
 -- control
 
--- TODO either 'exprs' a node of its own, or flatten it into 'return'
 local _return = nodeclass('return', _stmt)
+-- TODO either 'exprs' a node of its own, or flatten it into 'return'
 function _return:init(...)
 	self.exprs = {...}
 end
@@ -519,8 +529,8 @@ end
 local _break = nodeclass('break', _stmt)
 function _break:serialize(apply) return 'break' end
 
--- TODO 'args' a node of its own ?
 local _call = nodeclass'call'
+-- TODO 'args' a node of its own ?  or store it in self[i] ?
 function _call:init(func, ...)
 	self.func = func
 	self.args = {...}
@@ -552,10 +562,14 @@ _false.value = false
 function _false:serialize(apply) return 'false' end
 
 local _number = nodeclass'number'
+-- TODO just self[1] instead of self.value ?
+-- but this breaks convention with _boolean having .value as its static member value.
+-- I could circumvent this with _boolean subclass [1] holding the value ...
 function _number:init(value) self.value = value end
 function _number:serialize(apply) return self.value end
 
 local _string = nodeclass'string'
+-- TODO just self[1] instead of self.value
 function _string:init(value) self.value = value end
 function _string:serialize(apply)
 	-- use ext.tolua's string serializer
@@ -565,13 +579,15 @@ end
 local _vararg = nodeclass'vararg'
 function _vararg:serialize(apply) return '...' end
 
--- TODO 'args' a node
+-- TODO 'args' a node, or flatten into self[i] ?
 local _table = nodeclass'table'	-- single-element assigns
-function _table:init(args)
-	self.args = table(assert(args))
+function _table:init(...)
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
+	end
 end
 function _table:serialize(apply)
-	return '{'..self.args:mapi(function(arg)
+	return '{'..table.mapi(self, function(arg)
 		-- if it's an assign then wrap the vars[1] with []'s
 		if ast._assign:isa(arg) then
 			assert(#arg.vars == 1)
@@ -582,6 +598,12 @@ function _table:serialize(apply)
 	end):concat(',')..'}'
 end
 
+-- OK here is the classic example of the benefits of fields over integers:
+-- extensibility.
+-- attrib was added later
+-- as we add/remove fields, that means reordering indexes, and that means a break in compat
+-- one workaround to merging the two is just named functions and integer-indexed children
+-- another is a per-child traversal routine (like :serialize())
 local _var = nodeclass'var'	-- variable, lhs of ast._assign's, similar to _arg
 function _var:init(name, attrib)
 	self.name = name
@@ -647,10 +669,12 @@ end
 local _op = nodeclass'op'
 -- TODO 'args' a node ... or just flatten it into this node ...
 function _op:init(...)
-	self.args = {...}
+	for i=1,select('#', ...) do
+		self[i] = select(i, ...)
+	end
 end
 function _op:serialize(apply)
-	return table.mapi(self.args, apply):concat(' '..self.op..' ') -- spaces required for 'and' and 'or'
+	return table.mapi(self, apply):concat(' '..self.op..' ') -- spaces required for 'and' and 'or'
 end
 
 for _,info in ipairs{

@@ -198,11 +198,11 @@ A vararg `...` expression.<br>
 `n.type == 'vararg'`.<br>
 For use within function arguments, assignment expressions, function calls, etc.<br>
 <br>
-`n = ast._table(args)`<br>
+`n = ast._table(...)`<br>
 A table `{ ... }` expression.<br>
 `n.type == 'table'`.<br>
-`n.args =` a table of the expressions of the table.<br>
-If the expression in `n.args[i]` is an `ast._assign` then an entry is added into the table as `key = value`.  If it is not an `ast._assign` then it is inserted as a sequenced entry.<br>
+`n[1] ... n[#n] =` expressions of the table.<br>
+If the expression in `n[i]` is an `ast._assign` then an entry is added into the table as `key = value`.  If it is not an `ast._assign` then it is inserted as a sequenced entry.<br>
 <br>
 `n = ast._var(name)`<br>
 A variable reference expression.<br>
@@ -251,7 +251,7 @@ Binary operations:
 |shl      |`<<`          | 5.3+ |
 |shr      |`>>`          | 5.3+ |
 
-`n.args =` a table of the arguments of the operation.
+`n[1] ... n[#n] =` a table of the arguments of the operation.
 
 Unary operations:
 

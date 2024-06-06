@@ -48,7 +48,7 @@ for _,info in ipairs{
 	-- hmm, can I override serialize but only for specific apply()'s ?
 	-- I guess if I want to test apply == my new custom one vs otherwise call super ...
 	ast['_'..name].toC = function(self, apply)
-		return table(self.args):mapi(apply):concat(' '..op..' ')
+		return table.mapi(self, apply):concat(' '..op..' ')
 	end
 end
 function ast._not:toC(apply)

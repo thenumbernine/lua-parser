@@ -744,7 +744,7 @@ function LuaParser:parse_tableconstructor()
 	if not self:canbe('{', 'symbol') then return end
 	local fields = self:parse_fieldlist()
 	self:mustbe('}', 'symbol')
-	return ast._table(fields or {})
+	return ast._table(table.unpack(fields or {}))
 		:setspan{from = from, to = self:getloc()}
 end
 
