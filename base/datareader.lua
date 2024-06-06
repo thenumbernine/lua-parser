@@ -36,7 +36,9 @@ function DataReader:init(data)
 
 	-- skip past initial #'s
 	if self.data:sub(1,1) == '#' then
-		self:seekpast'\n'
+		if not self:seekpast'\n' then
+			self:seekpast'$'
+		end
 	end
 end
 
@@ -57,7 +59,6 @@ end
 function DataReader:setlasttoken(lasttoken, skipped)
 	self.lasttoken = lasttoken
 	if self.tracktokens then
--- TODO depending on whether this is called from seekto() vs seekpast(), skipped might include lasttoken ...
 		if skipped and #skipped > 0 then
 --DEBUG(parser.base.datareader): print('SKIPPED', require 'ext.tolua'(skipped))
 			self.tokenhistory:insert(skipped)
