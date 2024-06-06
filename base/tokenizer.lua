@@ -50,7 +50,7 @@ local start = r.index - #r.lasttoken
 		-- read block comment if it exists
 		if not r:readblock() then
 			-- read line otherwise
-			r:seekto'\n'
+			r:seekpast'\n'
 		end
 		local commentstr = r.data:sub(start, r.index-1)
 		-- TODO how to insert comments into the AST?  should they be their own nodes?
