@@ -38,7 +38,7 @@ end
 function Tokenizer:skipWhiteSpaces()
 	local r = self.r
 	r:canbe'%s+'
---DEBUG: print('read space ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
+--DEBUG: if r.lasttoken then print('read space ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken) end
 end
 
 -- Lua-specific comments (tho changing the comment symbol is easy ...)

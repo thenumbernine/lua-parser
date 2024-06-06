@@ -36,7 +36,7 @@ function DataReader:init(data)
 
 	-- skip past initial #'s
 	if self.data:sub(1,1) == '#' then
-		self:seekto'\n'
+		self:seekpast'\n'
 	end
 end
 
@@ -59,18 +59,19 @@ function DataReader:setlasttoken(lasttoken, skipped)
 	if self.tracktokens then
 -- TODO depending on whether this is called from seekto() vs seekpast(), skipped might include lasttoken ...
 		if skipped and #skipped > 0 then
---DEBUG(parser.base.datareader): print('SKIPPED', skipped)
+--DEBUG(parser.base.datareader): print('SKIPPED', require 'ext.tolua'(skipped))
 			self.tokenhistory:insert(skipped)
 		end
---DEBUG(parser.base.datareader): print('TOKEN', self.lasttoken)
+--DEBUG(parser.base.datareader): print('TOKEN', require 'ext.tolua'(self.lasttoken))
 		self.tokenhistory:insert(self.lasttoken)
 --DEBUG(parser.base.datareader paranoid): local sofar = self.tokenhistory:concat()
---DEBUG(parser.base.datareader paranoid): asserteq(self.data:sub(1,#sofar), sofar)
+--DEBUG(parser.base.datareader paranoid): asserteq(self.data:sub(1,#sofar), sofar, "source vs tokenhistory")
 	end
 	return self.lasttoken
 end
 
 function DataReader:seekto(pattern)
+--DEBUG(parser.base.datareader): print('DataReader:seekto', require 'ext.tolua'(pattern))
 	local from, to = self.data:find(pattern, self.index)
 	if not from then
 		from = #self.data+1
@@ -83,6 +84,7 @@ function DataReader:seekto(pattern)
 end
 
 function DataReader:seekpast(pattern)
+--DEBUG(parser.base.datareader): print('DataReader:seekpast', require 'ext.tolua'(pattern))
 	local from, to = self.data:find(pattern, self.index)
 	if not from then return end
 	local skipped = self.data:sub(self.index, from - 1)
@@ -93,10 +95,12 @@ function DataReader:seekpast(pattern)
 end
 
 function DataReader:canbe(pattern)
+--DEBUG(parser.base.datareader): print('DataReader:canbe', require 'ext.tolua'(pattern))
 	return self:seekpast('^'..pattern)
 end
 
 function DataReader:mustbe(pattern, msg)
+--DEBUG(parser.base.datareader): print('DataReader:mustbe', require 'ext.tolua'(pattern))
 	if not self:canbe(pattern) then error(msg or "expected "..pattern) end
 	return self.lasttoken
 end
