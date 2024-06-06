@@ -234,7 +234,7 @@ function LuaParser:parse_stat()
 
 	local prefixexp = self:parse_prefixexp()
 	if prefixexp then
-		if prefixexp.type == 'call' then 	-- function call
+		if ast._call:isa(prefixexp) then 	-- function call
 			return prefixexp
 		else	-- varlist assignment
 			local vars = table{prefixexp}
@@ -720,10 +720,11 @@ end
 -- returns a table of ... first element is a table of args, rest of elements are the body statements
 
 function LuaParser:parse_funcbody()
+	local ast = self.ast
 	if not self:canbe('(', 'symbol') then return end
 	local args = self:parse_parlist() or table()
 	local lastArg = args:last()
-	local functionType = lastArg and lastArg.type == 'vararg' and 'function-vararg' or 'function'
+	local functionType = ast._vararg:isa(lastArg) and 'function-vararg' or 'function'
 	self:mustbe(')', 'symbol')
 	self.functionStack:insert(functionType)
 	local block = self:parse_block(functionType)
@@ -805,7 +806,7 @@ function LuaParser:parse_field()
 	local exp = self:parse_exp()
 	if not exp then return end
 
-	if exp.type == 'var' and self:canbe('=', 'symbol') then
+	if ast._var:isa(exp) and self:canbe('=', 'symbol') then
 		return ast._assign(
 			{
 				ast._string(exp.name):setspan(exp.span)
