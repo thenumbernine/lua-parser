@@ -70,14 +70,10 @@ function GrammarASTNode:getcode(parser)
 	error("need to handle grammar type "..tolua(self.type).." "..tolua(self))
 end
 
--- how many places really use this?  and why not just search for underscore fields?
-ast.allclasses = table()
-
 local function nodeclass(type)
 	local cl = GrammarASTNode:subclass()
 	cl.type = type
 	ast['_'..type] = cl
-	ast.allclasses:insert(cl)
 	return cl
 end
 
@@ -323,7 +319,6 @@ local ASTNode = require 'parser.base.ast'
 local Tokenizer = require 'parser.base.tokenizer'
 
 local ast = {}
-ast.allclasses = table()
 
 local <?=rootASTClassName?> = ASTNode:subclass()
 
@@ -331,7 +326,6 @@ local function nodeclass(args, parent)
 	parent = parent or <?=rootASTClassName?>
 	local cl = parent:subclass(args)
 	ast['_'..cl.type] = cl
-	ast.allclasses:insert(cl)
 	return cl
 end
 

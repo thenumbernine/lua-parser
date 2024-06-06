@@ -1,9 +1,13 @@
 --[[
+parser.base.ast returns the ASTNode root of all AST nodes
+
 TODO ...
-... parser.base.ast returns the ASTNode root of all AST nodes
 ... but parser.lua.ast (and maybe soon parser.grammar.ast) return a collection-of-nodes, which are key'd to the token ... hmm ...
 maybe for consistency I should have parser.lua.ast return the LuaNode, which is an ASTNode child, and parent of all Lua AST nodes ...
 ... and give that node a member htat holds a key/value map to all nodes per token ...
+But using a namespace is definitely convenient, especially with all the member subclasses and methods that go in it (traverse, nodeclass, etc)
+... though these can easily turn into member fields and member methods
+
 --]]
 local table = require 'ext.table'
 local tolua = require 'ext.tolua'
@@ -16,18 +20,11 @@ local ASTNode = require 'parser.base.ast'
 -- another TODO how about just storing subclasses as `._type` , then the 'ast' usage outside this file can be just echanged with LuaASTNode itself, and the file can return a class, and lots of things can be simplified
 local ast = {}
 
--- put all subclasses here
-local allclasses = table()
-ast.allclasses = allclasses
-
-
 -- Lua-specific parent class.  root of all other ast node classes in this file.
 local LuaNode = ASTNode:subclass()
-allclasses:insert(LuaNode)
 
 -- assign to 'ast.node' to define it as the Lua ast's parent-most node class
 ast.node = LuaNode
-
 
 --[[
 TODO ... how to make tostring traversal - or any traversal for that matter - modular
@@ -273,18 +270,13 @@ end
 local function nodeclass(type, parent, args)
 	parent = parent or LuaNode
 	local cl = parent:subclass()-- make class
-
 	if args then				-- copy in contents
 		for k,v in pairs(args) do
 			cl[k] = v
 		end
 	end
 	cl.type = type				-- copy type field
-
-	allclasses:insert(cl)		-- add to 'allclasses'
-
 	ast['_'..type] = cl			-- add to namespace
-
 	return cl
 end
 ast.nodeclass = nodeclass

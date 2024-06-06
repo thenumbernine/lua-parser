@@ -29,10 +29,12 @@ local function toC(x)
 	return x:serialize(toC)
 end
 
-for _,cl in ipairs(ast.allclasses) do
-	-- weakness to this design ...i need to always keep specifying the above toC() wrapper, or I have to make a seprate member function...
-	function cl:toC(apply)
-		return self:serialize(apply)
+for k,cl in pairs(ast) do
+	if ast.node:isa(cl) then
+		-- weakness to this design ...i need to always keep specifying the above toC() wrapper, or I have to make a seprate member function...
+		function cl:toC(apply)
+			return self:serialize(apply)
+		end
 	end
 end
 

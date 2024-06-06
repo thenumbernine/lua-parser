@@ -46,10 +46,6 @@ Each has the following properties:
 
 `n:serialize(apply)` = apply a to-string serialization function to the AST.
 
-
-`ast.allclasses` holds an integer-indexed table of all listed classes.
-
-
 ## ast.node subclasses:
 
 `n = ast._block(...)` = a block of code in Lua.<br>
