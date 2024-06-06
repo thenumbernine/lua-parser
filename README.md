@@ -262,7 +262,7 @@ Unary operations:
 |len      |`#`         |      |
 |bnot     |`~`         | 5.3+ |
 
-`n.arg =` the single argument of the operation.
+`n[1] =` the single argument of the operation.
 
 ## more extra functions:
 

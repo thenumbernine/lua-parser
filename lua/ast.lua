@@ -714,11 +714,13 @@ for _,info in ipairs{
 	local op = info[2]
 	local cl = nodeclass(info[1], _op)
 	cl.op = op
-	function cl:init(arg)
-		self.arg = arg
+	function cl:init(...)
+		for i=1,select('#', ...) do
+			self[i] = select(i, ...)
+		end
 	end
 	function cl:serialize(apply)
-		return ' '..self.op..' '..apply(self.arg)	-- spaces required for 'not'
+		return ' '..self.op..' '..apply(self[1])	-- spaces required for 'not'
 	end
 end
 
