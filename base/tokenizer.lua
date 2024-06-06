@@ -216,8 +216,11 @@ end
 function Tokenizer:getpos()
 	local sofar = self.r.data:sub(1,self.r.index)
 	local lastline = sofar:match('[^\n]*$') or ''
-	return 'line '..self.r.line
-		..' col '..self.r.col
+	-- buggy
+	--return 'line '..self.r.line
+	--	..' col '..self.r.col
+	return 'line '..(select(2,sofar:gsub('\n', ''))+1)
+		..' col '..#lastline
 		..' code "'..lastline..'"'
 end
 
