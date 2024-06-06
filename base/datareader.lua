@@ -70,22 +70,6 @@ function DataReader:setlasttoken(lasttoken, skipped)
 	return self.lasttoken
 end
 
--- TODO not used anymore
--- and every time it was, both times just seekto'\n', once reading the first # newline and reading single-line comments, it screwed up the tokenhistory integrity.
--- so either fix it or delete it (most likely)
-function DataReader:seekto(pattern)
---DEBUG(parser.base.datareader): print('DataReader:seekto', require 'ext.tolua'(pattern))
-	local from, to = self.data:find(pattern, self.index)
-	if not from then
-		from = #self.data+1
-		to = from
-	end
-	local skipped = self.data:sub(self.index, from - 1)
-	self.index = from
-	self:setlasttoken(self.data:sub(from, to), skipped)
-	return self:updatelinecol(skipped)
-end
-
 function DataReader:seekpast(pattern)
 --DEBUG(parser.base.datareader): print('DataReader:seekpast', require 'ext.tolua'(pattern))
 	local from, to = self.data:find(pattern, self.index)
