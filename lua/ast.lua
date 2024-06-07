@@ -624,6 +624,7 @@ local _index = nodeclass'index'
 function _index:init(expr,key)
 	self.expr = expr
 	-- helper add wrappers to some types:
+	-- TODO or not?
 	if type(key) == 'string' then
 		key = ast._string(key)
 	elseif type(key) == 'number' then
@@ -648,6 +649,8 @@ local _indexself = nodeclass'indexself'
 function _indexself:init(expr,key)
 	self.expr = assert(expr)
 	assert(isLuaName(key))
+	-- TODO compat with _index?  always wrap?  do this before passing in key?
+	--key = ast._string(key)
 	self.key = assert(key)
 end
 function _indexself:serialize(apply)
