@@ -1,5 +1,5 @@
 -- parser.load_xorm uses ext.load to modify the load(), loadfile() and require() functions
-local showcode = require 'template.showcode'
+--DEBUG(parser.load_xform): local showcode = require 'template.showcode'
 local LuaParser = require 'parser.lua.parser'
 
 local callbacks = setmetatable({}, {__index=table})
@@ -23,11 +23,11 @@ require 'ext.load'().xforms:insert(function(d, source)
 		local result = tostring(tree)
 		return result
 	end, function(err)
-		return
-			(d and ('parser.load_xform code:\n'..showcode(d)) or '')
-			..tostring(source)
+		return '\n'
+			--..(d and ('parser.load_xform code:\n'..showcode(d)) or '')	-- do I need to show code if I'm rethrownig to ext.load and it's going to show code?
+			--..tostring(source)..':\n'
 			-- TODO move this into LuaParser itself's error generation
-			..(parser and (' at '..parser.t:getpos()..'\n') or '')
+			..(parser and parser.t and (' at '..parser.t:getpos()..'\n') or '')
 			..err..'\n'
 			..debug.traceback()
 	end)
