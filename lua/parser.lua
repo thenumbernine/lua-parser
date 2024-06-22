@@ -57,7 +57,7 @@ function LuaParser:setData(data, source)
 
 	-- last verify that all gotos went to all labels
 	for _,g in pairs(self.gotos) do
-		assert(self.labels[g.name], "no visible label '"..g.name.."' for <goto> at line "..g.line)
+		assert(self.labels[g.name], "no visible label '"..g.name.."' for <goto> at line "..g.span.to.line)
 	end
 end
 
@@ -203,7 +203,6 @@ function LuaParser:parse_stat()
 			local name = self:mustbe(nil, 'name')
 			local g = ast._goto(name)
 				:setspan{from = from, to = self:getloc()}
-			g.line, g.col = self.t:getlinecol()
 			self.gotos[name] = g
 			return g
 		-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
@@ -704,10 +703,7 @@ end
 
 function LuaParser:makeFunction(...)
 	local ast = self.ast
-	local f = ast._function(...) -- no :setspan(), this is done by the caller
-	f.line, f.col = self.t:getlinecol()
-	f.source = self.source
-	return f
+	return ast._function(...) -- no :setspan(), this is done by the caller
 end
 -- 'function' in the 5.1 syntax
 

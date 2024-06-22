@@ -182,13 +182,11 @@ end
 function Tokenizer:consume()
 	-- [[ TODO store these in an array somewhere, make the history adjustable
 	-- then in all the get[prev][2]loc's just pass an index for how far back to search
-	self.prev2line = self.prevline
-	self.prev2col = self.prevcol
 	self.prev2index = self.previndex
+	self.prev2tokenIndex = self.prevtokenIndex
 
-	self.prevline = self.r.line
-	self.prevcol = self.r.col
 	self.previndex = self.r.index
+	self.prevtokenIndex = #self.r.tokenhistory
 	--]]
 
 	self.token = self.nexttoken
@@ -209,23 +207,28 @@ function Tokenizer:consume()
 	self.nexttokentype = nexttokentype
 end
 
-function Tokenizer:getlinecol()
-	return self.r.line, self.r.col
-end
-
 function Tokenizer:getpos()
 	local sofar = self.r.data:sub(1,self.r.index)
 	local lastline = sofar:match('[^\n]*$') or ''
-	-- buggy
-	--return 'line '..self.r.line
-	--	..' col '..self.r.col
-	return 'line '..(select(2,sofar:gsub('\n', ''))+1)
+	return 'line '..select(2,sofar:gsub('\n', ''))
 		..' col '..#lastline
 		..' code "'..lastline..'"'
 end
 
+-- TODO here ...
+-- return the span across 
 function Tokenizer:getloc()
-	return {line = self.prev2line, col = self.prev2col, index = self.prev2index}
+	local sofar = self.r.data:sub(1,self.r.index)
+	local lastline = sofar:match('[^\n]*$') or ''
+	local line = select(2,sofar:gsub('\n', ''))
+	local col = #lastline
+
+	return {
+		line = line,
+		col = col,
+		index = self.prev2index,
+		tokenIndex = self.prev2tokenIndex,
+	}
 end
 
 return Tokenizer

@@ -30,10 +30,6 @@ function DataReader:init(data)
 	-- keep track of all tokens as we parse them.
 	self.tokenhistory = table()
 
-	-- TODO this isn't robust against different OS file formats.  maybe switching back to determining line number offline / upon error encounter is better than trying to track it while we parse.
-	self.line = 1
-	self.col = 1
-
 	-- skip past initial #'s
 	if self.data:sub(1,1) == '#' then
 		if not self:seekpast'\n' then
@@ -44,16 +40,6 @@ end
 
 function DataReader:done()
 	return self.index > #self.data
-end
-
-function DataReader:updatelinecol(skipped)
-	local newlines = #skipped:gsub('[^\n]','')
-	if newlines > 0 then
-		self.line = self.line + newlines
-		self.col = #skipped:match('[^\n]*$') + 1
-	else
-		self.col = self.col + #skipped
-	end
 end
 
 function DataReader:setlasttoken(lasttoken, skipped)
@@ -77,8 +63,6 @@ function DataReader:seekpast(pattern)
 	if not from then return end
 	local skipped = self.data:sub(self.index, from - 1)
 	self.index = to + 1
-	-- TODO hmm if we're using 'skipped' in both places to update the line/col count, and if it is proceeding the token here, but preceding it above, then will it have accurate info?  yes so long as we're always starting at self.index ? for the sake of line counting ... however it will sometimes include the next token and sometimes not ...
-	self:updatelinecol(skipped)
 	return self:setlasttoken(self.data:sub(from, to), skipped)
 end
 
