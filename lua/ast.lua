@@ -580,7 +580,11 @@ function _table:serialize(apply)
 		if ast._assign:isa(arg) then
 			assert(#arg.vars == 1)
 			assert(#arg.exprs == 1)
+			-- TODO if it's a string and name and not a keyword then use our shorthand
+			-- but for this , I should put the Lua keywords in somewhere that both the AST and Tokenizer can see them
+			-- and the Tokenizer builds separate lists depending on the version (so I guess a table per version?)
 			return '[' .. apply(arg.vars[1]) .. '] = '..apply(arg.exprs[1])
+
 		end
 		return apply(arg)
 	end):concat(',')..'}'

@@ -186,7 +186,7 @@ function Tokenizer:consume()
 	self.prev2tokenIndex = self.prevtokenIndex
 
 	self.previndex = self.r.index
-	self.prevtokenIndex = #self.r.tokenhistory
+	self.prevtokenIndex = #self.r.tokenhistory+1
 	--]]
 
 	self.token = self.nexttoken
@@ -215,13 +215,21 @@ function Tokenizer:getpos()
 		..' code "'..lastline..'"'
 end
 
--- TODO here ...
 -- return the span across 
 function Tokenizer:getloc()
-	local sofar = self.r.data:sub(1,self.r.index)
+	local r = self.r
+	--[[
+	--local index = r.index
+	local index = self.prev2index
+	local sofar = r.data:sub(1, index)
 	local lastline = sofar:match('[^\n]*$') or ''
 	local line = select(2,sofar:gsub('\n', ''))
 	local col = #lastline
+	--]]
+	-- [[
+	local line = self.r.line
+	local col = self.r.col
+	--]]
 
 	return {
 		line = line,
