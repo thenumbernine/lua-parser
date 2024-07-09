@@ -521,10 +521,11 @@ function LuaParser:parse_exp_muldivmod()
 	local ast = self.ast
 	local a = self:parse_exp_unary()
 	if not a then return end
+	-- if version < 5.3 then the // symbol won't be added to the tokenizer anyways...
 	if self:canbe('*', 'symbol')
 	or self:canbe('/', 'symbol')
 	or self:canbe('%', 'symbol')
-	or (self.version >= '5.3' and self:canbe('//', 'symbol'))
+	or self:canbe('//', 'symbol')
 	then
 		local classForSymbol = {
 			['*'] = ast._mul,

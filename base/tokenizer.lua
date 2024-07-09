@@ -173,6 +173,8 @@ end
 
 -- separate this in case someone has to modify the tokenizer symbols and keywords before starting
 function Tokenizer:start()
+	-- TODO provide tokenizer the AST namespace and have it build the tokens (and keywords?) here automatically
+	self.symbols = self.symbols:mapi(function(v,k) return true, v end):keys()
 	-- arrange symbols from largest to smallest
 	self.symbols:sort(function(a,b) return #a > #b end)
 	self:consume()
