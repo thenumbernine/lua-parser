@@ -217,7 +217,7 @@ function Tokenizer:getpos()
 		..' code "'..lastline..'"'
 end
 
--- return the span across 
+-- return the span across
 function Tokenizer:getloc()
 	local r = self.r
 	--[[
