@@ -4,7 +4,10 @@ local LuaParser = require 'parser.lua.parser'
 
 local callbacks = setmetatable({}, {__index=table})
 
-require 'ext.load'().xforms:insert(function(d, source)
+local state = require 'ext.load'()
+callbacks.state = state
+
+state.xforms:insert(function(d, source)
 --DEBUG(parser.load_xform): print()
 --DEBUG(parser.load_xform): print(debug.traceback())
 --DEBUG(parser.load_xform): print'!!! BEFORE PARSE !!!'
