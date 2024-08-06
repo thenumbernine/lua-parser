@@ -8,7 +8,7 @@ local lua = 'lua'
 
 local inceptionLevel = ... or 1
 inceptionLevel = assert(tonumber(inceptionLevel), "expected number")
-if inceptionLevel > 5 then 
+if inceptionLevel > 5 then
 	print('nobody can survive beyond 5 inception levels')
 	return
 end
@@ -27,6 +27,9 @@ end
 -- find all lua files?  search the rockspec?
 local srcpath = path'../..'
 for _,info in ipairs{
+	-- [[ if you want to parse *everything* and not just the parser tree
+	{dir='ext', files={'assert.lua', 'class.lua', 'cmdline.lua', 'coroutine.lua', 'ctypes.lua', 'debug.lua', 'detect_ffi.lua', 'detect_lfs.lua', 'detect_os.lua', 'env.lua', 'ext.lua', 'fromlua.lua', 'gcmem.lua', 'io.lua', 'load.lua', 'math.lua', 'meta.lua', 'number.lua', 'op.lua', 'os.lua', 'path.lua', 'range.lua', 'reload.lua', 'require.lua', 'string.lua', 'table.lua', 'timer.lua', 'tolua.lua', 'xpcall.lua'}},
+	--]]
 	{dir='parser', files={'parser.lua', 'load_xform.lua'}},
 	{dir='parser/base', files={'ast.lua', 'datareader.lua', 'parser.lua', 'tokenizer.lua'}},
 	{dir='parser/lua', files={'ast.lua', 'parser.lua', 'tokenizer.lua'}},
@@ -41,6 +44,7 @@ end
 -- then chdir and run it again
 dstpath'parser/tests':cd()
 os.exec(
-	-- if you want to only use reparsed content for the second parse ...
-	--'LUA_PATH="'..dstpath..'/?.lua;'..dstpath..'/?/?.lua" && '..
+	-- [[ if you want to only use reparsed content for the second parse ...
+	'LUA_PATH="'..dstpath..'/?.lua;'..dstpath..'/?/?.lua" && '..
+	--]]
 	lua..' parsemyself.lua '..(inceptionLevel+1))

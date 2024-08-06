@@ -276,7 +276,10 @@ Some more useful functions in AST:
 - Speaking of LuaJIT, it has different edge case syntax for 2.0.5, 2.1.0, and whether 5.2-compat is enabled or not.  It isn't passing the `minify_tests.lua`.
 - How about flags to turn off and on each feature, then a function for auto-detect flag sets based on Lua VERSION string or by running some local `load()` tests 
 - Make all node allocation routed through `Parser:node` to give the node a .parser field to point back to the parser - necessary for certain AST nodes that need to tell what parser keywords are allowed. I do this where necessary but I should do it always.
+	- I've also made this keyword test optional since in some rare projects (`vec-lua` for one) I am inserting AST nodes for the sake of a portable AST that I can inject as inline'd code, but without a parser, so I don't have a proper enumeration of keywords. So for now I'm making ast node `.parser` optional and the keyword test bypassed if `.parser` isn't present.  I'll probably make it a hard constraint later when I rework `vec-lua`.
+	- It seems like a quick fix to just convert all `a.b`s into `a['b']`s ... but Lua for some reason doesn't support `a['b']:c()` as an equivalent of `a.b:c()` ... so converting everything from dot to brack index could break some regenerated Lua scripts.
 - Node locations have token ranges.  Including comment and space tokens.  I need to use this for exact reconstruction of parse syntax.  I would like to also combine this with replacing parsed content (like with my `langfix` transpiler) and that means, instead of using ast fields which are tokens, I should use token-references as fields and allow them to be replaced ... maybe ...
+- I'm very tempted to switch the AST index names to remove the preceding underscore.  Pro of keeping it: the keywords become valid Lua names.  Pro of removing it: the AST index matches the keyword that the AST node represents ...
 
 ### Dependencies:
 

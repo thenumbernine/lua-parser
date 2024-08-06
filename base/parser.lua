@@ -25,7 +25,7 @@ function Parser:setData(data)
 			..self.t:getpos()..'\n'
 			..debug.traceback()
 	end))
-	-- 
+	--
 	-- now that we have the tree, build parents
 	-- ... since I don't do that during construction ...
 	self.ast.refreshparents(self.tree)
@@ -55,4 +55,11 @@ function Parser:mustbe(token, tokentype)
 	return self.lasttoken, self.lasttokentype
 end
 
-return Parser 
+-- make new ast node, assign it back to the parser (so it can tell what version / keywords / etc are being used)
+function Parser:node(index, ...)
+	local node = self.ast[index](...)
+	node.parser = self
+	return node
+end
+
+return Parser
