@@ -216,7 +216,7 @@ An `expr[key]` expression, i.e. an `__index`-metatable operation.<br>
 `n.key =` the expression of the index key.<br>
 <br>
 `n = ast._indexself(expr, key)`<br>
-An 'expr:key` expression, to be used as the expression of a `ast._ call` node for member-function-calls. These are Lua's shorthand insertion of `self` as the first argument.<br>
+An `expr:key` expression, to be used as the expression of a `ast._ call` node for member-function-calls. These are Lua's shorthand insertion of `self` as the first argument.<br>
 `n.type == 'indexself'`.<br>
 `n.expr =` the expression to be indexed.<br>
 `n.key =` the key to index.  Must only be a Lua string, (not an `ast._ string`, but a real Lua string).<br>
@@ -225,26 +225,26 @@ Binary operations:
 
 |node type|Lua operator|      |
 |---------|------------|------|
-|add      |`+`           |      |
-|sub      |`-`           |      |
-|mul      |`*`           |      |
-|div      |`/`           |      |
-|mod      |`%`           |      |
-|concat   |`..`          |      |
-|lt       |`<`           |      |
-|le       |`<=`          |      |
-|gt       |`>`           |      |
-|ge       |`>=`          |      |
-|eq       |`==`          |      |
-|ne       |`~=`          |      |
-|and      |`and`         |      |
-|or       |`or`          |      |
-|idiv     |`//`          | 5.3+ |
-|band     |`&`           | 5.3+ |
-|bxor     |`~`           | 5.3+ |
-|bor      |`\|`          | 5.3+ |
-|shl      |`<<`          | 5.3+ |
-|shr      |`>>`          | 5.3+ |
+|`_add`   |`+`         |      |
+|`_sub`   |`-`         |      |
+|`_mul`   |`*`         |      |
+|`_div`   |`/`         |      |
+|`_mod`   |`%`         |      |
+|`_concat`|`..`        |      |
+|`_lt`    |`<`         |      |
+|`_le`    |`<=`        |      |
+|`_gt`    |`>`         |      |
+|`_ge`    |`>=`        |      |
+|`_eq`    |`==`        |      |
+|`_ne`    |`~=`        |      |
+|`_and`   |`and`       |      |
+|`_or`    |`or`        |      |
+|`_idiv`  |`//`        | 5.3+ |
+|`_band`  |`&`         | 5.3+ |
+|`_bxor`  |`~`         | 5.3+ |
+|`_bor`   |`\|`        | 5.3+ |
+|`_shl`   |`<<`        | 5.3+ |
+|`_shr`   |`>>`        | 5.3+ |
 
 `n[1] ... n[#n] =` a table of the arguments of the operation.
 
@@ -252,10 +252,10 @@ Unary operations:
 
 |node type|Lua operator|      |
 |---------|------------|------|
-|unm      |`-`         |      |
-|not      |`not`       |      |
-|len      |`#`         |      |
-|bnot     |`~`         | 5.3+ |
+|`_unm`   |`-`         |      |
+|`_not`   |`not`       |      |
+|`_len`   |`#`         |      |
+|`_bnot`  |`~`         | 5.3+ |
 
 `n[1] =` the single argument of the operation.
 
