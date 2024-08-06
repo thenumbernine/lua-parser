@@ -65,6 +65,13 @@ function LuaParser:buildTokenizer(data)
 	return LuaTokenizer(data, self.version, self.useluajit)
 end
 
+-- make new ast node, assign it back to the parser (so it can tell what version / keywords / etc are being used)
+function LuaParser:node(index, ...)
+	local node = self.ast[index](...)
+	node.parser = self
+	return node
+end
+
 -- default entry point for parsing data sources
 function LuaParser:parseTree()
 	return self:parse_chunk()
@@ -295,7 +302,7 @@ function LuaParser:parse_funcname()
 		:setspan{from = from, to = self:getloc()}
 	while self:canbe('.', 'symbol') do
 		local sfrom = self.t:getloc()
-		name = ast._index(
+		name = self:node('_index',
 			name,
 			ast._string(self:mustbe(nil, 'name'))
 				:setspan{from = sfrom, to = self:getloc()}
@@ -645,12 +652,12 @@ function LuaParser:parse_prefixexp()
 
 	while true do
 		if self:canbe('[', 'symbol') then
-			prefixexp = ast._index(prefixexp, assert(self:parse_exp()))
+			prefixexp = self:node('_index', prefixexp, assert(self:parse_exp()))
 			self:mustbe(']', 'symbol')
 			prefixexp:setspan{from = from, to = self:getloc()}
 		elseif self:canbe('.', 'symbol') then
 			local sfrom = self:getloc()
-			prefixexp = ast._index(
+			prefixexp = self:node('_index',
 				prefixexp,
 				ast._string(self:mustbe(nil, 'name'))
 					:setspan{from = sfrom, to = self:getloc()}
@@ -768,7 +775,7 @@ function LuaParser:parse_tableconstructor()
 	if not self:canbe('{', 'symbol') then return end
 	local fields = self:parse_fieldlist()
 	self:mustbe('}', 'symbol')
-	return ast._table(table.unpack(fields or {}))
+	return self:node('_table', table.unpack(fields or {}))
 		:setspan{from = from, to = self:getloc()}
 end
 

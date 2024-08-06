@@ -640,6 +640,7 @@ function _index:serialize(apply)
 -- TODO - if self.key is a string and has no funny chars the use a .$key instead of [$key]
 	if ast._string:isa(self.key)
 	and isLuaName(self.key.value)
+	and not self.parser.t.keywords[self.key.value]
 	then
 		return apply(self.expr)..'.'..self.key.value
 	end
