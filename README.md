@@ -272,7 +272,6 @@ Some more useful functions in AST:
 ### TODO:
 
 - Option for parsing LuaJIT -i number suffixes.
-- unicode escape codes 
 - Speaking of LuaJIT, it has different edge case syntax for 2.0.5, 2.1.0, and whether 5.2-compat is enabled or not.  It isn't passing the `minify_tests.lua`.
 - How about flags to turn off and on each feature, then a function for auto-detect flag sets based on Lua VERSION string or by running some local `load()` tests 
 - Make all node allocation routed through `Parser:node` to give the node a .parser field to point back to the parser - necessary for certain AST nodes that need to tell what parser keywords are allowed. I do this where necessary but I should do it always.

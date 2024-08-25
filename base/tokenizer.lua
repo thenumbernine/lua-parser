@@ -97,13 +97,41 @@ function Tokenizer:parseQuoteString()
 				local escapeCode = escapeCodes[esc]
 				if escapeCode then
 					s:insert(escapeCode)
-				elseif esc == 'x' then
-					if self.version >= '5.2' then
-						esc = r:mustbe'%x' .. r:mustbe'%x'
-						s:insert(string.char(tonumber(esc, 16)))
+				elseif esc == 'x' and self.version >= '5.2' then
+					esc = r:mustbe'%x' .. r:mustbe'%x'
+					s:insert(string.char(tonumber(esc, 16)))
+				elseif esc == 'u' and self.version >= '5.3' then
+					r:mustbe'{'
+					local code = 0
+					while true do
+						local ch = r:canbe'%x'
+						if not ch then break end
+						code = code * 16 + tonumber(ch, 16)
+					end
+					r:mustbe'}'
+
+					-- hmm, needs bit library or bit operations, which should only be present in version >= 5.3 anyways so ...
+					local bit = bit32 or require 'bit'
+					if code < 0x80 then
+						s:insert(string.char(code))	-- 0xxxxxxx
+					elseif code < 0x800 then
+						s:insert(
+							string.char(bit.bor(0xc0, bit.band(0x1f, bit.rshift(code, 6))))
+							.. string.char(bit.bor(0x80, bit.band(0x3f, code)))
+						)
+					elseif code < 0x10000 then
+						s:insert(
+							string.char(bit.bor(0xe0, bit.band(0x0f, bit.rshift(code, 12))))
+							.. string.char(bit.bor(0x80, bit.band(0x3f, bit.rshift(code, 6))))
+							.. string.char(bit.bor(0x80, bit.band(0x3f, code)))
+						)
 					else
-						-- lua5.1 ignores the \ and treats the rest as string content
-						s:insert(esc)
+						s:insert(
+							string.char(bit.bor(0xf0, bit.band(0x07, bit.rshift(code, 18))))
+							.. string.char(bit.bor(0x80, bit.band(0x3f, bit.rshift(code, 12))))
+							.. string.char(bit.bor(0x80, bit.band(0x3f, bit.rshift(code, 6))))
+							.. string.char(bit.bor(0x80, bit.band(0x3f, code)))
+						)
 					end
 				elseif esc:match('%d') then
 					-- can read up to three
