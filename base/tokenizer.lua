@@ -78,6 +78,7 @@ function Tokenizer:parseBlockString()
 	end
 end
 
+-- TODO this is a very lua function though it's in parser/base/ and not parser/lua/ ...
 -- '' or "" single-line quote-strings with escape-codes
 function Tokenizer:parseQuoteString()
 	local r = self.r
@@ -96,11 +97,24 @@ function Tokenizer:parseQuoteString()
 				local escapeCode = escapeCodes[esc]
 				if escapeCode then
 					s:insert(escapeCode)
+				elseif esc == 'x' then
+					if self.version >= '5.2' then
+						esc = r:mustbe'%x' .. r:mustbe'%x'
+						s:insert(string.char(tonumber(esc, 16)))
+					else
+						-- lua5.1 ignores the \ and treats the rest as string content
+						s:insert(esc)
+					end
 				elseif esc:match('%d') then
 					-- can read up to three
 					if r:canbe'%d' then esc = esc .. r.lasttoken end
 					if r:canbe'%d' then esc = esc .. r.lasttoken end
 					s:insert(string.char(tonumber(esc)))
+				else
+					if self.version >= '5.2' then
+						-- lua5.1 doesn't care about bad escape codes
+						error("invalid escape sequence "..esc)
+					end
 				end
 			else
 				s:insert(r.lasttoken)

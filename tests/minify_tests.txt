@@ -596,3 +596,5 @@ local a = 0x1.23p+45 local b			-- FAIL_5.1
 local a = -0x1.23p+45 local b			-- FAIL_5.1
 local a = 0x1.23p-45 local b			-- FAIL_5.1
 local a = -0x1.23p-45 local b			-- FAIL_5.1
+local a = '\x3f'						-- this technically parses in 5.1, but in 5.1 it produces unexpected results of x3f ... so even in 5.1 it's a pass
+print'done'
