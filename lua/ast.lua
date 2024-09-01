@@ -34,6 +34,9 @@ and honestly if we do save all tokens, that's an easy case for in-order traversa
 --]]
 
 local function asttolua(x)
+	if not x.toLua then
+		error('asttolua called on non-ast object '..require 'ext.tolua'(x))
+	end
 	return x:toLua()
 end
 
@@ -52,7 +55,13 @@ end
 
 
 function LuaAST:exec(...)
-	return assert(load(self:toLua(), ...))
+	local code = self:toLua()
+	local f, msg = load(code, ...)
+	if not f then
+		print(require 'template.showcode'(code))
+		error(msg)
+	end
+	return f
 end
 
 
