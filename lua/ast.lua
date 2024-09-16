@@ -40,12 +40,23 @@ local function asttolua(x)
 	return x:toLua()
 end
 
+-- TODO subsequent toLua() impls have (apply) as an arg, and this is modular for expanding off toLua impls
+-- but maybe change those names to 'toLua_recurse' or something
+-- and keep a sole external function that provides 'asttolua' as the apply() function
 function LuaAST:toLua()
 	-- :serialize() impl provided by child classes
 	-- :serialize() should call traversal in-order of parsing (why I want to make it auto and assoc wth the parser and grammar and rule-generated ast node classes)
 	-- that means serialize() itself should never call serialize() but only call the apply() function passed into it (for modularity's sake)
 	-- it might mean i should capture all nodes too, even those that are fixed, like keywords and symbols, for the sake of reassmbling the syntax
-	return self:serialize(asttolua)
+	return self:toLua_recursive(asttolua)
+end
+-- why distinguish toLua(apply) and serialize(apply)?
+-- The need for this design pops up more in subclasses.
+-- serialize(apply) is used by all language-serializations
+-- toLua_recursive(apply) is for Lua-specific serialization (to-be-subclassed)
+-- toLua() is the external API
+function LuaAST:toLua_recursive(apply)
+	return self:serialize(apply)
 end
 
 -- lua is the default serialization ... but change this function to change that
