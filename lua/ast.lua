@@ -623,7 +623,6 @@ function _table:serialize(apply)
 					and arg.vars[1].value
 					or '[' .. apply(arg.vars[1]) .. ']'
 				)..'='..apply(arg.exprs[1])
-
 		end
 		return apply(arg)
 	end):concat(',')..'}'
