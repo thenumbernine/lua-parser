@@ -297,6 +297,22 @@ local function nodeclass(type, parent, args)
 end
 ast.nodeclass = nodeclass
 
+-- helper function
+local function isLuaName(s)
+	return s:match'^[_%a][_%w]*$'
+end
+function ast.keyIsName(key, parser)
+	return ast._string:isa(key)
+	-- if key is a string and has no funny chars
+	and isLuaName(key.value)
+	and (
+		-- ... and if we don't have a .parser assigned (as is the case of some dynamic ast manipulation ... *cough* vec-lua *cough* ...)
+		not parser
+		-- ... or if we do have a parser and this name isn't a keyword in the parser's tokenizer
+		or not parser.t.keywords[key.value]
+	)
+end
+
 -- generic global stmt collection
 local _block = nodeclass'block'
 function _block:init(...)
@@ -603,7 +619,10 @@ function _table:serialize(apply)
 			-- TODO if it's a string and name and not a keyword then use our shorthand
 			-- but for this , I should put the Lua keywords in somewhere that both the AST and Tokenizer can see them
 			-- and the Tokenizer builds separate lists depending on the version (so I guess a table per version?)
-			return '[' .. apply(arg.vars[1]) .. '] = '..apply(arg.exprs[1])
+			return (ast.keyIsName(arg.vars[1], self.parser)
+					and arg.vars[1].value
+					or '[' .. apply(arg.vars[1]) .. ']'
+				)..'='..apply(arg.exprs[1])
 
 		end
 		return apply(arg)
@@ -640,10 +659,6 @@ function _par:serialize(apply)
 	return '('..apply(self.expr)..')'
 end
 
-local function isLuaName(s)
-	return s:match'^[_%a][_%w]*$'
-end
-
 local _index = nodeclass'index'
 function _index:init(expr,key)
 	self.expr = expr
@@ -657,16 +672,7 @@ function _index:init(expr,key)
 	self.key = key
 end
 function _index:serialize(apply)
-	if ast._string:isa(self.key)
-	-- if self.key is a string and has no funny chars
-	and isLuaName(self.key.value)
-	and (
-		-- ... and if we don't have a .parser assigned (as is the case of some dynamic ast manipulation ... *cough* vec-lua *cough* ...)
-		not self.parser
-		-- ... or if we do have a parser and this name isn't a keyword in the parser's tokenizer
-		or not self.parser.t.keywords[self.key.value]
-	)
-	then
+	if ast.keyIsName(self.key, self.parser) then
 		-- the use a .$key instead of [$key]
 		return apply(self.expr)..'.'..self.key.value
 	end
