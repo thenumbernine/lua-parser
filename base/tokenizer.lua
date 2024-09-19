@@ -54,7 +54,7 @@ local start = r.index - #r.lasttoken
 				r:seekpast'$'
 			end
 		end
-		local commentstr = r.data:sub(start, r.index-1)
+		--local commentstr = r.data:sub(start, r.index-1)
 		-- TODO how to insert comments into the AST?  should they be their own nodes?
 		-- should all whitespace be its own node, so the original code text can be reconstructed exactly?
 		--coroutine.yield(commentstr, 'comment')
@@ -252,28 +252,16 @@ function Tokenizer:consume()
 end
 
 function Tokenizer:getpos()
-	local sofar = self.r.data:sub(1,self.r.index)
-	local lastline = sofar:match('[^\n]*$') or ''
-	return 'line '..select(2,sofar:gsub('\n', ''))
-		..' col '..#lastline
-		..' code "'..lastline..'"'
+	return 'line '..self.r.line
+		..' col '..self.r.col
+		..' code "'..self.r.data:sub(self.r.index):match'^[^\n]*'..'"'
 end
 
 -- return the span across
 function Tokenizer:getloc()
 	local r = self.r
-	--[[
-	--local index = r.index
-	local index = self.prev2index
-	local sofar = r.data:sub(1, index)
-	local lastline = sofar:match('[^\n]*$') or ''
-	local line = select(2,sofar:gsub('\n', ''))
-	local col = #lastline
-	--]]
-	-- [[
 	local line = self.r.line
 	local col = self.r.col
-	--]]
 
 	return {
 		line = line,

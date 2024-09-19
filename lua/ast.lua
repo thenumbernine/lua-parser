@@ -279,14 +279,36 @@ ast.flatten = LuaAST.flatten
 -- TODO something more flexible than this
 ast.spaceseparator = '\n'
 
+--[[ Old and more efficient
+local concat = table.concat
+--]]
+-- [[ Langfix hack here
+-- ... that will eventually come down to parser, because it gives me more control over the serialization
+-- Default table.concat will only convert numbers to strings and nothing else ...
+-- You can disable the new path in langfix/ast.lua around line 33, and then switch this to the origianl table.concat, and all should work like it used to
+local function onlynumtostr(x)
+	if type(x) == 'number' then return tostring(x) end
+	return x
+end
+local function concat(t, sep)
+	if #t == 0 then return '' end
+	sep = onlynumtostr(sep)
+	local s = onlynumtostr(t[1])
+	for i=2,#t do
+		if sep then s = s .. sep end
+		s = s .. onlynumtostr(t[i])
+	end
+	return s
+end
+--]]
+
 local function spacesep(stmts, apply)
-	return table.mapi(stmts, apply):concat(ast.spaceseparator)
+	return concat(table.mapi(stmts, apply), ast.spaceseparator)
 end
 
 local function commasep(exprs, apply)
-	return table.mapi(exprs, apply):concat','
+	return concat(table.mapi(exprs, apply), ',')
 end
-
 
 local function nodeclass(type, parent, args)
 	parent = parent or LuaAST
@@ -499,7 +521,7 @@ function _function:serialize(apply)
 	local s = 'function '
 	if self.name then s = s .. apply(self.name) end
 	s = s .. '('
-		.. table.mapi(self.args, apply):concat','
+		.. concat(table.mapi(self.args, apply), ',')
 		.. ') ' .. spacesep(self, apply) .. ' end'
 	return s
 end
@@ -611,7 +633,7 @@ function _table:init(...)
 	end
 end
 function _table:serialize(apply)
-	return '{'..table.mapi(self, function(arg)
+	return '{'..concat(table.mapi(self, function(arg)
 		-- if it's an assign then wrap the vars[1] with []'s
 		if ast._assign:isa(arg) then
 			assert(#arg.vars == 1)
@@ -625,7 +647,7 @@ function _table:serialize(apply)
 				)..'='..apply(arg.exprs[1])
 		end
 		return apply(arg)
-	end):concat(',')..'}'
+	end), ',')..'}'
 end
 
 -- OK here is the classic example of the benefits of fields over integers:
@@ -701,7 +723,7 @@ function _op:init(...)
 	end
 end
 function _op:serialize(apply)
-	return table.mapi(self, apply):concat(' '..self.op..' ') -- spaces required for 'and' and 'or'
+	return concat(table.mapi(self, apply), ' '..self.op..' ') -- spaces required for 'and' and 'or'
 end
 
 for _,info in ipairs{

@@ -46,14 +46,22 @@ function DataReader:done()
 	return self.index > #self.data
 end
 
-function DataReader:updatelinecol(skipped)
-	local newlines = #skipped:gsub('[^\n]','')
-	if newlines > 0 then
-		self.line = self.line + newlines
-		self.col = #skipped:match('[^\n]*$') + 1
+local slashNByte = ('\n'):byte()
+function DataReader:updatelinecol()
+	if not self.lastUpdateLineColIndex then
+		self.lastUpdateLineColIndex = 1
 	else
-		self.col = self.col + #skipped
+		assert(self.index >= self.lastUpdateLineColIndex)
 	end
+	for i=self.lastUpdateLineColIndex,self.index do
+		if self.data:byte(i,i) == slashNByte then
+			self.col = 1
+			self.line = self.line + 1
+		else
+			self.col = self.col + 1
+		end
+	end
+	self.lastUpdateLineColIndex = self.index+1
 end
 
 function DataReader:setlasttoken(lasttoken, skipped)
@@ -77,7 +85,7 @@ function DataReader:seekpast(pattern)
 	if not from then return end
 	local skipped = self.data:sub(self.index, from - 1)
 	self.index = to + 1
-	self:updatelinecol(skipped)
+	self:updatelinecol()
 	return self:setlasttoken(self.data:sub(from, to), skipped)
 end
 

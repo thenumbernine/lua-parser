@@ -8,7 +8,7 @@ local code = [[local result = aa and bb]]
 -- [[
 local code = path'../lua/parser.lua':read()
 --]]
-local parser =LuaParser(code, nil, code)
+local parser = LuaParser(code, nil, code)
 
 local tree = parser.tree
 local datareader = parser.t.r
@@ -27,11 +27,13 @@ local function printspan(x, tab)
 		print(tab..'token substr:', fromTokenSpan)
 		print(tab..'type:', x.type)
 
+		--[[
 		local reconstructedCode = load(reconstructed):dump()
 		local fromIndexSpanCode = load(fromIndexSpan):dump()
 		local fromTokenSpanCode = load(fromTokenSpan):dump()
 		asserteq(reconstructedCode:hexdump(), fromIndexSpanCode:hexdump())
 		asserteq(reconstructedCode:hexdump(), fromTokenSpanCode:hexdump())
+		--]]
 		--[[
 		local function reduceString(s)
 			-- remove comments too, those will be in tokenSpan text
@@ -57,13 +59,17 @@ local function printspan(x, tab)
 	end
 	for k,v in pairs(x) do
 		if k == 'span' then
-			print(tab..k..' = '..tostring(v.from.index)..'..'..tostring(v.to.index))
-		elseif k ~= 'parent' then
+			print(tab..k..' = index range '..tostring(v.from.index)..'..'..tostring(v.to.index)
+				..', line/col range '..v.from.line..'/'..v.from.col..'..'..v.to.line..'/'..v.to.col)
+		elseif k ~= 'parent'
+		and k ~= 'span'
+		and k ~= 'parser'
+		then
 			if type(v) == 'table' then
 				print(tab..k)
 				printspan(v, tab..'  ')
 			else
-				print(tab..k..' = '..tolua(v))
+				print(tab..k..' = '..tostring(v))--tolua(v))
 			end
 		end
 	end
