@@ -34,10 +34,10 @@ and honestly if we do save all tokens, that's an easy case for in-order traversa
 --]]
 
 local function asttolua(x)
-	if not x.toLua then
+	if not x.toLua_recursive then
 		error('asttolua called on non-ast object '..require 'ext.tolua'(x))
 	end
-	return x:toLua()
+	return x:toLua_recursive(asttolua)
 end
 
 -- TODO subsequent toLua() impls have (apply) as an arg, and this is modular for expanding off toLua impls
@@ -60,6 +60,7 @@ function LuaAST:toLua_recursive(apply)
 end
 
 -- lua is the default serialization ... but change this function to change that
+-- meant for external use
 function LuaAST:__tostring()
 	return self:toLua()
 end
@@ -87,7 +88,6 @@ local fields = {
 	{'name', 'field'},
 	{'index', 'field'},
 	{'value', 'field'},
-	{'span', 'field'},
 	{'cond', 'one'},
 	{'var', 'one'},
 	{'min', 'one'},
@@ -279,10 +279,7 @@ ast.flatten = LuaAST.flatten
 -- TODO something more flexible than this
 ast.spaceseparator = '\n'
 
---[[ Old and more efficient
-local concat = table.concat
---]]
--- [[ Langfix hack here
+--[[ Langfix hack here
 -- ... that will eventually come down to parser, because it gives me more control over the serialization
 -- Default table.concat will only convert numbers to strings and nothing else ...
 -- You can disable the new path in langfix/ast.lua around line 33, and then switch this to the origianl table.concat, and all should work like it used to
@@ -300,6 +297,9 @@ local function concat(t, sep)
 	end
 	return s
 end
+--]]
+-- [[ ... else, old and more efficient
+local concat = table.concat
 --]]
 
 local function spacesep(stmts, apply)
