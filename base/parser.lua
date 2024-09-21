@@ -31,7 +31,9 @@ function Parser:setData(data)
 	self.ast.refreshparents(self.tree)
 
 	if self.t.token then
-		error("unexpected "..self.t.token)
+		error("unexpected "..self.t.token..'\n'
+			..self.t:getpos()
+		)
 	end
 end
 
