@@ -163,7 +163,7 @@ function LuaParser:parse_stat()
 		-- ...and add elseifs and else to this
 		local efrom = self:getloc()
 		while self:canbe('elseif', 'keyword') do
-			local cond = assert(self:parse_exp())
+			local cond = assert(self:parse_exp(), 'unexpected symbol')
 			self:mustbe('then', 'keyword')
 			stmts:insert(
 				self:node('_elseif', cond, table.unpack(assert(self:parse_block())))
@@ -183,10 +183,13 @@ function LuaParser:parse_stat()
 	elseif self:canbe('repeat', 'keyword') then
 		local block = assert(self:parse_block'repeat')
 		self:mustbe('until', 'keyword')
-		return self:node('_repeat', assert(self:parse_exp()), table.unpack(block))
-			:setspan{from = from, to = self:getloc()}
+		return self:node(
+			'_repeat',
+			assert(self:parse_exp(), 'unexpected symbol'),
+			table.unpack(block)
+		):setspan{from = from, to = self:getloc()}
 	elseif self:canbe('while', 'keyword') then
-		local cond = assert(self:parse_exp())
+		local cond = assert(self:parse_exp(), 'unexpected symbol')
 		self:mustbe('do', 'keyword')
 		local block = assert(self:parse_block'while')
 		self:mustbe('end', 'keyword')
@@ -358,7 +361,7 @@ function LuaParser:parse_explist()
 	if not exp then return end
 	local exps = table{exp}
 	while self:canbe(',', 'symbol') do
-		exps:insert(assert(self:parse_exp()))
+		exps:insert((assert(self:parse_exp(), 'unexpected symbol')))
 	end
 	return exps
 end
@@ -613,7 +616,7 @@ function LuaParser:parse_prefixexp()
 	local from = self:getloc()
 
 	if self:canbe('(', 'symbol') then
-		local exp = assert(self:parse_exp())
+		local exp = assert(self:parse_exp(), 'unexpected symbol')
 		self:mustbe(')', 'symbol')
 		prefixexp = self:node('_par', exp)
 			:setspan{from = from, to = self:getloc()}
@@ -626,7 +629,7 @@ function LuaParser:parse_prefixexp()
 
 	while true do
 		if self:canbe('[', 'symbol') then
-			prefixexp = self:node('_index', prefixexp, assert(self:parse_exp()))
+			prefixexp = self:node('_index', prefixexp, (assert(self:parse_exp(), 'unexpected symbol')))
 			self:mustbe(']', 'symbol')
 			prefixexp:setspan{from = from, to = self:getloc()}
 		elseif self:canbe('.', 'symbol') then
@@ -764,7 +767,7 @@ end
 function LuaParser:parse_field()
 	local from = self:getloc()
 	if self:canbe('[', 'symbol') then
-		local keyexp = assert(self:parse_exp())
+		local keyexp = assert(self:parse_exp(), 'unexpected symbol')
 		self:mustbe(']', 'symbol')
 		self:mustbe('=', 'symbol')
 		local valexp = self:parse_exp()
@@ -783,7 +786,7 @@ function LuaParser:parse_field()
 			{
 				self:node('_string', exp.name):setspan(exp.span)
 			}, {
-				assert(self:parse_exp())
+				(assert(self:parse_exp(), 'unexpected symbol'))
 			}
 		):setspan{from = from, to = self:getloc()}
 	else
