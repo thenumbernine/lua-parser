@@ -397,6 +397,22 @@ function LuaParser:parse_exp_and()
 	return a
 end
 
+function LuaParser:isKeySymbol(t)
+	for k, v in pairs(t) do
+		if self:canbe(k, 'symbol') then
+			return v
+		end
+	end
+end
+
+LuaParser.exp_cmp_classNameForSymbol = {
+	['<'] = '_lt',
+	['>'] = '_gt',
+	['<='] = '_le',
+	['>='] = '_ge',
+	['~='] = '_ne',
+	['=='] = '_eq',
+}
 function LuaParser:parse_exp_cmp()
 	local a
 	if self.version >= '5.3' then
@@ -405,22 +421,8 @@ function LuaParser:parse_exp_cmp()
 		a = self:parse_exp_concat()
 	end
 	if not a then return end
-	if self:canbe('<', 'symbol')
-	or self:canbe('>', 'symbol')
-	or self:canbe('<=', 'symbol')
-	or self:canbe('>=', 'symbol')
-	or self:canbe('~=', 'symbol')
-	or self:canbe('==', 'symbol')
-	then
-		local classNameForSymbol = {
-			['<'] = '_lt',
-			['>'] = '_gt',
-			['<='] = '_le',
-			['>='] = '_ge',
-			['~='] = '_ne',
-			['=='] = '_eq',
-		}
-		local className = assertindex(classNameForSymbol, self.lasttoken)
+	local className = self:isKeySymbol(self.exp_cmp_classNameForSymbol)
+	if className then
 		a = self:node(className, a, assert(self:parse_exp_cmp()))
 			:setspan{from = a.span.from, to = self:getloc()}
 	end
@@ -458,17 +460,15 @@ function LuaParser:parse_exp_band()
 	return a
 end
 
+LuaParser.exp_shift_classNameForSymbol = {
+	['<<'] = '_shl',
+	['>>'] = '_shr',
+}
 function LuaParser:parse_exp_shift()
 	local a = self:parse_exp_concat()
 	if not a then return end
-	if self:canbe('<<', 'symbol')
-	or self:canbe('>>', 'symbol')
-	then
-		local classNameForSymbol = {
-			['<<'] = '_shl',
-			['>>'] = '_shr',
-		}
-		local className = assertindex(classNameForSymbol, self.lasttoken)
+	local className = self:isKeySymbol(self.exp_shift_classNameForSymbol)
+	if className then
 		local b = assert(self:parse_exp_shift())
 		a = self:node(className, a, b)
 			:setspan{from = a.span.from, to = self:getloc()}
@@ -487,17 +487,15 @@ function LuaParser:parse_exp_concat()
 	return a
 end
 
+LuaParser.exp_addsub_classNameForSymbol = {
+	['+'] = '_add',
+	['-'] = '_sub',
+}
 function LuaParser:parse_exp_addsub()
 	local a = self:parse_exp_muldivmod()
 	if not a then return end
-	if self:canbe('+', 'symbol')
-	or self:canbe('-', 'symbol')
-	then
-		local classNameForSymbol = {
-			['+'] = '_add',
-			['-'] = '_sub',
-		}
-		local className = assertindex(classNameForSymbol, self.lasttoken)
+	local className = self:isKeySymbol(self.exp_addsub_classNameForSymbol)
+	if className then
 		local b = assert(self:parse_exp_addsub())
 		a = self:node(className, a, b)
 			:setspan{from = a.span.from, to = self:getloc()}
@@ -505,22 +503,18 @@ function LuaParser:parse_exp_addsub()
 	return a
 end
 
+LuaParser.exp_muldivmod_classNameForSymbol = {
+	['*'] = '_mul',
+	['/'] = '_div',
+	['%'] = '_mod',
+	['//'] = '_idiv',
+}
 function LuaParser:parse_exp_muldivmod()
 	local a = self:parse_exp_unary()
 	if not a then return end
 	-- if version < 5.3 then the // symbol won't be added to the tokenizer anyways...
-	if self:canbe('*', 'symbol')
-	or self:canbe('/', 'symbol')
-	or self:canbe('%', 'symbol')
-	or self:canbe('//', 'symbol')
-	then
-		local classNameForSymbol = {
-			['*'] = '_mul',
-			['/'] = '_div',
-			['%'] = '_mod',
-			['//'] = '_idiv',
-		}
-		local className = assertindex(classNameForSymbol, self.lasttoken)
+	local className = self:isKeySymbol(self.exp_muldivmod_classNameForSymbol)
+	if className then
 		a = self:node(className, a, assert(self:parse_exp_muldivmod()))
 			:setspan{from = a.span.from, to = self:getloc()}
 	end
