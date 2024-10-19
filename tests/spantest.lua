@@ -31,8 +31,8 @@ local function printspan(x, tab)
 		local reconstructedCode = load(reconstructed):dump()
 		local fromIndexSpanCode = load(fromIndexSpan):dump()
 		local fromTokenSpanCode = load(fromTokenSpan):dump()
-		asserteq(reconstructedCode:hexdump(), fromIndexSpanCode:hexdump())
-		asserteq(reconstructedCode:hexdump(), fromTokenSpanCode:hexdump())
+		assert.eq(reconstructedCode:hexdump(), fromIndexSpanCode:hexdump())
+		assert.eq(reconstructedCode:hexdump(), fromTokenSpanCode:hexdump())
 		--]]
 		--[[
 		local function reduceString(s)
@@ -53,8 +53,8 @@ local function printspan(x, tab)
 		reconstructed = reduceString(reconstructed)
 		fromIndexSpan = reduceString(fromIndexSpan)
 		fromTokenSpan = reduceString(fromTokenSpan)
-		asserteq(reconstructed, fromIndexSpan)
-		asserteq(reconstructed, fromTokenSpan)
+		assert.eq(reconstructed, fromIndexSpan)
+		assert.eq(reconstructed, fromTokenSpan)
 		--]]
 	end
 	for k,v in pairs(x) do
