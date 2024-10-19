@@ -1,9 +1,5 @@
 local table = require 'ext.table'
-local asserteq = require 'ext.assert'.eq
-local assertne = require 'ext.assert'.ne
-local assertge = require 'ext.assert'.ge
-local assertle = require 'ext.assert'.le
-local assertindex = require 'ext.assert'.index
+local assert = require 'ext.assert'
 local Parser = require 'parser.base.parser'
 
 local ast = require 'parser.lua.ast'
@@ -96,7 +92,7 @@ end
 function LuaParser:parse_block(blockName)
 	if blockName then self.blockStack:insert(blockName) end
 	local chunk = self:parse_chunk()
-	if blockName then asserteq(self.blockStack:remove(), blockName) end
+	if blockName then assert.eq(self.blockStack:remove(), blockName) end
 	return chunk
 end
 
@@ -136,10 +132,10 @@ function LuaParser:parse_stat()
 	elseif self:canbe('for', 'keyword') then
 		local namelist = assert(self:parse_namelist())
 		if self:canbe('=', 'symbol') then
-			asserteq(#namelist, 1)
+			assert.eq(#namelist, 1)
 			local explist = assert(self:parse_explist())
-			assertge(#explist, 2)
-			assertle(#explist, 3)
+			assert.ge(#explist, 2)
+			assert.le(#explist, 3)
 			self:mustbe('do', 'keyword')
 			local block = assert(self:parse_block'for =')
 			self:mustbe('end', 'keyword')
@@ -241,7 +237,7 @@ function LuaParser:parse_stat()
 			local vars = table{prefixexp}
 			while self:canbe(',', 'symbol') do
 				local var = assert(self:parse_prefixexp())
-				assertne(var.type, 'call', "syntax error")
+				assert.ne(var.type, 'call', "syntax error")
 				vars:insert(var)
 			end
 			return self:parse_assign(vars, from)
@@ -566,7 +562,7 @@ function LuaParser:parse_subexp()
 
 	local from = self:getloc()
 	if self:canbe('...', 'symbol') then
-		asserteq(self.functionStack:last(), 'function-vararg')
+		assert.eq(self.functionStack:last(), 'function-vararg')
 		return self:node('_vararg')
 			:setspan{from = from, to = self:getloc()}
 	end
@@ -700,7 +696,7 @@ function LuaParser:parse_funcbody()
 	self:mustbe(')', 'symbol')
 	self.functionStack:insert(functionType)
 	local block = self:parse_block(functionType)
-	asserteq(self.functionStack:remove(), functionType)
+	assert.eq(self.functionStack:remove(), functionType)
 	self:mustbe('end', 'keyword')
 	return table{args, table.unpack(block)}
 end

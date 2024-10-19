@@ -14,7 +14,7 @@ Parser gets tokens as input, turns them into AST nodes
 --]]
 local table = require 'ext.table'
 local class = require 'ext.class'
-local asserteq = require 'ext.assert'.eq
+local assert = require 'ext.assert'
 
 local DataReader = class()
 
@@ -74,7 +74,7 @@ function DataReader:setlasttoken(lasttoken, skipped)
 --DEBUG(parser.base.datareader): print('TOKEN', require 'ext.tolua'(self.lasttoken))
 		self.tokenhistory:insert(self.lasttoken)
 --DEBUG(parser.base.datareader paranoid): local sofar = self.tokenhistory:concat()
---DEBUG(parser.base.datareader paranoid): asserteq(self.data:sub(1,#sofar), sofar, "source vs tokenhistory")
+--DEBUG(parser.base.datareader paranoid): assert.eq(self.data:sub(1,#sofar), sofar, "source vs tokenhistory")
 	end
 	return self.lasttoken
 end

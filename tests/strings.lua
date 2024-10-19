@@ -1,12 +1,12 @@
 #!/usr/bin/env luajit
-local asserteq = require 'ext.assert'.eq
+local assert = require 'ext.assert'
 local Parser = require 'parser'
 
 local function test(codein, eq)
 	local codeout = ''..Parser.parse(codein)
 	print(codein, codeout)
 	local s = assert(load(codeout))()	-- evaluate it ...
-	asserteq(s, eq)							-- assert it's correct
+	assert.eq(s, eq)							-- assert it's correct
 end
 
 -- parse dec escape code, since 5.1

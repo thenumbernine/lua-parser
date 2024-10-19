@@ -1,5 +1,5 @@
 local table = require 'ext.table'
-local assertle = require 'ext.assert'.le
+local assert = require 'ext.assert'
 local Tokenizer = require 'parser.base.tokenizer'
 
 local LuaTokenizer = Tokenizer:subclass()
@@ -53,7 +53,7 @@ function LuaTokenizer:parseHexNumber(...)
 		-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
 		local token = r:canbe'[%.%da-fA-F]+'
 		local numdots = #token:gsub('[^%.]','')
-		assertle(numdots, 1, 'malformed number')
+		assert.le(numdots, 1, 'malformed number')
 		local n = table{'0x', token}
 		if r:canbe'p' then
 			n:insert(r.lasttoken)
@@ -86,7 +86,7 @@ function LuaTokenizer:parseDecNumber()
 	local r = self.r
 	local token = r:canbe'[%.%d]+'
 	local numdots = #token:gsub('[^%.]','')
-	assertle(numdots, 1, 'malformed number')
+	assert.le(numdots, 1, 'malformed number')
 	local n = table{token}
 	if r:canbe'e' then
 		n:insert(r.lasttoken)

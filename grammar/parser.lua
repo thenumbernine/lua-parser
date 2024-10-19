@@ -29,10 +29,7 @@ Grammar implementation:
 local path = require 'ext.path'
 local table = require 'ext.table'
 local class = require 'ext.class'
-local asserteq = require 'ext.assert'.eq
-local assertlen = require 'ext.assert'.len
-local asserttype = require 'ext.assert'.type
-local assertindex = require 'ext.assert'.index
+local assert = require 'ext.assert'
 local tolua = require 'ext.tolua'
 local template = require 'template'
 local GrammarTokenizer = require 'parser.grammar.tokenizer'
@@ -121,7 +118,7 @@ end
 local _optional = nodeclass'optional'
 -- optional is only different in that, after the optional code, we don't need any assert()'s / mustbe()'s
 function _optional:getcode(parser)
-	assertlen(self, 1)
+	assert.len(self, 1)
 	return self[1]:getcode(parser)
 end
 
@@ -188,16 +185,16 @@ end
 
 local _name = nodeclass'name'
 function _name:getcode(parser)
-	assertlen(self, 1)
-	local name = asserttype(self[1], 'string')
-	assertindex(parser.ruleForName, name)
+	assert.len(self, 1)
+	local name = assert.type(self[1], 'string')
+	assert.index(parser.ruleForName, name)
 	return 'result:insert(self:parse_'..name..'())'
 end
 
 local _string = nodeclass'string'
 function _string:getcode(parser, canbe)
-	assertlen(self, 1)
-	local s = asserttype(self[1], 'string')
+	assert.len(self, 1)
+	local s = assert.type(self[1], 'string')
 	-- keyword / symbol
 	-- TODO this should be 'mustbe' unless its parent is 'optional' or 'multiple' ...
 	-- or maybe don't make that change here, but make it in the parent node that generates this code ...
@@ -259,7 +256,7 @@ function GrammarParser:setData(data, source, ...)
 	self.ruleForName.LiteralString = true
 	self.ruleForName.Numeral = true
 	for _,rule in ipairs(self.tree) do
-		assertlen(rule, 2)
+		assert.len(rule, 2)
 		self.ruleForName[rule:name()] = rule
 	end
 
@@ -268,17 +265,17 @@ function GrammarParser:setData(data, source, ...)
 	self.langSymbols = {}
 	local function process(node)
 		if ast._name:isa(node) then
-			assertlen(node, 1)
+			assert.len(node, 1)
 			-- names in the grammar should always point to either other rules, or to builtin axiomatic rules (Name, Numeric, LiteralString)
-			local name = asserttype(node:value(), 'string')
+			local name = assert.type(node:value(), 'string')
 			local rule = self.ruleForName[name]
 			if not rule then
 				error("rule referenced but not defined: "..tolua(name))
 			end
 			-- TODO replace the element in the table with the AST? that'd remove the DAG property of the AST.  no more pretty `tolua()` output.
 		elseif ast._string:isa(node) then
-			assertlen(node, 1)
-			local s = asserttype(node:value(), 'string')
+			assert.len(node, 1)
+			local s = assert.type(node:value(), 'string')
 
 			-- keywords vs symbols are parsed separately
 			-- keywords must be space-separated, and for now are only letters -- no symbol characters used (allowed?)
@@ -403,12 +400,12 @@ end
 	local function addEdge(prevTokenPair, nextTokenPair)
 		local prevTokenType, prevToken = table.unpack(prevTokenPair)
 		assert(type(prevToken) == 'string' or type(prevToken) == 'nil')
-		assertindex(validTokenTypes, prevTokenType)
+		assert.index(validTokenTypes, prevTokenType)
 		local prevstr = tokenAndTypeToStr{prevTokenType, prevToken}
 		
 		local nextTokenType, nextToken = table.unpack(nextTokenPair)
 		assert(type(nextToken) == 'string' or type(nextToken) == 'nil')
-		assertindex(validTokenTypes, nextTokenType)
+		assert.index(validTokenTypes, nextTokenType)
 		local nextstr = tokenAndTypeToStr{nextTokenType, nextToken}
 		
 		-- do the real edge-add
@@ -421,7 +418,7 @@ print('in', currentRule, 'adding '..prevstr..' -> '..nextstr)
 	addExpr = function(prevTokenPair, node)
 		local prevTokenType, prevToken = table.unpack(prevTokenPair)
 		assert(type(prevToken) == 'string' or type(prevToken) == 'nil')
-		assertindex(validTokenTypes, prevTokenType)
+		assert.index(validTokenTypes, prevTokenType)
 		assert(ast._node:isa(node))
 --DEBUG: print('adding', node.type)		
 		if ast._rule:isa(node) then
@@ -447,10 +444,10 @@ print('in', currentRule, 'adding '..prevstr..' -> '..nextstr)
 			return addList(prevTokenPair, node, 1)
 		elseif ast._name:isa(node) then
 			local ruleName = node:value()
-			local nextRule = assertindex(self.ruleForName, ruleName)
+			local nextRule = assert.index(self.ruleForName, ruleName)
 			if nextRule == true then
 				-- if the next rule is a builtin rule ... ?
-				local nextTokenType = assertindex({
+				local nextTokenType = assert.index({
 					Name = 'name',
 					Numeral = 'number',
 					LiteralString = 'string',
@@ -473,7 +470,7 @@ print('in', currentRule, 'adding '..prevstr..' -> '..nextstr)
 
 	local rulesProcessed = {}
 	addRule = function(prevTokenPair, rule)
-		asserttype(rule, 'table')
+		assert.type(rule, 'table')
 		assert(ast._rule:isa(rule))
 		currentRule = rule:name()
 		rulesProcessed[rule:name()] = rulesProcessed[rule:name()] or {}
@@ -482,7 +479,7 @@ print('in', currentRule, 'adding '..prevstr..' -> '..nextstr)
 		if not nextTokenPairs then
 --DEBUG: print('adding rule', rule:name(), prevstr)
 			nextTokenPairs = addExpr(prevTokenPair, rule:expr())
-asserttype(nextTokenPairs, 'table')
+assert.type(nextTokenPairs, 'table')
 			rulesProcessed[rule:name()][prevstr] = nextTokenPairs
 		end
 		return nextTokenPairs
