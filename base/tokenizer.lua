@@ -244,8 +244,13 @@ function Tokenizer:consume()
 	local status, nexttoken, nexttokentype = coroutine.resume(self.gettokenthread)
 	-- detect errors
 	if not status then
-		error(nexttoken..'\n'
-			..debug.traceback(self.gettokenthread))
+		error('\n'
+			.."token="..tostring(self.token)..'\n'
+			.."tokentype="..tostring(self.tokentype)..'\n'
+			..self:getpos()
+			.."tokenizer failed with error: "..tostring(nexttoken)..'\n'
+			..debug.traceback(self.gettokenthread)
+		)
 	end
 	self.nexttoken = nexttoken
 	self.nexttokentype = nexttokentype
