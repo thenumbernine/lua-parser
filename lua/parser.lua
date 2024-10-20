@@ -369,36 +369,105 @@ exp ::= [unop] subexp {binop [unop] subexp}
 subexp ::= nil | false | true | Numeral | LiteralString | `...` | function | prefixexp | tableconstructor
 --]]
 
+--[[ what to name this ...
+LuaParser.parseExprPrecedenceRulesAndClassNames = table{
+	{
+		['or'] = '_or',
+	},
+	{
+		['and'] = '_and',
+	},
+	{
+		['<'] = '_lt',
+		['>'] = '_gt',
+		['<='] = '_le',
+		['>='] = '_ge',
+		['~='] = '_ne',
+		['=='] = '_eq',
+	},
+}:append(
+	self.version < '5.3' and nil or table{
+	{
+		['|'] = '_bor',
+	},
+	{
+		['~'] = '_bxor',
+	},
+	{
+		['&'] = '_band',
+	},
+	{
+		['<<'] = '_shl',
+		['>>'] = '_shr',
+	},
+}):append{
+	{
+		['..'] = '_concat',
+	},
+	{
+		['+'] = '_add',
+		['-'] = '_sub',
+	},
+	{
+		['*'] = '_mul',
+		['/'] = '_div',
+		['%'] = '_mod',
+		-- if version < 5.3 then the // symbol won't be added to the tokenizer anyways...
+		['//'] = '_idiv',
+	},
+	-- unary lhs
+	{
+		['not'] = '_not',
+		['#'] = '_len',
+		['-'] = '_unm',
+		['~'] = '_bnot',	-- only a 5.3 token
+	},
+	-- binary
+	{
+		['^'] = '_pow',
+	},
+}
+--]]
 function LuaParser:parse_exp()
 	return self:parse_exp_or()
 end
 
-function LuaParser:parse_exp_or()
-	local a = self:parse_exp_and()
-	if not a then return end
-	if self:canbe('or', 'keyword') then
-		a = self:node('_or', a,assert(self:parse_exp_or()))
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
-
-function LuaParser:parse_exp_and()
-	local a = self:parse_exp_cmp()
-	if not a then return end
-	if self:canbe('and', 'keyword') then
-		a = self:node('_and', a, assert(self:parse_exp_and()))
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
-
 function LuaParser:isKeySymbol(t)
 	for k, v in pairs(t) do
-		if self:canbe(k, 'symbol') then
+		-- TODO why even bother separate it in canbe() ?
+		local keywordOrSymbol = k:match'^[_a-zA-Z][_a-zA-Z0-9]*$' and 'keyword' or 'symbol'
+		if self:canbe(k, keywordOrSymbol) then
 			return v
 		end
 	end
+end
+
+LuaParser.exp_or_classNameForSymbol = {
+	['or'] = '_or',
+}
+function LuaParser:parse_exp_or()
+	local a = self:parse_exp_and()
+	if not a then return end
+	local className = self:isKeySymbol(self.exp_or_classNameForSymbol)
+	if className then
+		a = self:node(className, a,assert(self:parse_exp_or()))
+			:setspan{from = a.span.from, to = self:getloc()}
+	end
+	return a
+end
+
+LuaParser.exp_and_classNameForSymbol = {
+	['and'] = '_and',
+}
+function LuaParser:parse_exp_and()
+	local a = self:parse_exp_cmp()
+	if not a then return end
+	local className = self:isKeySymbol(self.exp_and_classNameForSymbol)
+	if className then
+		a = self:node(className, a, assert(self:parse_exp_and()))
+			:setspan{from = a.span.from, to = self:getloc()}
+	end
+	return a
 end
 
 LuaParser.exp_cmp_classNameForSymbol = {
@@ -426,31 +495,43 @@ function LuaParser:parse_exp_cmp()
 end
 -- BEGIN 5.3+ ONLY:
 
+LuaParser.exp_bor_classNameForSymbol = {
+	['|'] = '_bor',
+}
 function LuaParser:parse_exp_bor()
 	local a = self:parse_exp_bxor()
 	if not a then return end
-	if self:canbe('|', 'symbol') then
-		a = self:node('_bor', a, assert(self:parse_exp_bor()))
+	local className = self:isKeySymbol(self.exp_bor_classNameForSymbol)
+	if className then
+		a = self:node(className, a, assert(self:parse_exp_bor()))
 			:setspan{from = a.span.from, to = self:getloc()}
 	end
 	return a
 end
 
+LuaParser.exp_bxor_classNameForSymbol = {
+	['~'] = '_bxor',
+}
 function LuaParser:parse_exp_bxor()
 	local a = self:parse_exp_band()
 	if not a then return end
-	if self:canbe('~', 'symbol') then
-		a = self:node('_bxor', a, assert(self:parse_exp_bxor()))
+	local className = self:isKeySymbol(self.exp_bxor_classNameForSymbol)
+	if className then
+		a = self:node(className, a, assert(self:parse_exp_bxor()))
 			:setspan{from = a.span.from, to = self:getloc()}
 	end
 	return a
 end
 
+LuaParser.exp_band_classNameForSymbol = {
+	['&'] = '_band',
+}
 function LuaParser:parse_exp_band()
 	local a = self:parse_exp_shift()
 	if not a then return end
-	if self:canbe('&', 'symbol') then
-		a = self:node('_band', a, assert(self:parse_exp_band()))
+	local className = self:isKeySymbol(self.exp_band_classNameForSymbol)
+	if className then
+		a = self:node(className, a, assert(self:parse_exp_band()))
 			:setspan{from = a.span.from, to = self:getloc()}
 	end
 	return a
@@ -473,11 +554,15 @@ function LuaParser:parse_exp_shift()
 end
 -- END 5.3+ ONLY:
 
+LuaParser.exp_concat_classNameForSymbol = {
+	['..'] = '_concat',
+}
 function LuaParser:parse_exp_concat()
 	local a = self:parse_exp_addsub()
 	if not a then return end
-	if self:canbe('..', 'symbol') then
-		a = self:node('_concat', a, assert(self:parse_exp_concat()))
+	local className = self:isKeySymbol(self.exp_concat_classNameForSymbol)
+	if className then
+		a = self:node(className, a, assert(self:parse_exp_concat()))
 			:setspan{from = a.span.from, to = self:getloc()}
 	end
 	return a
@@ -517,34 +602,31 @@ function LuaParser:parse_exp_muldivmod()
 	return a
 end
 
+LuaParser.exp_not_len_unm_bnot_classNameForSymbol = {
+	['not'] = '_not',
+	['#'] = '_len',
+	['-'] = '_unm',
+	['~'] = '_bnot',	-- only a 5.3 token
+}
 function LuaParser:parse_exp_unary()
 	local from = self:getloc()
-	if self:canbe('not', 'keyword') then
-		return self:node('_not', assert(self:parse_exp_unary()))
+	local className = self:isKeySymbol(self.exp_not_len_unm_bnot_classNameForSymbol)
+	if className then
+		return self:node(className, assert(self:parse_exp_unary()))
 			:setspan{from = from, to = self:getloc()}
-	end
-	if self:canbe('#', 'symbol') then
-		return self:node('_len', assert(self:parse_exp_unary()))
-			:setspan{from = from, to = self:getloc()}
-	end
-	if self:canbe('-', 'symbol') then
-		return self:node('_unm', assert(self:parse_exp_unary()))
-			:setspan{from = from, to = self:getloc()}
-	end
-	if self.version >= '5.3' then
-		if self:canbe('~', 'symbol') then
-			return self:node('_bnot', assert(self:parse_exp_unary()))
-				:setspan{from = from, to = self:getloc()}
-		end
 	end
 	return self:parse_exp_pow()
 end
 
+LuaParser.exp_pow_classNameForSymbol = {
+	['^'] = '_pow',
+}
 function LuaParser:parse_exp_pow()
 	local a = self:parse_subexp()
 	if not a then return end
-	if self:canbe('^', 'symbol') then
-		a = self:node('_pow', a, assert(self:parse_exp_unary()))
+	local className = self:isKeySymbol(self.exp_pow_classNameForSymbol)
+	if className then
+		a = self:node(className, a, assert(self:parse_exp_unary()))
 			:setspan{from = a.span.from, to = self:getloc()}
 	end
 	return a

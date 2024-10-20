@@ -37,5 +37,7 @@ for line in io.lines'minify_tests.txt' do
 		return err..'\n'..debug.traceback()
 	end)
 	print(expected, parserResults, line)
-	if expected ~= parserResults then error("parser failed to recreate identical string.  error="..errorString) end
+	if expected ~= parserResults then
+		error("parser failed to recreate identical string.  error="..errorString)
+	end
 end
