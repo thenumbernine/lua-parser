@@ -93,7 +93,7 @@ function Tokenizer:parseQuoteString()
 			if r:done() then error("unfinished string") end
 			if r.lasttoken == '\\' then
 				local esc = r:canbe'.'
-				local escapeCodes = {a='\a', b='\b', f='\f', n='\n', r='\r', t='\t', v='\v', ['\\']='\\', ['"']='"', ["'"]="'", ['0']='\0'}
+				local escapeCodes = {a='\a', b='\b', f='\f', n='\n', r='\r', t='\t', v='\v', ['\\']='\\', ['"']='"', ["'"]="'", ['0']='\0', ['\r']='\n', ['\n']='\n'}
 				local escapeCode = escapeCodes[esc]
 				if escapeCode then
 					s:insert(escapeCode)
