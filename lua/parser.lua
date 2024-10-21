@@ -31,6 +31,103 @@ function LuaParser:init(data, version, source, useluajit)
 		useluajit = not not _G.jit
 	end
 	self.useluajit = not not useluajit
+
+	-- TODO between this and parser.grammar, make a table-based way to specify the rules
+	-- [[ what to name this ...
+	self.parseExprPrecedenceRulesAndClassNames = table{
+		{
+			name = 'or',
+			rules = {
+				{token='or', className='_or'},
+			},
+		},
+		{
+			name = 'and',
+			rules = {
+				{token='and', className='_and'},
+			},
+		},
+		{
+			name = 'cmp',
+			rules = {
+				{token='<', className='_lt'},
+				{token='>', className='_gt'},
+				{token='<=', className='_le'},
+				{token='>=', className='_ge'},
+				{token='~=', className='_ne'},
+				{token='==', className='_eq'},
+			},
+		},
+	}:append(
+		self.version < '5.3' and nil or table{
+		{
+			name = 'bor',
+			rules = {
+				{token='|', className='_bor'},
+			},
+		},
+		{
+			name = 'bxor',
+			rules = {
+				{token='~', className='_bxor'},
+			},
+		},
+		{
+			name = 'band',
+			rules = {
+				{token='&', className='_band'},
+			},
+		},
+		{
+			name = 'shift',
+			rules = {
+				{token='<<', className='_shl'},
+				{token='>>', className='_shr'},
+			},
+		},
+	}):append{
+		{
+			name = 'concat',
+			rules = {
+				{token='..', className='_concat'},
+			},
+		},
+		{
+			name = 'addsub',	-- arithmetic
+			rules = {
+				{token='+', className='_add'},
+				{token='-', className='_sub'},
+			},
+		},
+		{
+			name = 'muldivmod',	-- geometric
+			rules = {
+				{token='*', className='_mul'},
+				{token='/', className='_div'},
+				{token='%', className='_mod'},
+				-- if version < 5.3 then the // symbol won't be added to the tokenizer anyways...
+				{token='//', className='_idiv'},
+			},
+		},
+		{
+			name = 'unary',
+			unaryLHS = true,
+			rules = {
+				{token='not', className='_not'},
+				{token='#', className='_len'},
+				{token='-', className='_unm'},
+				{token='~', className='_bnot'},	-- only a 5.3 token
+			},
+		},
+		{
+			name = 'pow',
+			rules = {
+				{token='^', className='_pow', nextLevel='unary'},
+			},
+		},
+	}
+	--]]
+
 	if data then
 		self:setData(data, source)
 	end
@@ -369,267 +466,65 @@ exp ::= [unop] subexp {binop [unop] subexp}
 subexp ::= nil | false | true | Numeral | LiteralString | `...` | function | prefixexp | tableconstructor
 --]]
 
---[[ what to name this ...
-LuaParser.parseExprPrecedenceRulesAndClassNames = table{
-	{
-		['or'] = '_or',
-	},
-	{
-		['and'] = '_and',
-	},
-	{
-		['<'] = '_lt',
-		['>'] = '_gt',
-		['<='] = '_le',
-		['>='] = '_ge',
-		['~='] = '_ne',
-		['=='] = '_eq',
-	},
-}:append(
-	self.version < '5.3' and nil or table{
-	{
-		['|'] = '_bor',
-	},
-	{
-		['~'] = '_bxor',
-	},
-	{
-		['&'] = '_band',
-	},
-	{
-		['<<'] = '_shl',
-		['>>'] = '_shr',
-	},
-}):append{
-	{
-		['..'] = '_concat',
-	},
-	{
-		['+'] = '_add',
-		['-'] = '_sub',
-	},
-	{
-		['*'] = '_mul',
-		['/'] = '_div',
-		['%'] = '_mod',
-		-- if version < 5.3 then the // symbol won't be added to the tokenizer anyways...
-		['//'] = '_idiv',
-	},
-	-- unary lhs
-	{
-		['not'] = '_not',
-		['#'] = '_len',
-		['-'] = '_unm',
-		['~'] = '_bnot',	-- only a 5.3 token
-	},
-	-- binary
-	{
-		['^'] = '_pow',
-	},
-}
---]]
 function LuaParser:parse_exp()
-	return self:parse_exp_or()
+	return self:parse_expr_precedenceTable(1)
 end
 
-function LuaParser:isKeySymbol(t)
-	for k, v in pairs(t) do
+function LuaParser:getNextRule(rules)
+	for _, rule in pairs(rules) do
 		-- TODO why even bother separate it in canbe() ?
-		local keywordOrSymbol = k:match'^[_a-zA-Z][_a-zA-Z0-9]*$' and 'keyword' or 'symbol'
-		if self:canbe(k, keywordOrSymbol) then
-			return v
+		local keywordOrSymbol = rule.token:match'^[_a-zA-Z][_a-zA-Z0-9]*$' and 'keyword' or 'symbol'
+		if self:canbe(rule.token, keywordOrSymbol) then
+			return rule
 		end
 	end
 end
 
-LuaParser.exp_or_classNameForSymbol = {
-	['or'] = '_or',
-}
-function LuaParser:parse_exp_or()
-	local a = self:parse_exp_and()
-	if not a then return end
-	local className = self:isKeySymbol(self.exp_or_classNameForSymbol)
-	if className then
-		a = self:node(className, a,assert(self:parse_exp_or()))
-			:setspan{from = a.span.from, to = self:getloc()}
+function LuaParser:getClassNameForRule(rules)
+	local rule = self:getNextRule(rules)
+	if rule then
+		return rule.className
 	end
-	return a
 end
 
-LuaParser.exp_and_classNameForSymbol = {
-	['and'] = '_and',
-}
-function LuaParser:parse_exp_and()
-	local a = self:parse_exp_cmp()
-	if not a then return end
-	local className = self:isKeySymbol(self.exp_and_classNameForSymbol)
-	if className then
-		a = self:node(className, a, assert(self:parse_exp_and()))
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
-
-LuaParser.exp_cmp_classNameForSymbol = {
-	['<'] = '_lt',
-	['>'] = '_gt',
-	['<='] = '_le',
-	['>='] = '_ge',
-	['~='] = '_ne',
-	['=='] = '_eq',
-}
-function LuaParser:parse_exp_cmp()
-	local a
-	if self.version >= '5.3' then
-		a = self:parse_exp_bor()
+function LuaParser:parse_expr_precedenceTable(i)
+	local precedenceLevel = self.parseExprPrecedenceRulesAndClassNames[i]
+	if precedenceLevel.unaryLHS then
+		local from = self:getloc()
+		local rule = self:getNextRule(precedenceLevel.rules)
+		if rule then
+			local nextLevel = i
+			if rule.nextLevel then
+				nextLevel = self.parseExprPrecedenceRulesAndClassNames:find(nil, function(level)
+					return level.name == rule.nextLevel
+				end) or error("couldn't find precedence level named "..tostring(rule.nextLevel))
+			end
+			return self:node(rule.className, assert(self:parse_expr_precedenceTable(nextLevel)))
+				:setspan{from = from, to = self:getloc()}
+		end
+		return self:parse_expr_precedenceTable(i+1)
 	else
-		a = self:parse_exp_concat()
+		-- binary operation by default
+		local a
+		if i < #self.parseExprPrecedenceRulesAndClassNames then
+			a = self:parse_expr_precedenceTable(i+1)
+		else
+			a = self:parse_subexp()
+		end
+		if not a then return end
+		local rule = self:getNextRule(precedenceLevel.rules)
+		if rule then
+			local nextLevel = i
+			if rule.nextLevel then
+				nextLevel = self.parseExprPrecedenceRulesAndClassNames:find(nil, function(level)
+					return level.name == rule.nextLevel
+				end) or error("couldn't find precedence level named "..tostring(rule.nextLevel))
+			end
+			a = self:node(rule.className, a,assert(self:parse_expr_precedenceTable(nextLevel)))
+				:setspan{from = a.span.from, to = self:getloc()}
+		end
+		return a
 	end
-	if not a then return end
-	local className = self:isKeySymbol(self.exp_cmp_classNameForSymbol)
-	if className then
-		a = self:node(className, a, assert(self:parse_exp_cmp()))
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
--- BEGIN 5.3+ ONLY:
-
-LuaParser.exp_bor_classNameForSymbol = {
-	['|'] = '_bor',
-}
-function LuaParser:parse_exp_bor()
-	local a = self:parse_exp_bxor()
-	if not a then return end
-	local className = self:isKeySymbol(self.exp_bor_classNameForSymbol)
-	if className then
-		a = self:node(className, a, assert(self:parse_exp_bor()))
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
-
-LuaParser.exp_bxor_classNameForSymbol = {
-	['~'] = '_bxor',
-}
-function LuaParser:parse_exp_bxor()
-	local a = self:parse_exp_band()
-	if not a then return end
-	local className = self:isKeySymbol(self.exp_bxor_classNameForSymbol)
-	if className then
-		a = self:node(className, a, assert(self:parse_exp_bxor()))
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
-
-LuaParser.exp_band_classNameForSymbol = {
-	['&'] = '_band',
-}
-function LuaParser:parse_exp_band()
-	local a = self:parse_exp_shift()
-	if not a then return end
-	local className = self:isKeySymbol(self.exp_band_classNameForSymbol)
-	if className then
-		a = self:node(className, a, assert(self:parse_exp_band()))
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
-
-LuaParser.exp_shift_classNameForSymbol = {
-	['<<'] = '_shl',
-	['>>'] = '_shr',
-}
-function LuaParser:parse_exp_shift()
-	local a = self:parse_exp_concat()
-	if not a then return end
-	local className = self:isKeySymbol(self.exp_shift_classNameForSymbol)
-	if className then
-		local b = assert(self:parse_exp_shift())
-		a = self:node(className, a, b)
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
--- END 5.3+ ONLY:
-
-LuaParser.exp_concat_classNameForSymbol = {
-	['..'] = '_concat',
-}
-function LuaParser:parse_exp_concat()
-	local a = self:parse_exp_addsub()
-	if not a then return end
-	local className = self:isKeySymbol(self.exp_concat_classNameForSymbol)
-	if className then
-		a = self:node(className, a, assert(self:parse_exp_concat()))
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
-
-LuaParser.exp_addsub_classNameForSymbol = {
-	['+'] = '_add',
-	['-'] = '_sub',
-}
-function LuaParser:parse_exp_addsub()
-	local a = self:parse_exp_muldivmod()
-	if not a then return end
-	local className = self:isKeySymbol(self.exp_addsub_classNameForSymbol)
-	if className then
-		local b = assert(self:parse_exp_addsub())
-		a = self:node(className, a, b)
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
-
-LuaParser.exp_muldivmod_classNameForSymbol = {
-	['*'] = '_mul',
-	['/'] = '_div',
-	['%'] = '_mod',
-	['//'] = '_idiv',
-}
-function LuaParser:parse_exp_muldivmod()
-	local a = self:parse_exp_unary()
-	if not a then return end
-	-- if version < 5.3 then the // symbol won't be added to the tokenizer anyways...
-	local className = self:isKeySymbol(self.exp_muldivmod_classNameForSymbol)
-	if className then
-		a = self:node(className, a, assert(self:parse_exp_muldivmod()))
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
-end
-
-LuaParser.exp_not_len_unm_bnot_classNameForSymbol = {
-	['not'] = '_not',
-	['#'] = '_len',
-	['-'] = '_unm',
-	['~'] = '_bnot',	-- only a 5.3 token
-}
-function LuaParser:parse_exp_unary()
-	local from = self:getloc()
-	local className = self:isKeySymbol(self.exp_not_len_unm_bnot_classNameForSymbol)
-	if className then
-		return self:node(className, assert(self:parse_exp_unary()))
-			:setspan{from = from, to = self:getloc()}
-	end
-	return self:parse_exp_pow()
-end
-
-LuaParser.exp_pow_classNameForSymbol = {
-	['^'] = '_pow',
-}
-function LuaParser:parse_exp_pow()
-	local a = self:parse_subexp()
-	if not a then return end
-	local className = self:isKeySymbol(self.exp_pow_classNameForSymbol)
-	if className then
-		a = self:node(className, a, assert(self:parse_exp_unary()))
-			:setspan{from = a.span.from, to = self:getloc()}
-	end
-	return a
 end
 
 function LuaParser:parse_subexp()
