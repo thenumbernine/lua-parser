@@ -14,137 +14,125 @@
 
 block ::= {stat [';']} [laststat [';']] ;
 
-stat ::= 'local' 
+stat ::= 'local' 'function' Name funcbody
+	| 'local' namelist ['=' explist]
+	| 'function' funcname funcbody
+	| 'for' Name '=' exp ',' exp [',' exp] 'do' block 'end'
+	| 'for' namelist 'in' explist 'do' block 'end'
+	| 'if' exp 'then' block {'elseif' exp 'then' block} ['else' block] 'end'
 	| 'repeat' block 'until' exp
-	| 'do' block 'end'		-- TODO causes infinite recursion
+	| 'while' exp 'do' block 'end'
+	| 'do' block 'end'
+	| functioncall
+	| varlist '=' explist
 	;
 
---	stat ::= 'local' 'function' Name funcbody
---		| 'local' namelist ['=' explist]
---		| 'function' funcname funcbody
---		| 'for' Name '=' exp ',' exp [',' exp] 'do' block 'end'
---		| 'for' namelist 'in' explist 'do' block 'end'
---		| 'if' exp 'then' block {'elseif' exp 'then' block} ['else' block] 'end'
---		| 'repeat' block 'until' exp
---		| 'while' exp 'do' block 'end'
---		| 'do' block 'end'
---		| functioncall
---		| varlist '=' explist
---		;
---	
-
-laststat ::= 'return'
+laststat ::= 'return' [explist]
 	| 'break'
 	;
 
---	laststat ::= 'return' [explist]
---		| 'break'
---		;
---	
---	funcname ::= Name {'.' Name} [':' Name] ;
---	
---	varlist ::= var {',' var} ;
---	
---	var ::=  Name
---		| prefixexp '[' exp ']'
---		| prefixexp '.' Name
---		;
---	
---	namelist ::= Name {',' Name} ;
---	
---	explist ::= {exp ','} exp ;
+funcname ::= Name {'.' Name} [':' Name] ;
+
+varlist ::= var {',' var} ;
+
+var ::=  Name
+	| prefixexp '[' exp ']'
+	| prefixexp '.' Name
+	;
+
+namelist ::= Name {',' Name} ;
+
+explist ::= {exp ','} exp ;
 
 exp ::= 'nil'
+	| 'false'
+	| 'true'
+	| Numeral
+	| LiteralString
+	| '...'
+	| functiondef
+	| prefixexp
+	| tableconstructor
+	| exp binop exp
+	| unop exp
+	;
 
---	exp ::= 'nil'
---		| 'false'
---		| 'true'
---		| Numeral
---		| LiteralString
---		| '...'
---		| functiondef
---		| prefixexp
---		| tableconstructor
---		| exp binop exp
---		| unop exp
---		;
---	
---	prefixexp ::= var
---		| functioncall
---		| '(' exp ')'
---		;
---	
---	functioncall ::= prefixexp args
---		| prefixexp ':' Name args
---		;
---	
---	args ::= '(' [explist] ')'
---		| tableconstructor
---		| LiteralString
---		;
---	
---	functiondef ::= 'function' funcbody ;
---	
---	funcbody ::= '(' [parlist] ')' block 'end' ;
---	
---	parlist ::= namelist [',' '...']
---		| '...'
---		;
---	
---	tableconstructor ::= '{' [fieldlist] '}' ;
---	
---	fieldlist ::= field {fieldsep field} [fieldsep] ;
---	
---	field ::= '[' exp ']' '=' exp
---		| Name '=' exp
---		| exp
---		;
---	
---	fieldsep ::= ','
---		| ';'
---		;
---	
---	binop ::= add
---		| '-'
---		| '*'
---		| '/'
---		| '^'
---		| '%'
---		| '..'
---		| '<'
---		| '<='
---		| '>'
---		| '>='
---		| '=='
---		| '~='
---		| 'and'
---		| 'or'
---		;
---	
---	add ::= '+' ;
---	sub ::= '-' ;
---	mul ::= '*' ;
---	div ::= '/' ;
---	pow ::= '^' ;
---	mod ::= '%' ;
---	concat ::= '..' ;
---	lt ::= '<' ;
---	le ::= '<=' ;
---	gt ::= '>' ;
---	ge ::= '>=' ;
---	eq ::= '==' ;
---	ne ::= '~=' ;
---	and ::= 'and' ;
---	or ::= 'or' ;
---	
---	unop ::= unm
---		| not
---		| len
---		;
---	
---	unm ::= '-' ;
---	not ::= 'not' ;
---	len ::= '#' ;
+prefixexp ::= var
+	| functioncall
+	| '(' exp ')'
+	;
+
+functioncall ::= prefixexp args
+	| prefixexp ':' Name args
+	;
+
+args ::= '(' [explist] ')'
+	| tableconstructor
+	| LiteralString
+	;
+
+functiondef ::= 'function' funcbody ;
+
+funcbody ::= '(' [parlist] ')' block 'end' ;
+
+parlist ::= namelist [',' '...']
+	| '...'
+	;
+
+tableconstructor ::= '{' [fieldlist] '}' ;
+
+fieldlist ::= field {fieldsep field} [fieldsep] ;
+
+field ::= '[' exp ']' '=' exp
+	| Name '=' exp
+	| exp
+	;
+
+fieldsep ::= ','
+	| ';'
+	;
+
+binop ::= add
+	| sub
+	| mul
+	| div
+	| pow
+	| mod
+	| concat
+	| lt
+	| le
+	| gt
+	| ge
+	| eq
+	| ne
+	| and
+	| or
+	;
+
+add ::= '+' ;
+sub ::= '-' ;
+mul ::= '*' ;
+div ::= '/' ;
+pow ::= '^' ;
+mod ::= '%' ;
+concat ::= '..' ;
+lt ::= '<' ;
+le ::= '<=' ;
+gt ::= '>' ;
+ge ::= '>=' ;
+eq ::= '==' ;
+ne ::= '~=' ;
+and ::= 'and' ;
+or ::= 'or' ;
+
+unop ::= unm
+	| not
+	| len
+	;
+
+unm ::= '-' ;
+not ::= 'not' ;
+len ::= '#' ;
 
 -- Name ::= ... how to define valid names ...
 -- Numeral ::= ... how to define numerals ...

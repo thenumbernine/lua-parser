@@ -450,9 +450,18 @@ print('adding edge', from, to)
 		elseif ast._name:isa(node) then
 			-- name is a rule ... or a builtin rule
 			local ruleName = node:value()
-			local tos = {'rule:'..ruleName}
-			addEdges(edges, froms, tos)
-			return tos
+			if ruleName == 'LiteralString' 
+			or ruleName == 'Numeral'
+			or ruleName == 'Name'
+			then
+				local tos = {ruleName}
+				addEdges(edges, froms, tos)
+				return tos
+			else
+				local tos = {'rule:'..ruleName}
+				addEdges(edges, froms, tos)
+				return tos
+			end
 		elseif ast._string:isa(node) then
 			-- string == literal
 			local to = assert.type(node:value(), 'string')
@@ -498,15 +507,16 @@ end
 			local ruleName = to:match'^rule:(.*)$'
 			if ruleName then
 				edges[from][to] = nil
-				for newto,v in pairs(edges['start:'..ruleName]) do
+				for newto,v in pairs(assert.index(edges, 'start:'..ruleName)) do
 					edges[from][newto] = true
 				end
 			end
 			-- and send end:* to wherever rule:* goes
+			-- mind you if nobody uses a rule then its end goes nowhere right?
 			local ruleName = to:match'^end:(.*)$'
 			if ruleName then
 				edges[from][to] = nil
-				for newto,v in pairs(edges['rule:'..ruleName]) do
+				for newto,v in pairs(assert.index(edges, 'rule:'..ruleName)) do
 					edges[from][newto] = true
 				end
 			end
