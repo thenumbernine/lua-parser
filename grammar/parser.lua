@@ -470,6 +470,10 @@ print('adding edge', from, to)
 			local tos = {keywordOrSymbol..':'..to}
 			addEdges(edges, froms, tos)
 			return tos
+		elseif ast._capture:isa(node) then
+			assert.len(node, 1)
+			-- TODO where to tell the digraph that we are capturing something ... 
+			return addFromsToNode(edges, froms, node[1])
 		end
 		error('here with type '..tostring(node.type))
 	end
@@ -503,26 +507,58 @@ end
 	-- now collapse the rule parts of the graph ...
 	for from,tos in pairs(edges) do
 		for _,to in ipairs(table.keys(tos)) do
-			-- if it goes to rule:* then send it to start:*
-			local ruleName = to:match'^rule:(.*)$'
-			if ruleName then
-				edges[from][to] = nil
-				for newto,v in pairs(assert.index(edges, 'start:'..ruleName)) do
-					edges[from][newto] = true
-				end
-			end
-			-- and send end:* to wherever rule:* goes
+			
+			-- send end:* to wherever rule:* goes
 			-- mind you if nobody uses a rule then its end goes nowhere right?
+			-- and give the DAG a value at this point to tell it to create this rule
 			local ruleName = to:match'^end:(.*)$'
 			if ruleName then
 				edges[from][to] = nil
 				for newto,v in pairs(assert.index(edges, 'rule:'..ruleName)) do
-					edges[from][newto] = true
+					-- now upon finishing a rule ... we're going to want it to pop out that node, right?
+					edges[from][newto] = ruleName
 				end
 			end
 		end
 	end
-	
+	local stillMoreToCollapse 
+	repeat
+		stillMoreToCollapse = false
+		local rulesStillUsed = {}
+		for from,tos in pairs(edges) do
+			for _,to in ipairs(table.keys(tos)) do
+				-- if it goes to rule:* then send it to start:*
+				local ruleName = to:match'^rule:(.*)$'
+				if ruleName then
+					rulesStillUsed[ruleName] = true
+					-- TODO if a rule: points to a start: points to a rule: then we could be erasing its dest here ...
+					-- so only erase a rule IF you know it's not used anymore ...
+					--edges[from][to] = nil
+					for newto,v in pairs(assert.index(edges, 'start:'..ruleName)) do
+						-- what about rule: that points to rule: ?
+						local ruleName2 = newto:match'^rule:(.*)$'
+						if ruleName2 and ruleName2 ~= ruleName then
+							-- still getting some circlees ...
+print(to.." goes to "..newto)
+							stillMoreToCollapse = true
+						end
+						edges[from][newto] = true
+					end
+				end
+			end
+		end
+		for from,tos in pairs(edges) do
+			for _,to in ipairs(table.keys(tos)) do
+				local ruleName = to:match'^rule:(.*)$'
+				if ruleName 
+				--and not rulesStillUsed[ruleName] 
+				then
+					edges[from][to] = nil
+				end
+			end
+		end
+	until not stillMoreToCollapse
+
 	-- ... and then remove the rule starts and ends
 	for _,from in ipairs(table.keys(edges)) do
 		local ruleName = from:match'^start:(.*)$' or from:match'^end:(.*)$' or from:match'^rule:(.*)$'
@@ -534,9 +570,11 @@ end
 
 print()
 print'done'
-for from,tos in pairs(edges) do
-	for to,v in pairs(tos) do
-		print(from..' -> '..to)
+for _,from in ipairs(table.keys(edges)) do
+	local tos = edges[from]
+	for _,to in ipairs(table.keys(tos)) do
+		local v = tos[to]
+		print(from..' -> '..to..(v ~= true and ' ['..tostring(v)..']' or ''))
 	end
 end
 end

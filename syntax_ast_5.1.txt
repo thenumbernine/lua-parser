@@ -12,19 +12,23 @@
 --
 -- or how about I just generate a FSM?  that seems to be trendy.
 
-block ::= {stat [';']} [laststat [';']] ;
+-- are the captures just the rules themselves?
+-- should I just capture everything?
+-- should I tag everything with what rule created it?
 
-stat ::= 'local' 'function' Name funcbody
-	| 'local' namelist ['=' explist]
-	| 'function' funcname funcbody
-	| 'for' Name '=' exp ',' exp [',' exp] 'do' block 'end'
-	| 'for' namelist 'in' explist 'do' block 'end'
-	| 'if' exp 'then' block {'elseif' exp 'then' block} ['else' block] 'end'
-	| 'repeat' block 'until' exp
-	| 'while' exp 'do' block 'end'
-	| 'do' block 'end'
-	| functioncall
-	| varlist '=' explist
+block ::= {(stat) [';']} [(laststat) [';']] ;
+
+stat ::= 'local' 'function' (Name) (funcbody)
+	| 'local' (namelist) ['=' (explist)]
+	| 'function' (funcname) (funcbody)
+	| 'for' (Name) '=' (exp) ',' (exp) [',' (exp)] 'do' (block) 'end'
+	| 'for' (namelist) 'in' (explist) 'do' (block) 'end'
+	| 'if' (exp) 'then' (block) {'elseif' (exp) 'then' (block)} ['else' (block)] 'end'
+	| 'repeat' (block) 'until' (exp)
+	| 'while' (exp) 'do' (block) 'end'
+	| 'do' (block) 'end'
+	| (functioncall)
+	| (varlist) '=' (explist)
 	;
 
 laststat ::= 'return' [explist]
