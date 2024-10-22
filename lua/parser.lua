@@ -33,6 +33,7 @@ function LuaParser:init(data, version, source, useluajit)
 	self.useluajit = not not useluajit
 
 	-- TODO between this and parser.grammar, make a table-based way to specify the rules
+	-- TODO TODO a token DAG from the grammar would be nice ...
 	-- [[ what to name this ...
 	self.parseExprPrecedenceRulesAndClassNames = table{
 		{

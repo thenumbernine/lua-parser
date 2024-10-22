@@ -366,8 +366,6 @@ end
 		parserClassName = parserClassName,
 	}))
 
-	local edges = {}
-
 	local validTokenTypes = {
 		start = true,
 		['end'] = true,
@@ -379,119 +377,158 @@ end
 	}
 
 	local function tokenAndTypeToStr(tokenPair)
-		return table.concat(tokenPair, ' ')
+		return table.concat(tokenPair, ':')
 	end
-
-	local addRule
-	local currentRule 	-- for debugging only
-
-	local addExpr
-
-	local function addList(prevTokenPair, node, i)
-		if i > #node then return table{prevTokenPair} end
-		local nextTokenPairs = addExpr(prevTokenPair, node[i])
-		local resultPairs = table()
-		for _,nextTokenPair in ipairs(nextTokenPairs) do
-			resultPairs:append(addList(nextTokenPair, node, i+1))
-		end
-		return resultPairs
-	end
-
-	local function addEdge(prevTokenPair, nextTokenPair)
-		local prevTokenType, prevToken = table.unpack(prevTokenPair)
-		assert(type(prevToken) == 'string' or type(prevToken) == 'nil')
-		assert.index(validTokenTypes, prevTokenType)
-		local prevstr = tokenAndTypeToStr{prevTokenType, prevToken}
-		
-		local nextTokenType, nextToken = table.unpack(nextTokenPair)
-		assert(type(nextToken) == 'string' or type(nextToken) == 'nil')
-		assert.index(validTokenTypes, nextTokenType)
-		local nextstr = tokenAndTypeToStr{nextTokenType, nextToken}
-		
-		-- do the real edge-add
-		edges[prevstr] = edges[prevstr] or {}
-		-- TODO here , assign any ast's being generated, and somehow assign the previously accumulated tokens and their captures
-		edges[prevstr][nextstr] = {}
-print('in', currentRule, 'adding '..prevstr..' -> '..nextstr)
-	end
-
-	addExpr = function(prevTokenPair, node)
-		local prevTokenType, prevToken = table.unpack(prevTokenPair)
-		assert(type(prevToken) == 'string' or type(prevToken) == 'nil')
-		assert.index(validTokenTypes, prevTokenType)
-		assert(ast._node:isa(node))
---DEBUG: print('adding', node.type)		
-		if ast._rule:isa(node) then
-			-- don't handle rules here ... or should I?  I could just insert 'addRule' here ...
-			error'here'			
-		elseif ast._or:isa(node) then
-			local nextTokens = table()
-			for _,option in ipairs(node) do
-				nextTokens:append(addExpr(prevTokenPair, option))
-			end
-			return nextTokens
-		elseif ast._optional:isa(node) then
-			-- TODO make this just like multiple except multiple should have the final connect back to the first, this shouldn't
-			local nextTokenPairs = table{prevTokenPair}
-			nextTokenPairs:append(addExpr(prevTokenPair, node[1]))
-			return nextTokenPairs
-		elseif ast._multiple:isa(node) then	-- zero-or-more ...
-			local nextTokenPairs = table{prevTokenPair}
-			nextTokenPairs:append(addList(prevTokenPair, node, 1))
-			return nextTokenPairs
-		--elseif ast._capture:isa(node) then
-		elseif ast._expr:isa(node) then
-			return addList(prevTokenPair, node, 1)
-		elseif ast._name:isa(node) then
-			local ruleName = node:value()
-			local nextRule = assert.index(self.ruleForName, ruleName)
-			if nextRule == true then
-				-- if the next rule is a builtin rule ... ?
-				local nextTokenType = assert.index({
-					Name = 'name',
-					Numeral = 'number',
-					LiteralString = 'string',
-				}, ruleName)
-				local nextTokenPair = {nextTokenType}
-				addEdge(prevTokenPair, nextTokenPair)
-				return table{nextTokenPair}
-			else
-				return addRule(prevTokenPair, nextRule)
-			end
-		elseif ast._string:isa(node) then
-			local nextToken = node:value()
-			local nextTokenType = nextToken:match'%a' and 'keyword' or 'symbol'
-			local nextTokenPair = {nextTokenType, nextToken}
-			addEdge(prevTokenPair, nextTokenPair)
-			return table{nextTokenPair}
-		end
-		error('here in rule '..currentRule..' with node '..node.type)
-	end
-
-	local rulesProcessed = {}
-	addRule = function(prevTokenPair, rule)
-		assert.type(rule, 'table')
-		assert(ast._rule:isa(rule))
-		currentRule = rule:name()
-		rulesProcessed[rule:name()] = rulesProcessed[rule:name()] or {}
-		local prevstr = tokenAndTypeToStr(prevTokenPair)
-		local nextTokenPairs = rulesProcessed[rule:name()][prevstr]
-		if not nextTokenPairs then
---DEBUG: print('adding rule', rule:name(), prevstr)
-			nextTokenPairs = addExpr(prevTokenPair, rule:expr())
-assert.type(nextTokenPairs, 'table')
-			rulesProcessed[rule:name()][prevstr] = nextTokenPairs
-		end
-		return nextTokenPairs
-	end
-
-	-- construct DAG ...
-assert(ast._rule:isa(self.tree[1]))	
+	
+	--[[ construct DAG ...
+assert.is(self.tree[1], ast._rule)
 	for _,nextTokenPair in ipairs(addRule({'start'}, self.tree[1])) do
 		addEdge(nextTokenPair, {'end'})
 	end
+	--]]
+	-- [[
+	local function combine(...)
+		return table():append(...):mapi(function(v)
+			return true, v
+		end):keys()
+	end
+	local function addEdges(edges, froms, tos)
+		for _,from in ipairs(froms) do
+			edges[from] = edges[from] or {}
+			for _,to in ipairs(tos) do
+print('adding edge', from, to)				
+				edges[from][to] = true
+			end
+		end
+	end
+	local addFromsToRule
+	local function addFromsToNode(edges, froms, node)
+		assert.type(froms, 'table')
+--print('addFromsToNode', require 'ext.tolua'(froms), node.type)
+		if ast._expr:isa(node) then
+			-- "expr" is really "list" or "container of other nodes"
+			for _,ch in ipairs(node) do
+				assert.is(ch, ast._node)
+				froms = addFromsToNode(edges, froms, ch)
+			end
+			return froms
+		elseif ast._multiple:isa(node) then
+			--[[
+			multiple means ...
+			froms -> start(node)
+			end(node) -> start(node)
+			end(node) -> tos
+			--]]
+			assert.len(node, 1)
+			local mult = node[1]
+			local firstfroms = froms
+			froms = addFromsToNode(edges, froms, mult)
+			addFromsToNode(edges, froms, mult)	-- from end to beginning ... output should match 'froms'
+			return combine(firstfroms, froms)	-- combine for when there's 0
+		elseif ast._optional:isa(node) then
+			--[[
+			froms -> optional
+			optional -> tos
+			froms -> tos
+			... same as multiple without the loop back
+			--]]
+			assert.len(node, 1)
+			local opt = node[1]
+			local firstfroms = froms
+			froms = addFromsToNode(edges, froms, opt)
+			return combine(firstfroms, froms)	-- combine for when we skip it
+		elseif ast._or:isa(node) then
+			--[[
+			froms -> start of each child of node
+			end of each child of node -> tos
+			--]]
+			local tos = table()
+			for _,ch in ipairs(node) do
+				tos = combine(tos, addFromsToNode(edges, froms, ch))
+			end
+			return tos
+		elseif ast._name:isa(node) then
+			-- name is a rule ... or a builtin rule
+			local ruleName = node:value()
+			local tos = {'rule:'..ruleName}
+			addEdges(edges, froms, tos)
+			return tos
+		elseif ast._string:isa(node) then
+			-- string == literal
+			local to = assert.type(node:value(), 'string')
+			-- TODO why even bother separate it in canbe() ?
+			local keywordOrSymbol = to:match'^[_a-zA-Z][_a-zA-Z0-9]*$' and 'keyword' or 'symbol'
+			local tos = {keywordOrSymbol..':'..to}
+			addEdges(edges, froms, tos)
+			return tos
+		end
+		error('here with type '..tostring(node.type))
+	end
+	function addFromsToRule(edges, froms, rule)
+		assert.is(rule, ast._rule)
+print()
+print('adding rule', rule:name())
+		return addFromsToNode(edges, froms, rule:expr())
+	end
+	
+	local edges = {}
+	
+	--[[
+	each rule gets its own edges[][] digraph
+	whose start node is 'start' and end node is 'end'
+	--]]
+	for i,rule in ipairs(self.tree) do
+		assert.is(rule, ast._rule)
+		local froms = addFromsToRule(edges, {'start:'..rule:name(), i==1 and 'start' or nil}, rule)
+		addEdges(edges, froms, {'end:'..rule:name(), i==1 and 'end' or nil})
+	end
 
-	print(tolua(edges))
+print()
+print'before collapse:'
+for from,tos in pairs(edges) do
+	for to,v in pairs(tos) do
+		print(from..' -> '..to)
+	end
+end
+
+	-- now collapse the rule parts of the graph ...
+	for from,tos in pairs(edges) do
+		for _,to in ipairs(table.keys(tos)) do
+			-- if it goes to rule:* then send it to start:*
+			local ruleName = to:match'^rule:(.*)$'
+			if ruleName then
+				edges[from][to] = nil
+				for newto,v in pairs(edges['start:'..ruleName]) do
+					edges[from][newto] = true
+				end
+			end
+			-- and send end:* to wherever rule:* goes
+			local ruleName = to:match'^end:(.*)$'
+			if ruleName then
+				edges[from][to] = nil
+				for newto,v in pairs(edges['rule:'..ruleName]) do
+					edges[from][newto] = true
+				end
+			end
+		end
+	end
+	
+	-- ... and then remove the rule starts and ends
+	for _,from in ipairs(table.keys(edges)) do
+		local ruleName = from:match'^start:(.*)$' or from:match'^end:(.*)$' or from:match'^rule:(.*)$'
+		if ruleName then
+			edges[from] = nil
+		end
+	end
+	--]]
+
+print()
+print'done'
+for from,tos in pairs(edges) do
+	for to,v in pairs(tos) do
+		print(from..' -> '..to)
+	end
+end
 end
 
 function GrammarParser:parseTree()
@@ -503,7 +540,7 @@ function GrammarParser:parseTree()
 		if not rule then break end
 
 		self:canbe(';', 'symbol')
-assert(ast._rule:isa(rule))
+assert.is(rule, ast._rule)
 		rules:insert(rule)
 	until false
 	return rules
