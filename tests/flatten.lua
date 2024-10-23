@@ -15,14 +15,14 @@ local ftree = parser.parse(fcode)
 print('f code')
 print(tolua(ftree))
 print('f ast code (should match original code)')
-print(ftree)
+print(ftree:toLua())
 print()
 
 local gtree = parser.parse(gcode)
 print('g code')
 print(tolua(gtree))
 print('g ast code')
-print(gtree)
+print(gtree:toLua())
 print()
 
 local fflat = ftree:flatten{
@@ -31,4 +31,4 @@ local fflat = ftree:flatten{
 print('flattened f ast')
 print(tolua(fflat))
 print('flattened f code')
-print(fflat)
+print(fflat:toLua())

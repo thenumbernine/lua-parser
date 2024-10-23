@@ -18,7 +18,7 @@ local datareader = parser.t.r
 local function printspan(x, tab)
 	tab = tab or ''
 	if x.type then
-		local reconstructed = tostring(x)
+		local reconstructed = x:toLua()
 		print(tab..'tostring():', reconstructed)
 		local fromIndexSpan = code:sub(x.span.from.index, x.span.to.index)
 		print(tab..'span substr:', fromIndexSpan)
@@ -69,7 +69,7 @@ local function printspan(x, tab)
 				print(tab..k)
 				printspan(v, tab..'  ')
 			else
-				print(tab..k..' = '..tostring(v))--tolua(v))
+				print(tab..k..' = '..(v.toLua and v:toLua() or tostring(v)))--tolua(v))
 			end
 		end
 	end

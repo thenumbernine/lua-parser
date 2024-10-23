@@ -2,6 +2,7 @@
 local parser = require 'parser'
 local ast = require 'parser.lua.ast'
 local path = require 'ext.path'
+local assert = require 'ext.assert'
 local table = require 'ext.table'
 
 local requires = table()
@@ -15,25 +16,41 @@ local tabs = -1	-- because everything is in one block
 function tab()
 	return ('\t'):rep(tabs)
 end
-local function tabblock(t, apply)
+function tabblock(t, consume)
 	tabs = tabs + 1
-	local s = table(t):mapi(function(expr)
-		return tab() .. apply(expr)
-	end):concat';\n'
+	for i,ti in ipairs(t) do
+		consume(tab())
+		consume(ti)
+		if i < #t then consume'\n' end
+	end
 	tabs = tabs - 1
-	return s..';\n'
-end
-
-local function toC(x)
-	if x.toC then return x:toC(toC) end
-	return x:serialize(toC)
 end
 
 for k,cl in pairs(ast) do
 	if ast.node:isa(cl) then
+		function cl:toC()
+			local s = ''
+			local consume
+			consume = function(x)
+				if type(x) == 'number' then
+					x = tostring(x)
+				end
+				if type(x) == 'string' then
+					s = s .. x
+				elseif type(x) == 'table' then
+					assert.is(x, ast.node)
+					assert.index(x, 'toC_recursive')
+					x:toC_recursive(consume)
+				else
+					error('here with unknown type '..type(x))
+				end
+			end
+			self:toC_recursive(consume)
+			return s
+		end
 		-- weakness to this design ...i need to always keep specifying the above toC() wrapper, or I have to make a seprate member function...
-		function cl:toC(apply)
-			return self:serialize(apply)
+		function cl:toC_recursive(consume)
+			self:serialize(consume)
 		end
 	end
 end
@@ -47,110 +64,195 @@ for _,info in ipairs{
 	{'ne','!='},
 } do
 	local name, op = table.unpack(info)
-	-- hmm, can I override serialize but only for specific apply()'s ?
-	-- I guess if I want to test apply == my new custom one vs otherwise call super ...
-	ast['_'..name].toC = function(self, apply)
-		return table.mapi(self, apply):concat(' '..op..' ')
-	end
-end
-function ast._not:toC(apply)
-	return '!'..apply(self[1])
-end
-function ast._len:toC(apply)
-	return apply(self[1])..'.size()';
-end
-function ast._assign:toC(apply)
-	local s = table()
-	for i=1,#self.vars do
-		if self.exprs[i] then
-			s:insert(apply(self.vars[i])..' = '..apply(self.exprs[i]))
-		else
-			s:insert(apply(self.vars[i]))
+	-- hmm, can I override serialize but only for specific consume()'s ?
+	-- I guess if I want to test consume == my new custom one vs otherwise call super ...
+	ast['_'..name].toC_recursive = function(self, consume)
+		for i,x in ipairs(self) do
+			consume(x)
+			if i < #self then
+				consume' '
+				consume(op)
+				consume ' '
+			end
 		end
 	end
-	return s:concat', '
 end
-function ast._block:toC(apply)
-	return tabblock(self, apply)
+function ast._not:toC_recursive(consume)
+	consume'!'
+	consume(self[1])
 end
-function ast._call:toC(apply)
-	local s = apply(self.func)..'('..table.mapi(self.args, apply):concat', '..')'
+function ast._len:toC_recursive(consume)
+	consume(self[1])
+	consume'.size()'
+end
+function ast._assign:toC_recursive(consume)
+	for i=1,#self.vars do
+		if self.exprs[i] then
+			consume(self.vars[i])
+			consume' = '
+			consume(self.exprs[i])
+		else
+			consume(self.vars[i])
+		end
+		if i < #self.vars then consume', ' end
+	end
+end
+function ast._block:toC_recursive(consume)
+	tabblock(self, consume)
+end
+function ast._call:toC_recursive(consume)
+	consume(self.func)
+	consume'('
+	for i,x in ipairs(self.args) do
+		consume(x)
+		if i < #self.args then consume', ' end
+	end
+	consume')'
 	if self.func.name == 'require' then
 		if self.args[1].type == 'string' then
 			-- ok here we add the require file based on our lua path
 			-- does this mean we need to declare the lua path up front to lua_to_c?
 			requires:insert(self.args[1].value)
 		else
-			s = s .. '\n#error require arg not a string'
+			consume'\n#error require arg not a string'
 		end
-		--s = s .. ' ## HERE ##'
 	end
-	return s
 end
-function ast._foreq:toC(apply)
-	local s = 'for ('..cobjtype..' '..self.var..' = '..self.min..'; '..self.var..' < '..self.max..'; '
+function ast._foreq:toC_recursive(consume)
+	consume'for ('
+	consume(cobjtype)
+	consume' '
+	consume(self.var)
+	consume' = '
+	consume(self.min)
+	consume'; '
+	consume(self.var)
+	consume' < '
+	consume(self.max)
+	consume'; '
 	if self.step then
-		s = s .. self.var..' += '..self.step
+		consume(self.var)
+		consume' += '
+		consume(self.step)
 	else
-		s = s .. '++'..self.var
+		consume'++'
+		consume(self.var)
 	end
-	s = s ..') {\n' .. tabblock(self, apply) .. tab() .. '}'
-	return s
+	consume') {\n'
+	tabblock(self, consume)
+	consume(tab())
+	consume'}'
 end
-function ast._forin:toC(apply)
-	return 'for ('..table(self.vars):mapi(apply):concat', '..' in '..table(self.iterexprs):mapi(apply):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
+function ast._forin:toC_recursive(consume)
+	consume'for ('
+	for i,v in ipairs(self.vars) do
+		consume(v)
+		if i < #self.vars then consume', ' end
+	end
+	consume' in '
+	for i,v in ipairs(self.iterexprs) do
+		consume(v)
+		if i < #self.iterexprs then consume', ' end
+	end
+	consume') {\n'
+	tabblock(self, consume)
+	consume(tab())
+	consume'}'
 end
-function ast._function:toC(apply)
+function ast._function:toC_recursive(consume)
 	if self.name then
 		-- global-scope def?
 		--return cobjtype..' '..self.name..'('..table(self.args):mapi(function(arg) return cobjtype..' '..apply(arg) end):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
 		-- local-scope named function def ...
-		return cobjtype..' '..self.name..' = []('..table(self.args):mapi(function(arg) return cobjtype..' '..apply(arg) end):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
+		consume(cobjtype)
+		consume' '
+		consume(self.name)
+		consume' = []('
+		for i,arg in ipairs(self.args) do
+			consume(cobjtype)
+			consume' '
+			consume(arg) 
+			if i < #self.args then consume', ' end
+		end
+		consume') {\n'
+		tabblock(self, consume)
+		consume(tab())
+		consume'}'
 	else
 		-- lambdas?
-		return '[]('..table(self.args):mapi(function(arg) return cobjtype..' '..apply(arg) end):concat', '..') {\n' .. tabblock(self, apply) .. tab() .. '}'
+		consume'[]('
+		for i,arg in ipairs(self.args) do
+			consume(cobjtype)
+			consume' '
+			consume(arg) 
+			if i < #self.args then consume', ' end
+		end
+		consume') {\n'
+		tabblock(self, consume)
+		consuem(tab())
+		consume'}'
 	end
 end
-function ast._if:toC(apply)
-	local s = 'if ('..self.cond..') {\n' .. tabblock(self, apply) .. tab() .. '}'
+function ast._if:toC_recursive(consume)
+	consume'if ('
+	consume(self.cond)
+	consume') {\n'
+	tabblock(self, consume)
+	consume(tab()..'}')
 	for _,ei in ipairs(self.elseifs) do
-		s = s .. ei
+		consume(ei)
 	end
-	if self.elsestmt then s = s .. self.elsestmt end
-	return s
+	if self.elsestmt then consume(self.elsestmt) end
 end
-function ast._elseif:toC(apply)
-	return ' else if ('..self.cond..') {\n' .. tabblock(self, apply) .. tab() .. '}'
+function ast._elseif:toC_recursive(consume)
+	consume' else if ('
+	consume(self.cond)
+	consume') {\n'
+	tabblock(self, consume)
+	consume(tab())
+	consume'}'
 end
-function ast._else:toC(apply)
-	return ' else {\n' .. tabblock(self, apply) .. tab() .. '}'
+function ast._else:toC_recursive(consume)
+	consume' else {\n'
+	tabblock(self, consume)
+	consume(tab())
+	consume'}'
 end
-function ast._index:toC(apply)
-	return apply(self.expr)..'['..apply(self.key)..']'
+function ast._index:toC_recursive(consume)
+	consume(self.expr)
+	consume'['
+	consume(self.key)
+	consume']'
 end
-function ast._indexself:toC(apply)
-	return apply(self.expr)..'.'..apply(self.key)
+function ast._indexself:toC_recursive(consume)
+	consume(self.expr)
+	consume'.'
+	consume(self.key)
 end
-function ast._local:toC(apply)
+function ast._local:toC_recursive(consume)
 	if self.exprs[1].type == 'function' or self.exprs[1].type == 'assign' then
 		-- if exprs[1] is a multi-assign then an 'cobjtype' needs to prefix each new declaration
-		return cobjtype..' '..apply(self.exprs[1])
+		consume(cobjtype)
+		consume' '
+		consume(self.exprs[1])
 	else
-		local s = table()
 		for i=1,#self.exprs do
-			s:insert(cobjtype..' '..self.exprs[i])
+			consume(cobjtype)
+			consume' '
+			consume(self.exprs[i])
+			if i < #self.exprs then consume'\n' end
 		end
-		return s:concat'\n'
 	end
 end
-function ast._vararg:toC(apply)
-	return 'reserved_vararg'	-- reserved name?
+function ast._vararg:toC_recursive(consume)
+	consume'reserved_vararg'	-- reserved name?
 end
-function ast._var:toC(apply)
+function ast._var:toC_recursive(consume)
 	if cppReservedWord[self.name] then
-		return 'cppreserved_' .. self.name
+		consume('cppreserved_' .. self.name)
+	else
+		consume(self.name)
 	end
-	return self.name
 end
 
 
@@ -164,7 +266,7 @@ local function luaFileToCpp(fn)
 	local luacode = assert(path(fn):exists(), "failed to find "..tostring(fn))
 	local luacode = assert(path(fn):read(), "failed to find "..tostring(fn))
 	local tree = parser.parse(luacode)
-	local cppcode = tree:toC(toC)
+	local cppcode = tree:toC()
 	cppcode = '//file: '..fn..'\n'..cppcode
 	cppcode = addtab(cppcode)
 	return cppcode
