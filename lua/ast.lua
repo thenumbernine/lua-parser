@@ -37,12 +37,16 @@ and honestly if we do save all tokens, that's an easy case for in-order traversa
 -- TODO subsequent toLua() impls have (consume) as an arg, and this is modular for expanding off toLua impls
 -- but maybe change those names to 'toLua_recurse' or something
 -- and keep a sole external function that provides consume()
+local slashNByte = ('\n'):byte()
 function LuaAST:serializeRecursiveMember(field)
 	local s = ''
 	-- :serialize() impl provided by child classes
 	-- :serialize() should call traversal in-order of parsing (why I want to make it auto and assoc wth the parser and grammar and rule-generated ast node classes)
 	-- that means serialize() itself should never call serialize() but only call the consume() function passed into it (for modularity's sake)
 	-- it might mean i should capture all nodes too, even those that are fixed, like keywords and symbols, for the sake of reassmbling the syntax
+	local line = 1
+	local col = 1
+	local index = 1
 	local consume
 	local lastspan
 	consume = function(x)
@@ -51,24 +55,40 @@ function LuaAST:serializeRecursiveMember(field)
 		end
 		if type(x) == 'string' then
 			-- here's our only string join
+			local function append(u)
+				for i=1,#u do
+					if u:byte(i) == slashNByte then
+						col = 1
+						line = line + 1
+					else
+						col = col + 1
+					end
+				end
+				index = index + #u
+				s = s .. u
+			end
 
 			-- TODO here if you want ... pad lines and cols until we match the original location (or exceed it)
 			-- to do that, track appended strings to have a running line/col counter just like we do in parser
 			-- to do that, separate teh updatelinecol() in the parser to work outside datareader
+			if lastspan then
+				while line < lastspan.from.line do
+					append'\n'
+				end
+			end
 
 			-- if we have a name coming in, only insert a space if we were already at a name
 			local namelhs = s:sub(-1):match'[_%w]'
 			local namerhs = x:sub(1,1):match'[_%w]'
 			if namelhs and namerhs then
-				s = s .. ' '
+				append' '
 			elseif not namelhs and not namerhs then
 				-- TODO here for minification if you want
 				-- if we have a symbol coming in, only insert a space if we were already at a symbol and the two together would make a different valid symbol
 				-- you'll need to search back the # of the max length of any symbol ...
-				s = s .. ' '
+				append' '
 			end
-
-			s = s .. x
+			append(x)
 		elseif type(x) == 'table' then
 			lastspan = x.span
 			assert.is(x, BaseAST)
@@ -293,7 +313,7 @@ function LuaAST.flatten(f, varmap)
 				for i,e in ipairs(f[1].exprs) do
 					retexprs[i] = LuaAST.copy(e)
 					traverseRecurse(retexprs[i], function(v)
-						-- _arg is not used by parser - externally used only - I should move flatten somewhere else ... 
+						-- _arg is not used by parser - externally used only - I should move flatten somewhere else ...
 						if ast._arg:isa(v) then
 							return LuaAST.copy(n.args[i])
 						end
