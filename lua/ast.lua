@@ -294,6 +294,7 @@ function LuaAST.flatten(f, varmap)
 				for i,e in ipairs(f[1].exprs) do
 					retexprs[i] = LuaAST.copy(e)
 					traverseRecurse(retexprs[i], function(v)
+						-- _arg is not used by parser - externally used only - I should move flatten somewhere else ... 
 						if ast._arg:isa(v) then
 							return LuaAST.copy(n.args[i])
 						end
@@ -581,6 +582,7 @@ function _function:serialize(consume)
 end
 
 -- aux for _function
+-- not used by parser - externally used only - I should get rid of it
 local _arg = nodeclass'arg'
 -- TODO just self[1] ?
 function _arg:init(index)
@@ -589,8 +591,7 @@ end
 -- params need to know what function they're in
 -- so they can reference the function's arg names
 function _arg:serialize(consume)
-	consume'arg'
-	consume(self.index)
+	consume('arg'..self.index)
 end
 
 -- _local can be an assignment of multi vars to muli exprs
@@ -730,7 +731,7 @@ end
 -- as we add/remove fields, that means reordering indexes, and that means a break in compat
 -- one workaround to merging the two is just named functions and integer-indexed children
 -- another is a per-child traversal routine (like :serialize())
-local _var = nodeclass'var'	-- variable, lhs of ast._assign's, similar to _arg
+local _var = nodeclass'var'	-- variable, lhs of ast._assign's
 function _var:init(name, attrib)
 	self.name = name
 	self.attrib = attrib

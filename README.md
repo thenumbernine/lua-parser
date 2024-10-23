@@ -127,11 +127,6 @@ Subclass of `_stmt`.<br>
 `n.args = ` table of arguments.  This does get modified: each argument gets assigned an `.param = true`, and an `.index =` for which index it is in the argument list.<br>
 `n[1] ... n[#n] =` nodes of statements within the block.<br>
 <br>
-`n = ast._arg(index)`<br>
-An argument to a function.<br>
-`n.type == 'arg'`.<br>
-`n.index =` which index in the function's argument list this is.<br>
-<br>
 `n = ast._local(exprs)`<br>
 A `local ...` statement.<br>
 Subclass of `_stmt`.<br>
