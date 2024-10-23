@@ -23,7 +23,7 @@ state.xforms:insert(function(d, source)
 		for _,cb in ipairs(callbacks) do
 			cb(tree)
 		end
-		local result = tostring(tree)
+		local result = tree:toLua()
 		return result
 	end, function(err)
 		return '\n'
