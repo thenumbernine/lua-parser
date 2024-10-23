@@ -103,8 +103,7 @@ function LuaAST:exec(...)
 	local code = self:toLua()
 	local f, msg = load(code, ...)
 	if not f then
-		print(require 'template.showcode'(code))
-		error(msg)
+		return nil, msg, code
 	end
 	return f
 end
@@ -811,10 +810,7 @@ end
 function _op:serialize(consume)
 	for i,x in ipairs(self) do
 		consume(x)
-		if i < #self then
-			-- spaces required for 'and' and 'or'
-			consume(self.op)
-		end
+		if i < #self then consume(self.op) end
 	end
 end
 

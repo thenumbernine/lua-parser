@@ -15,26 +15,19 @@ state.xforms:insert(function(d, source)
 --DEBUG(parser.load_xform): print(showcode(d))
 --DEBUG(parser.load_xform): print()
 
-	local parser
-	local result, code = xpcall(function()
-		parser = LuaParser()
-		parser:setData(d, source)
-		local tree = parser.tree
-		for _,cb in ipairs(callbacks) do
-			cb(tree)
+	local parser = LuaParser()
+	local success, msg = parser:setData(d, source)
+	if not success then
+		if parser.t then
+			msg = parser.t:getpos()..': '..msg
 		end
-		local result = tree:toLua()
-		return result
-	end, function(err)
-		return '\n'
-			--..(d and ('parser.load_xform code:\n'..showcode(d)) or '')	-- do I need to show code if I'm rethrownig to ext.load and it's going to show code?
-			--..tostring(source)..':\n'
-			-- TODO move this into LuaParser itself's error generation
-			..(parser and parser.t and (' at '..parser.t:getpos()..'\n') or '')
-			..err..'\n'
-			..debug.traceback()
-	end)
-	if not result then error(code) end
+		return nil, msg
+	end
+	local tree = parser.tree
+	for _,cb in ipairs(callbacks) do
+		cb(tree)
+	end
+	local code = tree:toLua()
 
 --DEBUG(parser.load_xform): print()
 --DEBUG(parser.load_xform): print(debug.traceback())

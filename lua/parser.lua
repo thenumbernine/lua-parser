@@ -12,11 +12,13 @@ local LuaParser = Parser:subclass()
 LuaParser.ast = ast
 
 -- static function
-function LuaParser.parse(...)
-	return LuaParser(...).tree
+function LuaParser.parse(data, source, ...)
+	local parser = LuaParser(nil, nil, ...)
+	local result = table.pack(parser:setData(data, source))
+	if not result[1] then return result:unpack() end
+	return parser.tree
 end
 
--- TODO commin API with base/parser, maybe (data, source, version, useluajit)
 -- TODO instead of version and useluajit, how about parseFlags, and enable/disable them depending on the version
 function LuaParser:init(data, version, source, useluajit)
 	self.version = version or _VERSION:match'^Lua (.*)$'
@@ -130,30 +132,28 @@ function LuaParser:init(data, version, source, useluajit)
 	--]]
 
 	if data then
-		self:setData(data, source)
+		-- can't return from init so gotta error ...
+		assert(self:setData(data, source))
 	end
-end
-
--- TODO I don't need all these, just :getloc()
-function LuaParser:getloc()
-	local loc = self.t:getloc()
-	loc.source = self.source
-	return loc
 end
 
 function LuaParser:setData(data, source)
 	self.gotos = {}		-- keep track of all gotos
 	self.labels = {}	-- keep track of all labels
-	self.source = source
 	self.blockStack = table()
 	self.functionStack = table{'function-vararg'}
 
-	LuaParser.super.setData(self, data)
+	local result = table.pack(LuaParser.super.setData(self, data))
+	if not result[1] then return result:unpack() end
 
 	-- last verify that all gotos went to all labels
 	for _,g in pairs(self.gotos) do
-		assert(self.labels[g.name], "no visible label '"..g.name.."' for <goto> at line "..g.span.to.line)
+		if not self.labels[g.name] then
+			return nil,
+				"no visible label '"..g.name.."' for <goto> at line "..g.span.to.line
+		end
 	end
+	return true
 end
 
 function LuaParser:buildTokenizer(data)
@@ -206,14 +206,14 @@ function LuaParser:parse_stat()
 			return self:node('_local', {
 				self:makeFunction(
 					self:node('_var', name),
-					table.unpack(assert(self:parse_funcbody()))
+					table.unpack((assert(self:parse_funcbody(), {msg="expected function body"})))
 				):setspan{from = ffrom , to = self:getloc()}
 			}):setspan{from = from , to = self:getloc()}
 		else
 			local afrom = self:getloc()
-			local namelist = assert(self:parse_attnamelist())
+			local namelist = assert(self:parse_attnamelist(), {msg="expected attr name list"})
 			if self:canbe('=', 'symbol') then
-				local explist = assert(self:parse_explist())
+				local explist = assert(self:parse_explist(), {msg="expected expr list"})
 				local assign = self:node('_assign', namelist, explist)
 					:setspan{from = ffrom, to = self:getloc()}
 				return self:node('_local', {assign})
@@ -225,49 +225,49 @@ function LuaParser:parse_stat()
 		end
 	elseif self:canbe('function', 'keyword') then
 		local funcname = self:parse_funcname()
-		return self:makeFunction(funcname, table.unpack(assert(self:parse_funcbody())))
+		return self:makeFunction(funcname, table.unpack((assert(self:parse_funcbody(), {msg="expected function body"}))))
 			:setspan{from = from , to = self:getloc()}
 	elseif self:canbe('for', 'keyword') then
-		local namelist = assert(self:parse_namelist())
+		local namelist = assert(self:parse_namelist(), {msg="expected name list"})
 		if self:canbe('=', 'symbol') then
-			assert.eq(#namelist, 1)
-			local explist = assert(self:parse_explist())
-			assert.ge(#explist, 2)
-			assert.le(#explist, 3)
+			assert.eq(#namelist, 1, {msg="expected only one name in for loop"})
+			local explist = assert(self:parse_explist(), {msg="expected exp list"})
+			assert.ge(#explist, 2, {msg="bad for loop"})
+			assert.le(#explist, 3, {msg="bad for loop"})
 			self:mustbe('do', 'keyword')
-			local block = assert(self:parse_block'for =')
+			local block = assert(self:parse_block'for =', {msg="for loop expected block"})
 			self:mustbe('end', 'keyword')
 			return self:node('_foreq', namelist[1], explist[1], explist[2], explist[3], table.unpack(block))
 				:setspan{from = from, to = self:getloc()}
 		elseif self:canbe('in', 'keyword') then
-			local explist = assert(self:parse_explist())
+			local explist = assert(self:parse_explist(), {msg="expected expr list"})
 			self:mustbe('do', 'keyword')
-			local block = assert(self:parse_block'for in')
+			local block = assert(self:parse_block'for in', {msg="expected block"})
 			self:mustbe('end', 'keyword')
 			return self:node('_forin', namelist, explist, table.unpack(block))
 				:setspan{from = from, to = self:getloc()}
 		else
-			error("'=' or 'in' expected")
+			error{msg="'=' or 'in' expected"}
 		end
 	elseif self:canbe('if', 'keyword') then
-		local cond = assert(self:parse_exp(), "unexpected symbol")
+		local cond = assert(self:parse_exp(), {msg="unexpected symbol"})
 		self:mustbe('then', 'keyword')
 		local block = self:parse_block()
 		local stmts = table(block)
 		-- ...and add elseifs and else to this
 		local efrom = self:getloc()
 		while self:canbe('elseif', 'keyword') do
-			local cond = assert(self:parse_exp(), 'unexpected symbol')
+			local cond = assert(self:parse_exp(), {msg='unexpected symbol'})
 			self:mustbe('then', 'keyword')
 			stmts:insert(
-				self:node('_elseif', cond, table.unpack(assert(self:parse_block())))
+				self:node('_elseif', cond, table.unpack((assert(self:parse_block(), {msg='expected block'}))))
 					:setspan{from = efrom, to = self:getloc()}
 			)
 			efrom = self:getloc()
 		end
 		if self:canbe('else', 'keyword') then
 			stmts:insert(
-				self:node('_else', table.unpack(assert(self:parse_block())))
+				self:node('_else', table.unpack((assert(self:parse_block(), {msg='expected block'}))))
 					:setspan{from = efrom, to = self:getloc()}
 			)
 		end
@@ -275,22 +275,22 @@ function LuaParser:parse_stat()
 		return self:node('_if', cond, table.unpack(stmts))
 			:setspan{from = from, to = self:getloc()}
 	elseif self:canbe('repeat', 'keyword') then
-		local block = assert(self:parse_block'repeat')
+		local block = assert(self:parse_block'repeat', {msg='expected block'})
 		self:mustbe('until', 'keyword')
 		return self:node(
 			'_repeat',
-			assert(self:parse_exp(), 'unexpected symbol'),
+			(assert(self:parse_exp(), {msg='unexpected symbol'})),
 			table.unpack(block)
 		):setspan{from = from, to = self:getloc()}
 	elseif self:canbe('while', 'keyword') then
-		local cond = assert(self:parse_exp(), 'unexpected symbol')
+		local cond = assert(self:parse_exp(), {msg='unexpected symbol'})
 		self:mustbe('do', 'keyword')
-		local block = assert(self:parse_block'while')
+		local block = assert(self:parse_block'while', {msg='expected block'})
 		self:mustbe('end', 'keyword')
 		return self:node('_while', cond, table.unpack(block))
 			:setspan{from = from, to = self:getloc()}
 	elseif self:canbe('do', 'keyword') then
-		local block = assert(self:parse_block())
+		local block = assert(self:parse_block(), {msg='expected block'})
 		self:mustbe('end', 'keyword')
 		return self:node('_do', table.unpack(block))
 			:setspan{from = from, to = self:getloc()}
@@ -334,8 +334,8 @@ function LuaParser:parse_stat()
 		else	-- varlist assignment
 			local vars = table{prefixexp}
 			while self:canbe(',', 'symbol') do
-				local var = assert(self:parse_prefixexp())
-				assert.ne(var.type, 'call', "syntax error")
+				local var = assert(self:parse_prefixexp(), {msg='expected expr'})
+				assert.ne(var.type, 'call', {msg="syntax error"})
 				vars:insert(var)
 			end
 			return self:parse_assign(vars, from)
@@ -345,7 +345,7 @@ end
 
 function LuaParser:parse_assign(vars, from)
 	self:mustbe('=', 'symbol')
-	return self:node('_assign', vars, assert(self:parse_explist()))
+	return self:node('_assign', vars, (assert(self:parse_explist(), {msg='expected expr'})))
 		:setspan{from = from, to = self:getloc()}
 end
 
@@ -373,7 +373,7 @@ end
 function LuaParser:parse_break()
 	local from = self:getloc()
 	if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
-		error("break not inside loop")
+		error{msg="break not inside loop"}
 	end
 	return self:node('_break')
 		:setspan{from = from, to = self:getloc()}
@@ -455,7 +455,7 @@ function LuaParser:parse_explist()
 	if not exp then return end
 	local exps = table{exp}
 	while self:canbe(',', 'symbol') do
-		exps:insert((assert(self:parse_exp(), 'unexpected symbol')))
+		exps:insert((assert(self:parse_exp(), {msg='unexpected symbol'})))
 	end
 	return exps
 end
@@ -498,9 +498,9 @@ function LuaParser:parse_expr_precedenceTable(i)
 			if rule.nextLevel then
 				nextLevel = self.parseExprPrecedenceRulesAndClassNames:find(nil, function(level)
 					return level.name == rule.nextLevel
-				end) or error("couldn't find precedence level named "..tostring(rule.nextLevel))
+				end) or error{msg="couldn't find precedence level named "..tostring(rule.nextLevel)}
 			end
-			return self:node(rule.className, assert(self:parse_expr_precedenceTable(nextLevel)))
+			return self:node(rule.className, (assert(self:parse_expr_precedenceTable(nextLevel), {msg='unexpected symbol'})))
 				:setspan{from = from, to = self:getloc()}
 		end
 		return self:parse_expr_precedenceTable(i+1)
@@ -519,9 +519,9 @@ function LuaParser:parse_expr_precedenceTable(i)
 			if rule.nextLevel then
 				nextLevel = self.parseExprPrecedenceRulesAndClassNames:find(nil, function(level)
 					return level.name == rule.nextLevel
-				end) or error("couldn't find precedence level named "..tostring(rule.nextLevel))
+				end) or error{msg="couldn't find precedence level named "..tostring(rule.nextLevel)}
 			end
-			a = self:node(rule.className, a,assert(self:parse_expr_precedenceTable(nextLevel)))
+			a = self:node(rule.className, a, (assert(self:parse_expr_precedenceTable(nextLevel), {msg='unexpected symbol'})))
 				:setspan{from = a.span.from, to = self:getloc()}
 		end
 		return a
@@ -540,7 +540,7 @@ function LuaParser:parse_subexp()
 
 	local from = self:getloc()
 	if self:canbe('...', 'symbol') then
-		assert.eq(self.functionStack:last(), 'function-vararg')
+		assert.eq(self.functionStack:last(), 'function-vararg', {msg='unexpected symbol'})
 		return self:node('_vararg')
 			:setspan{from = from, to = self:getloc()}
 	end
@@ -584,7 +584,7 @@ function LuaParser:parse_prefixexp()
 	local from = self:getloc()
 
 	if self:canbe('(', 'symbol') then
-		local exp = assert(self:parse_exp(), 'unexpected symbol')
+		local exp = assert(self:parse_exp(), {msg='unexpected symbol'})
 		self:mustbe(')', 'symbol')
 		prefixexp = self:node('_par', exp)
 			:setspan{from = from, to = self:getloc()}
@@ -597,7 +597,7 @@ function LuaParser:parse_prefixexp()
 
 	while true do
 		if self:canbe('[', 'symbol') then
-			prefixexp = self:node('_index', prefixexp, (assert(self:parse_exp(), 'unexpected symbol')))
+			prefixexp = self:node('_index', prefixexp, (assert(self:parse_exp(), {msg='unexpected symbol'})))
 			self:mustbe(']', 'symbol')
 			prefixexp:setspan{from = from, to = self:getloc()}
 		elseif self:canbe('.', 'symbol') then
@@ -614,7 +614,7 @@ function LuaParser:parse_prefixexp()
 				self:mustbe(nil, 'name')
 			):setspan{from = from, to = self:getloc()}
 			local args = self:parse_args()
-			if not args then error"function arguments expected" end
+			if not args then error{msg="function arguments expected"} end
 			prefixexp = self:node('_call', prefixexp, table.unpack(args))
 				:setspan{from = from, to = self:getloc()}
 		else
@@ -661,7 +661,7 @@ end
 function LuaParser:parse_functiondef()
 	local from = self:getloc()
 	if not self:canbe('function', 'keyword') then return end
-	return self:makeFunction(nil, table.unpack(assert(self:parse_funcbody())))
+	return self:makeFunction(nil, table.unpack((assert(self:parse_funcbody(), {msg='expected function body'}))))
 		:setspan{from = from, to = self:getloc()}
 end
 -- returns a table of ... first element is a table of args, rest of elements are the body statements
@@ -735,11 +735,11 @@ end
 function LuaParser:parse_field()
 	local from = self:getloc()
 	if self:canbe('[', 'symbol') then
-		local keyexp = assert(self:parse_exp(), 'unexpected symbol')
+		local keyexp = assert(self:parse_exp(), {msg='unexpected symbol'})
 		self:mustbe(']', 'symbol')
 		self:mustbe('=', 'symbol')
 		local valexp = self:parse_exp()
-		if not valexp then error("expected expression but found "..self.t.token) end
+		if not valexp then error{msg="expected expression but found "..tostring(self.t.token)} end
 		return self:node('_assign', {keyexp}, {valexp})
 			:setspan{from = from, to = self:getloc()}
 	end
@@ -754,7 +754,7 @@ function LuaParser:parse_field()
 			{
 				self:node('_string', exp.name):setspan(exp.span)
 			}, {
-				(assert(self:parse_exp(), 'unexpected symbol'))
+				(assert(self:parse_exp(), {msg='unexpected symbol'}))
 			}
 		):setspan{from = from, to = self:getloc()}
 	else

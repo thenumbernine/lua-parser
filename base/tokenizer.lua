@@ -29,7 +29,7 @@ function Tokenizer:init(data, ...)
 			elseif self:parseNumber() then
 			elseif self:parseSymbol() then
 			else
-				error("unknown token "..r.data:sub(r.index))
+				error{msg="unknown token "..r.data:sub(r.index)}
 			end
 		end
 	end)
@@ -90,7 +90,7 @@ function Tokenizer:parseQuoteString()
 		while true do
 			r:seekpast'.'
 			if r.lasttoken == quote then break end
-			if r:done() then error("unfinished string") end
+			if r:done() then error{msg="unfinished string"} end
 			if r.lasttoken == '\\' then
 				local esc = r:canbe'.'
 				local escapeCodes = {a='\a', b='\b', f='\f', n='\n', r='\r', t='\t', v='\v', ['\\']='\\', ['"']='"', ["'"]="'", ['0']='\0', ['\r']='\n', ['\n']='\n'}
@@ -141,7 +141,7 @@ function Tokenizer:parseQuoteString()
 				else
 					if self.version >= '5.2' then
 						-- lua5.1 doesn't care about bad escape codes
-						error("invalid escape sequence "..esc)
+						error{msg="invalid escape sequence "..esc}
 					end
 				end
 			else
@@ -244,13 +244,14 @@ function Tokenizer:consume()
 	local status, nexttoken, nexttokentype = coroutine.resume(self.gettokenthread)
 	-- detect errors
 	if not status then
-		error('\n'
-			.."token="..tostring(self.token)..'\n'
-			.."tokentype="..tostring(self.tokentype)..'\n'
-			..self:getpos()
-			.."tokenizer failed with error: "..tostring(nexttoken)..'\n'
-			..debug.traceback(self.gettokenthread)
-		)
+		local err = nexttoken
+		error{
+			msg = err.msg,
+			token = self.token,
+			tokentype = self.tokentype,
+			pos = self:getpos(),
+			traceback = debug.traceback(self.gettokenthread),
+		}
 	end
 	self.nexttoken = nexttoken
 	self.nexttokentype = nexttokentype

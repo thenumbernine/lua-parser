@@ -8,7 +8,7 @@ local code = [[local result = aa and bb]]
 -- [[
 local code = path'../lua/parser.lua':read()
 --]]
-local parser = LuaParser(code, nil, code)
+local parser = LuaParser(code, code)
 
 local tree = parser.tree
 local datareader = parser.t.r

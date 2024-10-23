@@ -96,7 +96,7 @@ end
 
 function DataReader:mustbe(pattern, msg)
 --DEBUG(parser.base.datareader): print('DataReader:mustbe', require 'ext.tolua'(pattern))
-	if not self:canbe(pattern) then error(msg or "expected "..pattern) end
+	if not self:canbe(pattern) then error{msg=msg or "expected "..pattern} end
 	return self.lasttoken
 end
 
@@ -107,7 +107,7 @@ function DataReader:readblock()
 	self:canbe'\n'	-- if the first character is a newline then skip it
 	local start = self.index
 	if not self:seekpast('%]'..eq..'%]') then
-		error("expected closing block")
+		error{msg="expected closing block"}
 	end
 	-- since we used seekpast, the string isn't being captured as a lasttoken ...
 	--return self:setlasttoken(self.data:sub(start, self.index - #self.lasttoken - 1))

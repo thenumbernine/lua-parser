@@ -26,17 +26,14 @@ if version == '5.1' then
 	-- but nevermind, both luajit 2.0.5 and 2.1.0 choke in weird places on the minify tests
 end
 
-print(version)
+print('version', version)
 for line in io.lines'minify_tests.txt' do
 	local expected = not line:match('FAIL_'..version)
 	local luaResults = not not (loadstring or load)(line)
 	assert(expected == luaResults, "test failed: your Lua version doesn't match the baseline:\nline "..line.." expected "..tostring(expected).." but got "..tostring(luaResults))
-	local parserResults, errorString = xpcall(function()
-		return parser.parse(line)
-	end, function(err)
-		return err..'\n'..debug.traceback()
-	end)
-	print(expected, parserResults, line)
+	local parserResults, errorString = parser.parse(line)
+	parserResults = not not parserResults
+	print('expected', expected, 'results', parserResults, 'line', line)
 	if expected ~= parserResults then
 		error("parser failed to recreate identical string.  error="..errorString)
 	end

@@ -5,7 +5,7 @@
 Parses to an abstract syntax tree representation.
 Call tostring() on the AST to get equivalent Lua code.
 
-Works for versions 5.1 5.2 5.3 5.4 and maybe some luajit versions depending on their compatability.
+Works for versions ~~5.1 5.2~~ 5.3 5.4 and Luajit.  I broke <=5.2 compatability when I resorted to throwing objects for parse error reporting.
 
 AST also contains some functions like flatten() for use with optimizing / auto-inlining Lua.
 
@@ -16,12 +16,13 @@ See the tests folder for example usage.
 `Parser = require 'parser'`
 This will return the parser class.
 
-`Parser.parse(data[, version, source])`
+`result, msg = Parser.parse(data[, source, version, useluajit])`
 This parses the code in `data` and returns an `ast._block` object.
-This is shorthand for `Parser(data, version, source).tree`
-`version` is a string `'5.1', '5.2', '5.3'`, etc., corresponding to your Lua version.
+This is shorthand for `Parser(data, source, version, useluajit).tree`
+`version` is a string `'5.3', '5.4'`, etc., corresponding to your Lua version.
 The `Parser` object has a few more functions to it corresponding with internal use while parsing.
 `source` is a description of the source, i.e. filename, which is included in some nodes (functions) for information on where they are declared.
+Returns `result` in case of success.  If it encounters a parse error returns `false` and `msg` as what went wrong.
 
 `ast = require 'parser.lua.ast'`
 This is the AST (abstract syntax tree) library,
