@@ -41,7 +41,7 @@ function Parser:setData(data, source)
 	end))
 	if not result[1] then
 		if not parseError then error(result[2]) end	-- internal error
-		return false, parseError.msg, self.t:getpos()	-- parsed code error
+		return false, self.t:getpos()..': '..parseError.msg 	-- parsed code error
 	end
 
 	--
@@ -50,7 +50,7 @@ function Parser:setData(data, source)
 	self.ast.refreshparents(self.tree)
 
 	if self.t.token then
-		return nil, "expected eof, found "..self.t.token, self.t:getpos()
+		return false, self.t:getpos()..": expected eof, found "..self.t.token
 	end
 	return true
 end

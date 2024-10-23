@@ -29,16 +29,15 @@ local LuaAST = BaseAST:subclass()
 ast.node = LuaAST
 
 --[[
-TODO ... how to make tostring traversal - or any traversal for that matter - modular
-this needs to go with 'flatten'
-and honestly if we do save all tokens, that's an easy case for in-order traversal and for easily reconstructing the syntax / prettyprint / tostring()
+args:
+	maintainSpan = set to true to have the output maintain the input's span
 --]]
-
--- TODO subsequent toLua() impls have (consume) as an arg, and this is modular for expanding off toLua impls
--- but maybe change those names to 'toLua_recurse' or something
--- and keep a sole external function that provides consume()
 local slashNByte = ('\n'):byte()
-function LuaAST:serializeRecursiveMember(field)
+function LuaAST:serializeRecursiveMember(field, args)
+	local maintainSpan
+	if args then
+		maintainSpan = args.maintainSpan
+	end
 	local s = ''
 	-- :serialize() impl provided by child classes
 	-- :serialize() should call traversal in-order of parsing (why I want to make it auto and assoc wth the parser and grammar and rule-generated ast node classes)
@@ -71,7 +70,7 @@ function LuaAST:serializeRecursiveMember(field)
 			-- TODO here if you want ... pad lines and cols until we match the original location (or exceed it)
 			-- to do that, track appended strings to have a running line/col counter just like we do in parser
 			-- to do that, separate teh updatelinecol() in the parser to work outside datareader
-			if lastspan then
+			if maintainSpan and lastspan then
 				while line < lastspan.from.line do
 					append'\n'
 				end
@@ -102,8 +101,8 @@ function LuaAST:serializeRecursiveMember(field)
 	return s
 end
 
-function LuaAST:toLua()
-	return self:serializeRecursiveMember'toLua_recursive'
+function LuaAST:toLua(args)
+	return self:serializeRecursiveMember('toLua_recursive', args)
 end
 
 -- why distinguish toLua() and serialize(consume)?

@@ -144,13 +144,14 @@ function LuaParser:setData(data, source)
 	self.functionStack = table{'function-vararg'}
 
 	local result = table.pack(LuaParser.super.setData(self, data))
-	if not result[1] then return result:unpack() end
+	if not result[1] then
+		return result:unpack()
+	end
 
 	-- last verify that all gotos went to all labels
 	for _,g in pairs(self.gotos) do
 		if not self.labels[g.name] then
-			return nil,
-				"no visible label '"..g.name.."' for <goto> at line "..g.span.to.line
+			return false, "line "..g.span.to.line..": no visible label '"..g.name.."' for <goto>"
 		end
 	end
 	return true

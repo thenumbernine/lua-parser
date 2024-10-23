@@ -2,10 +2,10 @@
 require 'ext'
 local LuaParser = require 'parser.lua.parser'
 
---[[
+-- [[
 local code = [[local result = aa and bb]]
 --]]
--- [[
+--[[
 local code = path'../lua/parser.lua':read()
 --]]
 local parser = LuaParser(code, code)
@@ -19,7 +19,7 @@ local function printspan(x, tab)
 	tab = tab or ''
 	if x.type then
 		local reconstructed = x:toLua()
-		print(tab..'tostring():', reconstructed)
+		print(tab..'tostring():', string.trim(reconstructed))
 		local fromIndexSpan = code:sub(x.span.from.index, x.span.to.index)
 		print(tab..'span substr:', fromIndexSpan)
 		local fromTokenSpan = datareader.tokenhistory:sub(x.span.from.tokenIndex, x.span.to.tokenIndex):concat()
