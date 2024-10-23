@@ -21,7 +21,7 @@ dstpath:mkdir()
 local function rewrite(src, dst)
 	print(src..' => '..dst)
 	dst:getdir():mkdir(true)
-	assert(dst:write(tostring(LuaParser.parse((assert(src:read()))))))
+	assert(dst:write(LuaParser.parse((assert(src:read()))):toLua()))
 end
 
 -- find all lua files?  search the rockspec?

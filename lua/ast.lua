@@ -11,6 +11,7 @@ But using a namespace is definitely convenient, especially with all the member s
 tempting to replace the 'ast' namespace with just LuaAST itself, and keep the convention that keys beginning with `_` are subclasses...
 --]]
 local table = require 'ext.table'
+local assert = require 'ext.assert'
 local tolua = require 'ext.tolua'
 
 local BaseAST = require 'parser.base.ast'
@@ -33,38 +34,70 @@ this needs to go with 'flatten'
 and honestly if we do save all tokens, that's an easy case for in-order traversal and for easily reconstructing the syntax / prettyprint / tostring()
 --]]
 
-local function asttolua(x)
-	if not x.toLua_recursive then
-		error('asttolua called on non-ast object '..require 'ext.tolua'(x))
-	end
-	return x:toLua_recursive(asttolua)
-end
-
--- TODO subsequent toLua() impls have (apply) as an arg, and this is modular for expanding off toLua impls
+-- TODO subsequent toLua() impls have (consume) as an arg, and this is modular for expanding off toLua impls
 -- but maybe change those names to 'toLua_recurse' or something
--- and keep a sole external function that provides 'asttolua' as the apply() function
-function LuaAST:toLua()
+-- and keep a sole external function that provides consume()
+function LuaAST:serializeRecursiveMember(field)
+	local s = ''
 	-- :serialize() impl provided by child classes
 	-- :serialize() should call traversal in-order of parsing (why I want to make it auto and assoc wth the parser and grammar and rule-generated ast node classes)
-	-- that means serialize() itself should never call serialize() but only call the apply() function passed into it (for modularity's sake)
+	-- that means serialize() itself should never call serialize() but only call the consume() function passed into it (for modularity's sake)
 	-- it might mean i should capture all nodes too, even those that are fixed, like keywords and symbols, for the sake of reassmbling the syntax
-	return self:toLua_recursive(asttolua)
+	local consume
+	local lastspan
+	consume = function(x)
+		if type(x) == 'number' then
+			x = tostring(x)
+		end
+		if type(x) == 'string' then
+			-- here's our only string join
+
+			-- TODO here if you want ... pad lines and cols until we match the original location (or exceed it)
+			-- to do that, track appended strings to have a running line/col counter just like we do in parser
+			-- to do that, separate teh updatelinecol() in the parser to work outside datareader
+
+			-- if we have a name coming in, only insert a space if we were already at a name
+			local namelhs = s:sub(-1):match'[_%w]'
+			local namerhs = x:sub(1,1):match'[_%w]'
+			if namelhs and namerhs then
+				s = s .. ' '
+			elseif not namelhs and not namerhs then
+				-- TODO here for minification if you want
+				-- if we have a symbol coming in, only insert a space if we were already at a symbol and the two together would make a different valid symbol
+				-- you'll need to search back the # of the max length of any symbol ...
+				s = s .. ' '
+			end
+
+			s = s .. x
+		elseif type(x) == 'table' then
+			lastspan = x.span
+			assert.is(x, BaseAST)
+			assert.index(x, field)
+			x[field](x, consume)
+		else
+			error('here with unknown type '..type(x))
+		end
+	end
+	self[field](self, consume)
+	return s
 end
--- why distinguish toLua(apply) and serialize(apply)?
+
+function LuaAST:toLua()
+	return self:serializeRecursiveMember'toLua_recursive'
+end
+
+-- why distinguish toLua() and serialize(consume)?
 -- The need for this design pops up more in subclasses.
--- serialize(apply) is used by all language-serializations
--- toLua_recursive(apply) is for Lua-specific serialization (to-be-subclassed)
+-- serialize(consume) is used by all language-serializations
+-- toLua_recursive(consume) is for Lua-specific serialization (to-be-subclassed)
+-- I'm not sure if this is better than just using a fully separate table of serialization functions per node ...
 -- toLua() is the external API
-function LuaAST:toLua_recursive(apply)
-	return self:serialize(apply)
+function LuaAST:toLua_recursive(consume)
+	return self:serialize(consume)
 end
 
--- lua is the default serialization ... but change this function to change that
--- meant for external use
-function LuaAST:__tostring()
-	return self:toLua()
-end
-
+-- ok maybe it's not such a good idea to use tostring and serialization for the same purpose ...
+LuaAST.__tostring = string.nametostring
 
 function LuaAST:exec(...)
 	local code = self:toLua()
@@ -250,7 +283,7 @@ function LuaAST.flatten(f, varmap)
 		if type(n) == 'table'
 		and ast._call:isa(n)
 		then
-			local funcname = asttolua(n.func)	-- in case it's a var ... ? TODO modular asttolua => apply ?
+			local funcname = n.func:toLua()	-- in case it's a var ... ?
 			assert(funcname, "can't flatten a function with anonymous calls")
 			local f = varmap[funcname]
 			if f
@@ -276,44 +309,28 @@ function LuaAST.flatten(f, varmap)
 end
 ast.flatten = LuaAST.flatten
 
--- TODO something more flexible than this
-ast.spaceseparator = '\n'
-
---[[ Langfix hack here
--- ... that will eventually come down to parser, because it gives me more control over the serialization
--- Default table.concat will only convert numbers to strings and nothing else ...
--- You can disable the new path in langfix/ast.lua around line 33, and then switch this to the origianl table.concat, and all should work like it used to
-local function onlynumtostr(x)
-	if type(x) == 'number' then return tostring(x) end
-	return x
-end
-local function concat(t, sep)
-	if #t == 0 then return '' end
-	sep = onlynumtostr(sep)
-	local s = onlynumtostr(t[1])
-	for i=2,#t do
-		if sep then s = s .. sep end
-		s = s .. onlynumtostr(t[i])
+local function consumeconcat(consume, t, sep)
+	for i,x in ipairs(t) do
+		consume(x)
+		if sep and i < #t then
+			consume(sep)
+		end
 	end
-	return s
-end
---]]
--- [[ ... else, old and more efficient
-local concat = table.concat
---]]
-
-local function spacesep(stmts, apply)
-	return concat(table.mapi(stmts, apply), ast.spaceseparator)
 end
 
-local function commasep(exprs, apply)
-	return concat(table.mapi(exprs, apply), ',')
+local function spacesep(stmts, consume)
+	consumeconcat(consume, stmts)
+end
+
+local function commasep(exprs, consume)
+	consumeconcat(consume, exprs, ',')
 end
 
 local function nodeclass(type, parent, args)
 	parent = parent or LuaAST
 	local cl = parent:subclass(args)
 	cl.type = type
+	cl.__name = type
 	ast['_'..type] = cl
 	return cl
 end
@@ -342,8 +359,8 @@ function _block:init(...)
 		self[i] = select(i, ...)
 	end
 end
-function _block:serialize(apply)
-	return spacesep(self, apply)
+function _block:serialize(consume)
+	spacesep(self, consume)
 end
 
 --statements
@@ -356,8 +373,10 @@ function _assign:init(vars, exprs)
 	self.vars = table(vars)
 	self.exprs = table(exprs)
 end
-function _assign:serialize(apply)
-	return commasep(self.vars, apply)..'='..commasep(self.exprs, apply)
+function _assign:serialize(consume)
+	commasep(self.vars, consume)
+	consume'='
+	commasep(self.exprs, consume)
 end
 
 -- should we impose construction constraints _do(_block(...))
@@ -371,8 +390,10 @@ function _do:init(...)
 		self[i] = select(i, ...)
 	end
 end
-function _do:serialize(apply)
-	return 'do '..spacesep(self, apply)..' end'
+function _do:serialize(consume)
+	consume'do'
+	spacesep(self, consume)
+	consume'end'
 end
 
 local _while = nodeclass('while', _stmt)
@@ -383,8 +404,12 @@ function _while:init(cond, ...)
 		self[i] = select(i, ...)
 	end
 end
-function _while:serialize(apply)
-	return 'while '..apply(self.cond)..' do '..spacesep(self, apply)..' end'
+function _while:serialize(consume)
+	consume'while'
+	consume(self.cond)
+	consume'do'
+	spacesep(self, consume)
+	consume'end'
 end
 
 local _repeat = nodeclass('repeat', _stmt)
@@ -395,8 +420,11 @@ function _repeat:init(cond, ...)
 		self[i] = select(i, ...)
 	end
 end
-function _repeat:serialize(apply)
-	return 'repeat '..spacesep(self, apply)..' until '..apply(self.cond)
+function _repeat:serialize(consume)
+	consume'repeat'
+	spacesep(self, consume)
+	consume'until'
+	consume(self.cond)
 end
 
 --[[
@@ -431,14 +459,18 @@ function _if:init(cond,...)
 	self.elseifs = elseifs
 	self.elsestmt = elsestmt
 end
-function _if:serialize(apply)
-	local s = 'if '..apply(self.cond)..' then '..spacesep(self, apply)
+function _if:serialize(consume)
+	consume'if'
+	consume(self.cond)
+	consume'then'
+	spacesep(self, consume)
 	for _,ei in ipairs(self.elseifs) do
-		s = s .. apply(ei)
+		consume(ei)
 	end
-	if self.elsestmt then s = s .. apply(self.elsestmt) end
-	s = s .. ' end'
-	return s
+	if self.elsestmt then
+		consume(self.elsestmt)
+	end
+	consume'end'
 end
 
 -- aux for _if
@@ -450,8 +482,11 @@ function _elseif:init(cond,...)
 		self[i] = select(i, ...)
 	end
 end
-function _elseif:serialize(apply)
-	return ' elseif '..apply(self.cond)..' then '..spacesep(self, apply)
+function _elseif:serialize(consume)
+	consume'elseif'
+	consume(self.cond)
+	consume'then'
+	spacesep(self, consume)
 end
 
 -- aux for _if
@@ -461,8 +496,9 @@ function _else:init(...)
 		self[i] = select(i, ...)
 	end
 end
-function _else:serialize(apply)
-	return ' else '..spacesep(self, apply)
+function _else:serialize(consume)
+	consume'else'
+	spacesep(self, consume)
 end
 
 local _foreq = nodeclass('foreq', _stmt)
@@ -482,11 +518,20 @@ function _foreq:init(var,min,max,step,...)
 		self[i] = select(i, ...)
 	end
 end
-function _foreq:serialize(apply)
-	local s = 'for '..apply(self.var)..' = '..apply(self.min)..','..apply(self.max)
-	if self.step then s = s..','..apply(self.step) end
-	s = s .. ' do '..spacesep(self, apply)..' end'
-	return s
+function _foreq:serialize(consume)
+	consume'for'
+	consume(self.var)
+	consume'='
+	consume(self.min)
+	consume','
+	consume(self.max)
+	if self.step then
+		consume','
+		consume(self.step)
+	end
+	consume'do'
+	spacesep(self, consume)
+	consume'end'
 end
 
 -- TODO 'vars' should be a node itself
@@ -498,8 +543,14 @@ function _forin:init(vars, iterexprs, ...)
 		self[i] = select(i, ...)
 	end
 end
-function _forin:serialize(apply)
-	return 'for '..commasep(self.vars, apply)..' in '..commasep(self.iterexprs, apply)..' do '..spacesep(self, apply)..' end'
+function _forin:serialize(consume)
+	consume'for'
+	commasep(self.vars, consume)
+	consume'in'
+	commasep(self.iterexprs, consume)
+	consume'do'
+	spacesep(self, consume)
+	consume'end'
 end
 
 local _function = nodeclass('function', _stmt)
@@ -517,13 +568,16 @@ function _function:init(name, args, ...)
 		self[i] = select(i, ...)
 	end
 end
-function _function:serialize(apply)
-	local s = 'function '
-	if self.name then s = s .. apply(self.name) end
-	s = s .. '('
-		.. concat(table.mapi(self.args, apply), ',')
-		.. ') ' .. spacesep(self, apply) .. ' end'
-	return s
+function _function:serialize(consume)
+	consume'function'
+	if self.name then
+		consume(self.name)
+	end
+	consume'('
+	commasep(self.args, consume)
+	consume')'
+	spacesep(self, consume)
+	consume'end'
 end
 
 -- aux for _function
@@ -534,8 +588,9 @@ function _arg:init(index)
 end
 -- params need to know what function they're in
 -- so they can reference the function's arg names
-function _arg:serialize(apply)
-	return 'arg'..self.index
+function _arg:serialize(consume)
+	consume'arg'
+	consume(self.index)
 end
 
 -- _local can be an assignment of multi vars to muli exprs
@@ -553,11 +608,13 @@ function _local:init(exprs)
 	end
 	self.exprs = table(assert(exprs))
 end
-function _local:serialize(apply)
+function _local:serialize(consume)
 	if ast._function:isa(self.exprs[1]) or ast._assign:isa(self.exprs[1]) then
-		return 'local '..apply(self.exprs[1])
+		consume'local'
+		consume(self.exprs[1])
 	else
-		return 'local '..commasep(self.exprs, apply)
+		consume'local'
+		commasep(self.exprs, consume)
 	end
 end
 
@@ -568,12 +625,13 @@ local _return = nodeclass('return', _stmt)
 function _return:init(...)
 	self.exprs = {...}
 end
-function _return:serialize(apply)
-	return 'return '..commasep(self.exprs, apply)
+function _return:serialize(consume)
+	consume'return'
+	commasep(self.exprs, consume)
 end
 
 local _break = nodeclass('break', _stmt)
-function _break:serialize(apply) return 'break' end
+function _break:serialize(consume) consume'break' end
 
 local _call = nodeclass'call'
 -- TODO 'args' a node of its own ?  or store it in self[i] ?
@@ -581,49 +639,54 @@ function _call:init(func, ...)
 	self.func = func
 	self.args = {...}
 end
-function _call:serialize(apply)
+function _call:serialize(consume)
 	if #self.args == 1
 	and (ast._table:isa(self.args[1])
 		or ast._string:isa(self.args[1])
 	) then
-		return apply(self.func)..apply(self.args[1])
+		consume(self.func)
+		consume(self.args[1])
+	else
+		consume(self.func)
+		consume'('
+		commasep(self.args, consume)
+		consume')'
 	end
-	return apply(self.func)..'('..commasep(self.args, apply)..')'
 end
 
 local _nil = nodeclass'nil'
 _nil.const = true
-function _nil:serialize(apply) return 'nil' end
+function _nil:serialize(consume) consume'nil' end
 
 local _boolean = nodeclass'boolean'
 
 local _true = nodeclass('true', _boolean)
 _true.const = true
 _true.value = true
-function _true:serialize(apply) return 'true' end
+function _true:serialize(consume) consume'true' end
 
 local _false = nodeclass('false', _boolean)
 _false.const = true
 _false.value = false
-function _false:serialize(apply) return 'false' end
+function _false:serialize(consume) consume'false' end
 
 local _number = nodeclass'number'
 -- TODO just self[1] instead of self.value ?
 -- but this breaks convention with _boolean having .value as its static member value.
 -- I could circumvent this with _boolean subclass [1] holding the value ...
 function _number:init(value) self.value = value end
-function _number:serialize(apply) return self.value end
+function _number:serialize(consume) consume(tostring(self.value)) end
 
 local _string = nodeclass'string'
 -- TODO just self[1] instead of self.value
 function _string:init(value) self.value = value end
-function _string:serialize(apply)
+function _string:serialize(consume)
 	-- use ext.tolua's string serializer
-	return tolua(self.value)
+	consume(tolua(self.value))
 end
 
 local _vararg = nodeclass'vararg'
-function _vararg:serialize(apply) return '...' end
+function _vararg:serialize(consume) consume'...' end
 
 -- TODO 'args' a node, or flatten into self[i] ?
 local _table = nodeclass'table'	-- single-element assigns
@@ -632,22 +695,33 @@ function _table:init(...)
 		self[i] = select(i, ...)
 	end
 end
-function _table:serialize(apply)
-	return '{'..concat(table.mapi(self, function(arg)
+function _table:serialize(consume)
+	consume'{'
+	for i,arg in ipairs(self) do
 		-- if it's an assign then wrap the vars[1] with []'s
 		if ast._assign:isa(arg) then
-			assert(#arg.vars == 1)
-			assert(#arg.exprs == 1)
+			assert.len(arg.vars, 1)
+			assert.len(arg.exprs, 1)
 			-- TODO if it's a string and name and not a keyword then use our shorthand
 			-- but for this , I should put the Lua keywords in somewhere that both the AST and Tokenizer can see them
 			-- and the Tokenizer builds separate lists depending on the version (so I guess a table per version?)
-			return (ast.keyIsName(arg.vars[1], self.parser)
-					and arg.vars[1].value
-					or '[' .. apply(arg.vars[1]) .. ']'
-				)..'='..apply(arg.exprs[1])
+			if ast.keyIsName(arg.vars[1], self.parser) then
+				consume(arg.vars[1].value)
+			else
+				consume'['
+				consume(arg.vars[1])
+				consume']'
+			end
+			consume'='
+			consume(arg.exprs[1])
+		else
+			consume(arg)
 		end
-		return apply(arg)
-	end), ',')..'}'
+		if i < #self then
+			consume','
+		end
+	end
+	consume'}'
 end
 
 -- OK here is the classic example of the benefits of fields over integers:
@@ -661,13 +735,14 @@ function _var:init(name, attrib)
 	self.name = name
 	self.attrib = attrib
 end
-function _var:serialize(apply)
-	local s = self.name
+function _var:serialize(consume)
+	consume(self.name)
 	if self.attrib then
 		-- the extra space is needed for assignments, otherwise lua5.4 `local x<const>=1` chokes while `local x<const> =1` works
-		s = s .. '<'..self.attrib..'> '
+		consume'<'
+		consume(self.attrib)
+		consume'>'
 	end
-	return s
 end
 
 local _par = nodeclass'par'
@@ -676,8 +751,10 @@ ast._parenthesis = nil
 function _par:init(expr)
 	self.expr = expr
 end
-function _par:serialize(apply)
-	return '('..apply(self.expr)..')'
+function _par:serialize(consume)
+	consume'('
+	consume(self.expr)
+	consume')'
 end
 
 local _index = nodeclass'index'
@@ -692,12 +769,18 @@ function _index:init(expr,key)
 	end
 	self.key = key
 end
-function _index:serialize(apply)
+function _index:serialize(consume)
 	if ast.keyIsName(self.key, self.parser) then
 		-- the use a .$key instead of [$key]
-		return apply(self.expr)..'.'..self.key.value
+		consume(self.expr)
+		consume'.'
+		consume(self.key.value)
+	else
+		consume(self.expr)
+		consume'['
+		consume(self.key)
+		consume']'
 	end
-	return apply(self.expr)..'['..apply(self.key)..']'
 end
 
 -- this isn't the () call itself, this is just the : dereference
@@ -711,8 +794,10 @@ function _indexself:init(expr,key)
 	--key = ast._string(key)
 	self.key = assert(key)
 end
-function _indexself:serialize(apply)
-	return apply(self.expr)..':'..self.key
+function _indexself:serialize(consume)
+	consume(self.expr)
+	consume':'
+	consume(self.key)
 end
 
 local _op = nodeclass'op'
@@ -722,8 +807,14 @@ function _op:init(...)
 		self[i] = select(i, ...)
 	end
 end
-function _op:serialize(apply)
-	return concat(table.mapi(self, apply), ' '..self.op..' ') -- spaces required for 'and' and 'or'
+function _op:serialize(consume)
+	for i,x in ipairs(self) do
+		consume(x)
+		if i < #self then
+			-- spaces required for 'and' and 'or'
+			consume(self.op)
+		end
+	end
 end
 
 for _,info in ipairs{
@@ -768,8 +859,9 @@ for _,info in ipairs{
 			self[i] = select(i, ...)
 		end
 	end
-	function cl:serialize(apply)
-		return ' '..self.op..' '..apply(self[1])	-- spaces required for 'not'
+	function cl:serialize(consume)
+		consume(self.op)
+		consume(self[1])	-- spaces required for 'not'
 	end
 end
 
@@ -777,157 +869,19 @@ local _goto = nodeclass('goto', _stmt)
 function _goto:init(name)
 	self.name = name
 end
-function _goto:serialize(apply)
-	return 'goto '..self.name
+function _goto:serialize(consume)
+	consume'goto'
+	consume(self.name)
 end
 
 local _label = nodeclass('label', _stmt)
 function _label:init(name)
 	self.name = name
 end
-function _label:serialize(apply)
-	return '::'..self.name..'::'
+function _label:serialize(consume)
+	consume'::'
+	consume(self.name)
+	consume'::'
 end
-
---[[
-function building and eventually reconstructing and inlining
-
-TODO full-on AST:
-
-f = _function(
-		'vec3.add',
-		{'a','b'},
-		-- rest is stmts
-		_return(
-			_call(_var('vec3'),
-				add(index(param(1),1), index(param(2),1)),
-				add(index(param(1),2), index(param(2),2)),
-				add(index(param(1),3), index(param(2),3)),
-			)
-		)
-	}
-
-	-- becomes --
-
-	"function vec3.add(a,b)
-		return vec3(
-			a[1] + b[1],
-			a[2] + b[2],
-			a[3] + b[3])
-	end"
-
-	-- convert + to -
-	traverseRecurse(f, function(n)
-		if ast._add:isa(n) then n.type = 'sub' end
-	end
-
-	-- then we do a tree-descent with replace rule:
-	traverseRecurse(f, function(n)
-		if ast._param:isa(n) and n.param == 2 then
-			n.param = 1
-		end
-	end)
-	-- and that's how dot() becomes lenSq()
-
-	-- inline a function
-	traverseRecurse(f, function(n)
-		if ast._call:isa(n) then
-			local inline = clonetree(n.func.body)
-			-- first scope/local declare args
-			local vars = {}
-			for i=#n.args,1,-1 do
-				local arg = n.args[i]
-				local v = var()
-				table.insert(vars, v)
-				table.insert(inline, 1, localassign(v, arg))			-- names are all anonymous, just specify the var and assignment value.	 local() for declaring vars only, assign() for assigning them only, and localassign() for both?  or should i nest the two cmds?
-			end
-			-- then convert the body
-			traverseRecurse(inline, function(v)
-				if ast._param:isa(v) then
-					return vars[v.param]
-				end
-			end)
-			return inline
-		end
-	end)
-
-	--[=[
-	make a list ... check it twice ...
-
-	block		- statement block
-		[1]...[n] - array of stmt objects
-		.tostring = table.concat(block, ' ')
-
-statements:
-	assign		- assignment operation
-		.vars	- array of var objects
-		.exprs	- array of expressions
-		.tostring = table.concat(map(vars, 'name'), ',')..'='..table.concat(exprs, ',')
-
-	do			- do / end block wrapper
-		[1]...[n] - array of stmt objects
-		.tostring = 'do '..table.concat(do, ' ')..' end'
-
-	while
-		.cond	- condition expression
-		[1]...[n] - statements to execute
-		.tostring = 'while '..cond..' do '..table.concat(tostring, ' ')..' end'
-
-	repeat
-		.cond	- condition expression
-		[1]...[n] - statements to execute
-		.tostring = 'repeat '..table.concat(tostring, ' ')..' until '..cond
-
-	-- this could be prettier if we just had 'else' as a var, and did a special-case reinterpret for else->if's
-	-- but it would also have more nodes...
-	if
-		.cond		- condition expression
-		[1]...[n] - statements if this condition option works
-		.elseifs	- array of 'elseif' condition options
-			.cond	- condition expression
-			[1]...[n] - statements if this condition option works
-		.else		- statements to execute if all other condition options fail
-		.tostring = 'if '..cond..' then '..table.concat(if, ' ')..
-					table.concat(
-						map(elseifs or {}, function(ei) return " elseif "..ei.cond.." then "..table.concat(stmts, " ") end),
-						' ')..
-					map(else or {}, function(else) return " else "..table.concat(else, ' ') end)
-
-	-- for =
-	-- for in
-	-- local function
-	-- local
-
-last-statements:
-	return		- returns a list of expressions
-		.exprs
-		.tostring = 'return '..table.concat(exprs, ',')
-
-	break		- breaks out of the current loop
-
-
-	stmt	general parent class of all statements
-
-
-	block
-		[1]...[n]: array of stmt objects
-		-tostring: "do "..all statement's tostring().." end"
-
-	func
-		-name - string of function name.  optional.
-		-args - array of strings of argument names
-		-body - block of the statements in the function body
-
-
-
-	--]=]
-
-	-- we can similarly insert debug.traceback EVERYWHERE something gets referenced
-	so that I CAN GET STACK TRACES FROM ERRORS IN COROUTINES
-
-
-then we could do tree traversing and graph inferencing
-and do some real inline optimization
---]]
 
 return ast
