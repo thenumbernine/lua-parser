@@ -203,10 +203,11 @@ function LuaParser:parse_stat()
 	if self:canbe('local', 'keyword') then
 		local ffrom = self:getloc()
 		if self:canbe('function', 'keyword') then
-			local name = self:mustbe(nil, 'name')
+			local namevar = self:parse_var()
+			if not namevar then error{msg="expected name"} end
 			return self:node('_local', {
 				self:makeFunction(
-					self:node('_var', name),
+					namevar,
 					table.unpack((assert(self:parse_funcbody(), {msg="expected function body"})))
 				):setspan{from = ffrom , to = self:getloc()}
 			}):setspan{from = from , to = self:getloc()}
@@ -382,10 +383,9 @@ end
 
 
 function LuaParser:parse_funcname()
-	if not self:canbe(nil, 'name') then return end
 	local from = self:getloc()
-	local name = self:node('_var', self.lasttoken)
-		:setspan{from = from, to = self:getloc()}
+	local name = self:parse_var()
+	if not name then return end
 	while self:canbe('.', 'symbol') do
 		local sfrom = self.t:getloc()
 		name = self:node('_index',
@@ -401,6 +401,7 @@ function LuaParser:parse_funcname()
 	return name
 end
 
+-- parses a varialbe name, without attribs, and returns it in a '_var' node
 function LuaParser:parse_var()
 	local from = self:getloc()
 	local name = self:canbe(nil, 'name')
@@ -590,11 +591,9 @@ function LuaParser:parse_prefixexp()
 		self:mustbe(')', 'symbol')
 		prefixexp = self:node('_par', exp)
 			:setspan{from = from, to = self:getloc()}
-	elseif self:canbe(nil, 'name') then
-		prefixexp = self:node('_var', self.lasttoken)
-			:setspan{from = from, to = self:getloc()}
 	else
-		return
+		prefixexp = self:parse_var()
+		if not prefixexp then return end
 	end
 
 	while true do
@@ -689,12 +688,10 @@ function LuaParser:parse_parlist()	-- matches namelist() with ... as a terminato
 				:setspan{from = from, to = self:getloc()}
 		}
 	end
-	local name = self:canbe(nil, 'name')
-	if not name then return end
-	local names = table{
-		self:node('_var', name)
-			:setspan{from = from, to = self:getloc()}
-	}
+
+	local namevar = self:parse_var()
+	if not namevar then return end
+	local names = table{namevar}
 	while self:canbe(',', 'symbol') do
 		from = self:getloc()
 		if self:canbe('...', 'symbol') then
@@ -704,10 +701,9 @@ function LuaParser:parse_parlist()	-- matches namelist() with ... as a terminato
 			)
 			return names
 		end
-		names:insert(
-			self:node('_var', (self:mustbe(nil, 'name')))
-				:setspan{from = from, to = self:getloc()}
-		)
+		local namevar = self:parse_var()
+		if not namevar then error{msg="expected name"} end
+		names:insert(namevar)
 	end
 	return names
 end
