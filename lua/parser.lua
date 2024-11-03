@@ -640,7 +640,7 @@ function LuaParser:parse_args()
 		return {
 			self:node('_string', self.lasttoken)
 				:setspan{from = from, to = self:getloc()}
-			}
+		}
 	end
 
 	local tableconstructor = self:parse_tableconstructor()

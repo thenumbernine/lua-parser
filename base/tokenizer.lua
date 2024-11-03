@@ -246,7 +246,7 @@ function Tokenizer:consume()
 	if not status then
 		local err = nexttoken
 		error{
-			msg = err.msg,
+			msg = err,
 			token = self.token,
 			tokentype = self.tokentype,
 			pos = self:getpos(),
