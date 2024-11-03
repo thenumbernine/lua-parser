@@ -401,23 +401,24 @@ function LuaParser:parse_funcname()
 	return name
 end
 
-function LuaParser:parse_namelist()
+function LuaParser:parse_var()
 	local from = self:getloc()
 	local name = self:canbe(nil, 'name')
 	if not name then return end
-	local names = table{
-		self:node('_var', name)
-			:setspan{from = from, to = self:getloc()}
-	}
+	return self:node('_var', name)
+		:setspan{from=from, to=self:getloc()}
+end
+
+function LuaParser:parse_namelist()
+	local var = self:parse_var()
+	if not var then return end
+	local names = table{var}
 	while self:canbe(',', 'symbol') do
-		from = self:getloc()
-		names:insert(
-			self:node('_var', (self:mustbe(nil, 'name')))
-				:setspan{from = from, to = self:getloc()}
-		)
+		names:insert((assert(self:parse_var(), {msg="expected name"})))
 	end
 	return names
 end
+
 -- same as above but with optional attributes
 
 function LuaParser:parse_attnamelist()
