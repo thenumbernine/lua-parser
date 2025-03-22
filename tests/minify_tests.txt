@@ -526,6 +526,7 @@ a = -b + -c 		-- (-b) + (-c)
 a = b ^ -c			-- b ^ (-c)
 a = -b ^ c			-- -(b ^ c)
 a = -b ^ -c			-- -(b ^ (-c))
+a;                              		-- FAIL_5.1 FAIL_5.2 FAIL_5.3 FAIL_5.4
 ;                                       -- FAIL_5.1
 do ; end                                -- FAIL_5.1
 while 1 do ; end                        -- FAIL_5.1
