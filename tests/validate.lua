@@ -23,11 +23,11 @@ if version == '5.1' then
 	-- [[
 	if jit then version = '5.2' end
 	--]]
-	-- but nevermind, both luajit 2.0.5 and 2.1.0 choke in weird places on the minify tests
+	-- but nevermind, both luajit 2.0.5 and 2.1.0 choke in weird places on the validate tests
 end
 
 print('version', version)
-for line in io.lines'minify_tests.txt' do
+for line in io.lines'validate.txt' do
 	local expected = not line:match('FAIL_'..version)
 	local luaResults = not not (loadstring or load)(line)
 	assert(expected == luaResults, "test failed: your Lua version doesn't match the baseline:\nline "..line.." expected "..tostring(expected).." but got "..tostring(luaResults))
