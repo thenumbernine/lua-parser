@@ -117,9 +117,9 @@ function LuaParser:init(data, version, source, useluajit)
 			unaryLHS = true,
 			rules = {
 				{token='not', className='_not'},
-				{token='#', className='_len'},
+				{token='#', className='_len'},	-- only a 5.1+ token
 				{token='-', className='_unm'},
-				{token='~', className='_bnot'},	-- only a 5.3 token
+				{token='~', className='_bnot'},	-- only a 5.3+ token
 			},
 		},
 		{
@@ -169,20 +169,20 @@ end
 function LuaParser:parse_chunk()
 	local from = self:getloc()
 	local stmts = table()
+	if self.version >= '5.2' or self.useluajit then
+		-- preceding ;'s allowed
+		while self:canbe(';', 'symbol') do end
+	end
 	repeat
 		local stmt = self:parse_stat()
 		if not stmt then break end
 		stmts:insert(stmt)
-		if self.version == '5.1' then
-			self:canbe(';', 'symbol')
-		end
+		self:canbe(';', 'symbol')
 	until false
 	local laststat = self:parse_retstat()
 	if laststat then
 		stmts:insert(laststat)
-		if self.version == '5.1' then
-			self:canbe(';', 'symbol')
-		end
+		self:canbe(';', 'symbol')
 	end
 	return self:node('_block', table.unpack(stmts))
 		:setspan{from = from, to = self:getloc()}
@@ -196,9 +196,6 @@ function LuaParser:parse_block(blockName)
 end
 
 function LuaParser:parse_stat()
-	if self.version >= '5.2' then
-		repeat until not self:canbe(';', 'symbol')
-	end
 	local from = self:getloc()
 	if self:canbe('local', 'keyword') then
 		local ffrom = self:getloc()
@@ -356,15 +353,12 @@ function LuaParser:parse_retstat()
 	local from = self:getloc()
 	-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
 	-- that means only handle 'break' here in 5.1
-	if self.version == '5.1' and self:canbe('break', 'keyword') then
+	if self.version <= '5.1' and self:canbe('break', 'keyword') then
 		return self:parse_break()
 			:setspan{from = from, to = self:getloc()}
 	end
 	if self:canbe('return', 'keyword') then
 		local explist = self:parse_explist() or {}
-		if self.version >= '5.2' then
-			self:canbe(';', 'symbol')
-		end
 		return self:node('_return', table.unpack(explist))
 			:setspan{from = from, to = self:getloc()}
 	end
@@ -503,7 +497,8 @@ function LuaParser:parse_expr_precedenceTable(i)
 					return level.name == rule.nextLevel
 				end) or error{msg="couldn't find precedence level named "..tostring(rule.nextLevel)}
 			end
-			return self:node(rule.className, (assert(self:parse_expr_precedenceTable(nextLevel), {msg='unexpected symbol'})))
+			local a = assert(self:parse_expr_precedenceTable(nextLevel), {msg='unexpected symbol'})
+			return self:node(rule.className, a)
 				:setspan{from = from, to = self:getloc()}
 		end
 		return self:parse_expr_precedenceTable(i+1)
@@ -543,6 +538,7 @@ function LuaParser:parse_subexp()
 
 	local from = self:getloc()
 	if self:canbe('...', 'symbol') then
+		if self.version == '5.0' then error{msg="unexpected symbol near '...'"} end
 		assert.eq(self.functionStack:last(), 'function-vararg', {msg='unexpected symbol'})
 		return self:node('_vararg')
 			:setspan{from = from, to = self:getloc()}
@@ -711,6 +707,10 @@ end
 function LuaParser:parse_tableconstructor()
 	local from = self:getloc()
 	if not self:canbe('{', 'symbol') then return end
+	if self.version == '5.0' then
+		-- despite what the 5.0 syntax says, it looks like the 5.0 parser will parse and ignore a leading semicolon as valid: {; 1, 2, 3, 4}
+		self:canbe(';', 'symbol')
+	end
 	local fields = self:parse_fieldlist()
 	self:mustbe('}', 'symbol')
 	return self:node('_table', table.unpack(fields or {}))

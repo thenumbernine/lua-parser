@@ -23,7 +23,7 @@ funcname ::= Name {'.' Name} [':' Name] ;
 
 varlist ::= var {',' var} ;
 
-var ::=  Name
+var ::= Name
 	| prefixexp '[' exp ']'
 	| prefixexp '.' Name
 	;
@@ -32,7 +32,7 @@ namelist ::= Name {',' Name} ;
 
 explist ::= {exp ','} exp ;
 
-exp ::= 	'nil'
+exp ::= 'nil'
 	| 'false'
 	| 'true'
 	| Numeral
@@ -50,11 +50,11 @@ prefixexp ::= var
 	| '(' exp ')'
 	;
 
-functioncall ::= 	prefixexp args
+functioncall ::= prefixexp args
 	| prefixexp ':' Name args
 	;
 
-args ::= 	'(' [explist] ')'
+args ::= '(' [explist] ')'
 	| tableconstructor
 	| LiteralString
 	;

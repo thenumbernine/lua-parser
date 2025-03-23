@@ -19,8 +19,13 @@ function LuaTokenizer:initSymbolsAndKeywords(version, useluajit)
 	self.version = assert(version)
 	self.useluajit = useluajit
 	
-	for w in ([[... .. == ~= <= >= + - * / % ^ # < > = ( ) { } [ ] ; : , .]]):gmatch('%S+') do
+	for w in ([[... .. == ~= <= >= + - * / ^ < > = ( ) { } [ ] ; : , .]]):gmatch('%S+') do
 		self.symbols:insert(w)
+	end
+
+	if version >= '5.1' then
+		self.symbols:insert'#'
+		self.symbols:insert'%'
 	end
 
 	for w in ([[and break do else elseif end false for function if in local nil not or repeat return then true until while]]):gmatch('%S+') do
@@ -36,7 +41,7 @@ function LuaTokenizer:initSymbolsAndKeywords(version, useluajit)
 		self.keywords['goto'] = true
 	end
 	
-	if version >= '5.3' then
+	if version >= '5.3' and not useluajit then
 		self.symbols:insert'//'
 		self.symbols:insert'~'
 		self.symbols:insert'&'
