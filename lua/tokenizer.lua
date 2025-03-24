@@ -41,7 +41,7 @@ function LuaTokenizer:initSymbolsAndKeywords(version, useluajit)
 		self.keywords['goto'] = true
 	end
 	
-	if version >= '5.3' and not useluajit then
+	if version >= '5.3' then -- and not useluajit then ... setting this fixes some validation tests, but setting it breaks langfix+luajit ... TODO straighten out parser/version configuration
 		self.symbols:insert'//'
 		self.symbols:insert'~'
 		self.symbols:insert'&'
