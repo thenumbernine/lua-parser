@@ -264,6 +264,8 @@ Some more useful functions in AST:
 - `ast.traverse`
 - `ast.nodeclass(type, parent, args)`
 - `ast.tostringmethod` = this specifies the serialization method.  It is used to look up the serializer stored in `ast.tostringmethods`
+- `parser.load_xform` works with my `ext.load` shim load layer to allow you to modify the AST of all subsequent loaded Lua code.
+
 
 ### TODO:
 
@@ -281,13 +283,4 @@ Some more useful functions in AST:
 - https://github.com/thenumbernine/lua-ext
 - https://github.com/thenumbernine/lua-template
 
-While I was at it, I added a require() replacement for parsing Lua scripts and registering callbacks,
-so any other script can say `"require 'parser.load_xform':insert(function(tree) ... modify the parse tree ... end)"`
-and voila, Lua preprocessor in Lua!
-
-`minify_tests.txt` taken from the tests at https://github.com/stravant/LuaMinify
-
-I tested this by parsing itself,
-then using the parsed & reconstructed version to parse itself,
-then using the parsed & reconstructed version to parse the parsed & reconstructed version,
-then using the 2x parsed & reconstructed version to parse itself
+`validate-key.txt` originally taken from `minify_tests.txt` at https://github.com/stravant/LuaMinify
