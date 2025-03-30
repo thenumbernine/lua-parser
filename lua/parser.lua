@@ -233,16 +233,18 @@ function LuaParser:parse_stat()
 			local explist = assert(self:parse_explist(), {msg="expected exp list"})
 			assert.ge(#explist, 2, {msg="bad for loop"})
 			assert.le(#explist, 3, {msg="bad for loop"})
+			local doloc = self:getloc()
 			self:mustbe('do', 'keyword')
 			local block = assert(self:parse_block'for =', {msg="for loop expected block"})
-			self:mustbe('end', 'keyword')
+			self:mustbe('end', 'keyword', 'do', doloc)
 			return self:node('_foreq', namelist[1], explist[1], explist[2], explist[3], table.unpack(block))
 				:setspan{from = from, to = self:getloc()}
 		elseif self:canbe('in', 'keyword') then
 			local explist = assert(self:parse_explist(), {msg="expected expr list"})
+			local doloc = self:getloc()
 			self:mustbe('do', 'keyword')
 			local block = assert(self:parse_block'for in', {msg="expected block"})
-			self:mustbe('end', 'keyword')
+			self:mustbe('end', 'keyword', 'do', doloc)
 			return self:node('_forin', namelist, explist, table.unpack(block))
 				:setspan{from = from, to = self:getloc()}
 		else
@@ -270,7 +272,7 @@ function LuaParser:parse_stat()
 					:setspan{from = efrom, to = self:getloc()}
 			)
 		end
-		self:mustbe('end', 'keyword')
+		self:mustbe('end', 'keyword', 'if', from)
 		return self:node('_if', cond, table.unpack(stmts))
 			:setspan{from = from, to = self:getloc()}
 	elseif self:canbe('repeat', 'keyword') then
@@ -283,14 +285,15 @@ function LuaParser:parse_stat()
 		):setspan{from = from, to = self:getloc()}
 	elseif self:canbe('while', 'keyword') then
 		local cond = assert(self:parse_exp(), {msg='unexpected symbol'})
+		local doloc = self:getloc()
 		self:mustbe('do', 'keyword')
 		local block = assert(self:parse_block'while', {msg='expected block'})
-		self:mustbe('end', 'keyword')
+		self:mustbe('end', 'keyword', 'do', doloc)
 		return self:node('_while', cond, table.unpack(block))
 			:setspan{from = from, to = self:getloc()}
 	elseif self:canbe('do', 'keyword') then
 		local block = assert(self:parse_block(), {msg='expected block'})
-		self:mustbe('end', 'keyword')
+		self:mustbe('end', 'keyword', 'do', from)
 		return self:node('_do', table.unpack(block))
 			:setspan{from = from, to = self:getloc()}
 	elseif self.version >= '5.2' then
@@ -664,6 +667,7 @@ end
 -- returns a table of ... first element is a table of args, rest of elements are the body statements
 
 function LuaParser:parse_funcbody()
+	local funcloc = self:getloc()
 	if not self:canbe('(', 'symbol') then return end
 	local args = self:parse_parlist() or table()
 	local lastArg = args:last()
@@ -672,7 +676,7 @@ function LuaParser:parse_funcbody()
 	self.functionStack:insert(functionType)
 	local block = self:parse_block(functionType)
 	assert.eq(self.functionStack:remove(), functionType)
-	self:mustbe('end', 'keyword')
+	self:mustbe('end', 'keyword', 'function', funcloc)
 	return table{args, table.unpack(block)}
 end
 

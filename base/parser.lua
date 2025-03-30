@@ -41,7 +41,7 @@ function Parser:setData(data, source)
 	end))
 	if not result[1] then
 		if not parseError then error(result[2]) end	-- internal error
-		return false, self.t:getpos()..': '..parseError.msg 	-- parsed code error
+		return false, self.t:getpos()..': '..tostring(parseError.msg) 	-- parsed code error
 	end
 
 	--
@@ -73,11 +73,16 @@ function Parser:canbe(token, tokentype)	-- token is optional
 	end
 end
 
-function Parser:mustbe(token, tokentype)
+function Parser:mustbe(token, tokentype, opentoken, openloc)
 	local lasttoken, lasttokentype = self.t.token, self.t.tokentype
 	self.lasttoken, self.lasttokentype = self:canbe(token, tokentype)
 	if not self.lasttoken then
-		error{msg="expected token="..tolua(token).." tokentype="..tolua(tokentype).." but found token="..tolua(lasttoken).." type="..tolua(lasttokentype)}
+		local msg = "expected token="..tolua(token).." tokentype="..tolua(tokentype)
+			.." but found token="..tolua(lasttoken).." type="..tolua(lasttokentype)
+		if opentoken then
+			msg = msg .. " to close "..tolua(opentoken).." at line="..openloc.line..' col='..openloc.col
+		end
+		error{msg=msg}
 	end
 	return self.lasttoken, self.lasttokentype
 end
