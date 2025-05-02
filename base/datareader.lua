@@ -68,19 +68,19 @@ function DataReader:setlasttoken(lasttoken, skipped)
 	self.lasttoken = lasttoken
 	if self.tracktokens then
 		if skipped and #skipped > 0 then
---DEBUG(parser.base.datareader): print('SKIPPED', require 'ext.tolua'(skipped))
+--DEBUG: print('SKIPPED', require 'ext.tolua'(skipped))
 			self.tokenhistory:insert(skipped)
 		end
---DEBUG(parser.base.datareader): print('TOKEN', require 'ext.tolua'(self.lasttoken))
+--DEBUG: print('TOKEN', require 'ext.tolua'(self.lasttoken))
 		self.tokenhistory:insert(self.lasttoken)
---DEBUG(parser.base.datareader paranoid): local sofar = self.tokenhistory:concat()
---DEBUG(parser.base.datareader paranoid): assert.eq(self.data:sub(1,#sofar), sofar, "source vs tokenhistory")
+--DEBUG(paranoid): local sofar = self.tokenhistory:concat()
+--DEBUG(paranoid): assert.eq(self.data:sub(1,#sofar), sofar, "source vs tokenhistory")
 	end
 	return self.lasttoken
 end
 
 function DataReader:seekpast(pattern)
---DEBUG(parser.base.datareader): print('DataReader:seekpast', require 'ext.tolua'(pattern))
+--DEBUG: print('DataReader:seekpast', require 'ext.tolua'(pattern))
 	local from, to = self.data:find(pattern, self.index)
 	if not from then return end
 	local skipped = self.data:sub(self.index, from - 1)
@@ -90,12 +90,12 @@ function DataReader:seekpast(pattern)
 end
 
 function DataReader:canbe(pattern)
---DEBUG(parser.base.datareader): print('DataReader:canbe', require 'ext.tolua'(pattern))
+--DEBUG: print('DataReader:canbe', require 'ext.tolua'(pattern))
 	return self:seekpast('^'..pattern)
 end
 
 function DataReader:mustbe(pattern, msg)
---DEBUG(parser.base.datareader): print('DataReader:mustbe', require 'ext.tolua'(pattern))
+--DEBUG: print('DataReader:mustbe', require 'ext.tolua'(pattern))
 	if not self:canbe(pattern) then error{msg=msg or "expected "..pattern} end
 	return self.lasttoken
 end
