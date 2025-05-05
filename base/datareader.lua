@@ -33,13 +33,6 @@ function DataReader:init(data)
 	-- TODO this isn't robust against different OS file formats.  maybe switching back to determining line number offline / upon error encounter is better than trying to track it while we parse.
 	self.line = 1
 	self.col = 1
-
-	-- skip past initial #'s
-	if self.data:sub(1,1) == '#' then
-		if not self:seekpast'\n' then
-			self:seekpast'$'
-		end
-	end
 end
 
 function DataReader:done()

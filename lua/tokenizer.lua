@@ -51,6 +51,18 @@ function LuaTokenizer:initSymbolsAndKeywords(version, useluajit)
 	end
 end
 
+function LuaTokenizer:init(...)
+	LuaTokenizer.super.init(self, ...)
+
+	-- skip past initial #'s
+	local r = self.r
+	if r.data:sub(1,1) == '#' then
+		if not r:seekpast'\n' then
+			r:seekpast'$'
+		end
+	end
+end
+
 function LuaTokenizer:parseHexNumber(...)
 	local r = self.r
 	-- if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
