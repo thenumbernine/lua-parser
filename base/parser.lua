@@ -47,7 +47,11 @@ function Parser:setData(data, source)
 	--
 	-- now that we have the tree, build parents
 	-- ... since I don't do that during construction ...
-	self.ast.refreshparents(self.tree)
+	if self.ast
+	and self.ast.refreshparents
+	then
+		self.ast.refreshparents(self.tree)
+	end
 
 	if self.t.token then
 		return false, self.t:getpos()..": expected eof, found "..self.t.token
