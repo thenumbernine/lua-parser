@@ -21,12 +21,12 @@ function Parser:setData(data, source)
 	data = tostring(data)
 	self.source = source
 	local t = self:buildTokenizer(data)
-	t:start()
 	self.t = t
 
 	-- default entry point for parsing data sources
 	local parseError
 	local result = table.pack(xpcall(function()
+		t:start()
 		self.tree = self:parseTree()
 	end, function(err)
 		-- throw an object if it's an error parsing the code
