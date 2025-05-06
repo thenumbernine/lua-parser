@@ -50,16 +50,16 @@ function Tokenizer:parseComment()
 	if self:parseBlockComment() then return true end
 
 	if r:canbe(self.singleLineComment) then
-		--local start = r.index - #r.lasttoken
+--DEBUG:local start = r.index - #r.lasttoken
 		-- read line
 		if not r:seekpast'\n' then
 			r:seekpast'$'
 		end
-		--local commentstr = r.data:sub(start, r.index-1)
+--DEBUG:local commentstr = r.data:sub(start, r.index-1)
 		-- TODO how to insert comments into the AST?  should they be their own nodes?
 		-- should all whitespace be its own node, so the original code text can be reconstructed exactly?
 		--coroutine.yield(commentstr, 'comment')
---DEBUG: print('read comment ['..start..','..(r.index-1)..']:'..commentstr)
+--DEBUG:print('read comment ['..start..','..(r.index-1)..']:'..commentstr)
 		return true
 	end
 end
