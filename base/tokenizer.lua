@@ -45,14 +45,15 @@ end
 Tokenizer.singleLineComment = string.patescape'--'
 function Tokenizer:parseComment()
 	local r = self.r
+
+	-- TODO try block comments first
+	if self:parseBlockComment() then return true end
+
 	if r:canbe(self.singleLineComment) then
-local start = r.index - #r.lasttoken
-		-- read block comment if it exists
-		if not r:readblock() then
-			-- read line otherwise
-			if not r:seekpast'\n' then
-				r:seekpast'$'
-			end
+		--local start = r.index - #r.lasttoken
+		-- read line
+		if not r:seekpast'\n' then
+			r:seekpast'$'
 		end
 		--local commentstr = r.data:sub(start, r.index-1)
 		-- TODO how to insert comments into the AST?  should they be their own nodes?
@@ -63,19 +64,9 @@ local start = r.index - #r.lasttoken
 	end
 end
 
+-- parse a string
 function Tokenizer:parseString()
-	if self:parseBlockString() then return true end
 	if self:parseQuoteString() then return true end
-end
-
--- Lua-specific block strings
-function Tokenizer:parseBlockString()
-	local r = self.r
-	if r:readblock() then
---DEBUG: print('read multi-line string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
-		coroutine.yield(r.lasttoken, 'string')
-		return true
-	end
 end
 
 -- TODO this is a very lua function though it's in parser/base/ and not parser/lua/ ...

@@ -18,7 +18,7 @@ function LuaTokenizer:initSymbolsAndKeywords(version, useluajit)
 	-- store later for parseHexNumber
 	self.version = assert(version)
 	self.useluajit = useluajit
-	
+
 	for w in ([[... .. == ~= <= >= + - * / ^ < > = ( ) { } [ ] ; : , .]]):gmatch('%S+') do
 		self.symbols:insert(w)
 	end
@@ -40,7 +40,7 @@ function LuaTokenizer:initSymbolsAndKeywords(version, useluajit)
 		self.symbols:insert'::'	-- for labels .. make sure you insert it before ::
 		self.keywords['goto'] = true
 	end
-	
+
 	if version >= '5.3' then -- and not useluajit then ... setting this fixes some validation tests, but setting it breaks langfix+luajit ... TODO straighten out parser/version configuration
 		self.symbols:insert'//'
 		self.symbols:insert'~'
@@ -62,6 +62,51 @@ function LuaTokenizer:init(...)
 		end
 	end
 end
+
+function LuaTokenizer:parseBlockComment()
+	local r = self.r
+	-- look for --[====[
+	if not r:canbe('%-%-%[=*%[') then return end
+	self:readRestOfBlock(r.lasttoken)
+	return true
+end
+
+function LuaTokenizer:parseString()
+	-- try to parse block strings
+	if self:parseBlockString() then return true end
+
+	-- try for base's quote strings
+	return LuaTokenizer.super.parseString(self)
+end
+
+-- Lua-specific block strings
+function LuaTokenizer:parseBlockString()
+	local r = self.r
+	if not r:canbe('%[=*%[') then return end
+	if self:readRestOfBlock(r.lasttoken) then
+--DEBUG: print('read multi-line string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
+		coroutine.yield(r.lasttoken, 'string')
+		return true
+	end
+end
+
+function LuaTokenizer:readRestOfBlock(startToken)
+	local r = self.r
+
+	local eq = assert(startToken:match('%[(=*)%[$'))
+	-- skip whitespace?
+	r:canbe'\n'	-- if the first character is a newline then skip it
+	local start = r.index
+	if not r:seekpast('%]'..eq..'%]') then
+		error{msg="expected closing block"}
+	end
+	-- since we used seekpast, the string isn't being captured as a lasttoken ...
+	--return r:setlasttoken(r.data:sub(start, r.index - #r.lasttoken - 1))
+	-- ... so don't push it into the history here, just assign it.
+	r.lasttoken = r.data:sub(start, r.index - #r.lasttoken - 1)
+	return r.lasttoken
+end
+
 
 function LuaTokenizer:parseHexNumber(...)
 	local r = self.r

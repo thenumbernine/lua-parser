@@ -93,20 +93,4 @@ function DataReader:mustbe(pattern, msg)
 	return self.lasttoken
 end
 
--- TODO this one is specific to Lua languages ... I could move it into tokenizer ...
-function DataReader:readblock()
-	if not self:canbe('%[=*%[') then return end
-	local eq = assert(self.lasttoken:match('^%[(=*)%[$'))
-	self:canbe'\n'	-- if the first character is a newline then skip it
-	local start = self.index
-	if not self:seekpast('%]'..eq..'%]') then
-		error{msg="expected closing block"}
-	end
-	-- since we used seekpast, the string isn't being captured as a lasttoken ...
-	--return self:setlasttoken(self.data:sub(start, self.index - #self.lasttoken - 1))
-	-- ... so don't push it into the history here, just assign it.
-	self.lasttoken = self.data:sub(start, self.index - #self.lasttoken - 1)
-	return self.lasttoken
-end
-
 return DataReader
