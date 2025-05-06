@@ -25,7 +25,7 @@ state.xforms:insert(function(d, source)
 	end
 	local tree = parser.tree
 	for _,cb in ipairs(callbacks) do
-		cb(tree)
+		cb(tree, source)
 	end
 	local code = tree:toLua()
 
