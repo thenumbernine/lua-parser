@@ -31,6 +31,8 @@ function Parser:setData(data, source)
 	end, function(err)
 		-- throw an object if it's an error parsing the code
 		if type(err) == 'table' then
+--DEBUG:print('got parse error:', require'ext.tolua'(err))
+--DEBUG:print(debug.traceback())
 			parseError = err
 			return
 		else
@@ -93,6 +95,7 @@ end
 
 -- make new ast node, assign it back to the parser (so it can tell what version / keywords / etc are being used)
 function Parser:node(index, ...)
+--DEBUG:print('Parser:node', index, ...)
 	local node = self.ast[index](...)
 	node.parser = self
 	return node
