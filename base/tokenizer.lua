@@ -236,7 +236,9 @@ function Tokenizer:consume()
 	-- detect errors
 	if not status then
 		local err = nexttoken
+		--[[ enabling this to forward errors wasn't so foolproof...
 		if type(err) == 'table' then
+		--]]
 			-- then repackage it and include our parser state
 			error{
 				msg = err.msg,
@@ -245,10 +247,12 @@ function Tokenizer:consume()
 				pos = self:getpos(),
 				traceback = debug.traceback(self.gettokenthread),
 			}
+		--[[ see above
 		else
 			-- internal error - just rethrow
 			error(err)
 		end
+		--]]
 	end
 	self.nexttoken = nexttoken
 	self.nexttokentype = nexttokentype
