@@ -116,6 +116,7 @@ end
 -- used with self.parseExprPrecedenceRulesAndClassNames
 -- example in parser/lua/parser.lua
 function Parser:parse_expr_precedenceTable(i)
+--DEBUG:print('Parser:parse_expr_precedenceTable', i, 'of', #self.parseExprPrecedenceRulesAndClassNames, 'token=', self.t.token)
 	local precedenceLevel = self.parseExprPrecedenceRulesAndClassNames[i]
 	if precedenceLevel.unaryLHS then
 		local from = self:getloc()
@@ -131,7 +132,12 @@ function Parser:parse_expr_precedenceTable(i)
 			return self:node(rule.className, a)
 				:setspan{from = from, to = self:getloc()}
 		end
-		return self:parse_expr_precedenceTable(i+1)
+
+		if i < #self.parseExprPrecedenceRulesAndClassNames then
+			return self:parse_expr_precedenceTable(i+1)
+		else
+			return self:parse_subexp()
+		end
 	else
 		-- binary operation by default
 		local a
