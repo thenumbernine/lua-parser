@@ -66,7 +66,7 @@ end
 function LuaTokenizer:parseBlockComment()
 	local r = self.r
 	-- look for --[====[
-	if not r:canbe('%-%-%[=*%[') then return end
+	if not r:canbe'%-%-%[=*%[' then return end
 	self:readRestOfBlock(r.lasttoken)
 	return true
 end
@@ -82,7 +82,7 @@ end
 -- Lua-specific block strings
 function LuaTokenizer:parseBlockString()
 	local r = self.r
-	if not r:canbe('%[=*%[') then return end
+	if not r:canbe'%[=*%[' then return end
 	if self:readRestOfBlock(r.lasttoken) then
 --DEBUG: print('read multi-line string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
 		coroutine.yield(r.lasttoken, 'string')
