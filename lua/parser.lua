@@ -481,13 +481,6 @@ function LuaParser:getNextRule(rules)
 	end
 end
 
-function LuaParser:getClassNameForRule(rules)
-	local rule = self:getNextRule(rules)
-	if rule then
-		return rule.className
-	end
-end
-
 function LuaParser:parse_expr_precedenceTable(i)
 	local precedenceLevel = self.parseExprPrecedenceRulesAndClassNames[i]
 	if precedenceLevel.unaryLHS then
