@@ -101,4 +101,61 @@ function Parser:node(index, ...)
 	return node
 end
 
+-- used with parse_expr_precedenceTable
+function Parser:getNextRule(rules)
+	for _, rule in pairs(rules) do
+		-- TODO why even bother separate it in canbe() ?
+		local keywordOrSymbol = rule.token:match'^[_a-zA-Z][_a-zA-Z0-9]*$' and 'keyword' or 'symbol'
+		if self:canbe(rule.token, keywordOrSymbol) then
+			return rule
+		end
+	end
+end
+
+-- a useful tool for specifying lots of precedence level rules
+-- used with self.parseExprPrecedenceRulesAndClassNames
+-- example in parser/lua/parser.lua
+function Parser:parse_expr_precedenceTable(i)
+	local precedenceLevel = self.parseExprPrecedenceRulesAndClassNames[i]
+	if precedenceLevel.unaryLHS then
+		local from = self:getloc()
+		local rule = self:getNextRule(precedenceLevel.rules)
+		if rule then
+			local nextLevel = i
+			if rule.nextLevel then
+				nextLevel = self.parseExprPrecedenceRulesAndClassNames:find(nil, function(level)
+					return level.name == rule.nextLevel
+				end) or error{msg="couldn't find precedence level named "..tostring(rule.nextLevel)}
+			end
+			local a = assert(self:parse_expr_precedenceTable(nextLevel), {msg='unexpected symbol'})
+			return self:node(rule.className, a)
+				:setspan{from = from, to = self:getloc()}
+		end
+		return self:parse_expr_precedenceTable(i+1)
+	else
+		-- binary operation by default
+		local a
+		if i < #self.parseExprPrecedenceRulesAndClassNames then
+			a = self:parse_expr_precedenceTable(i+1)
+		else
+			a = self:parse_subexp()
+		end
+		if not a then return end
+		local rule = self:getNextRule(precedenceLevel.rules)
+		if rule then
+			local nextLevel = i
+			if rule.nextLevel then
+				nextLevel = self.parseExprPrecedenceRulesAndClassNames:find(nil, function(level)
+					return level.name == rule.nextLevel
+				end) or error{msg="couldn't find precedence level named "..tostring(rule.nextLevel)}
+			end
+			a = self:node(rule.className, a, (assert(self:parse_expr_precedenceTable(nextLevel), {msg='unexpected symbol'})))
+				:setspan{from = a.span.from, to = self:getloc()}
+		end
+		return a
+	end
+end
+
+
+
 return Parser
