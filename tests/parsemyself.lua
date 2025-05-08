@@ -34,7 +34,7 @@ for _,info in ipairs{
 	{dir='parser/base', files={'ast.lua', 'datareader.lua', 'parser.lua', 'tokenizer.lua'}},
 	{dir='parser/lua', files={'ast.lua', 'parser.lua', 'tokenizer.lua'}},
 	{dir='parser/grammar', files={'parser.lua', 'tokenizer.lua'}},
-	{dir='parser/tests', files={'flatten.lua', 'lua_to_c.lua', 'lua_to_c_test.lua', 'minify_tests.lua', 'parse.lua', 'parsemyself.lua', 'spantest.lua'}},
+	{dir='parser/tests', files={'flatten.lua', 'lua_to_c.lua', 'lua_to_c_test.lua', 'validate.lua', 'parse.lua', 'parsemyself.lua', 'spantest.lua'}},
 } do
 	for _,fn in ipairs(info.files) do
 		rewrite(srcpath/info.dir/fn, dstpath/info.dir/fn)
