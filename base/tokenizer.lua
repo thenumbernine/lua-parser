@@ -29,7 +29,7 @@ function Tokenizer:init(data, ...)
 			elseif self:parseNumber() then
 			elseif self:parseSymbol() then
 			else
-				error{msg="unknown token "..r.data:sub(r.index)}
+				error{msg="unknown token "..r.data:sub(r.index, r.index+20)..(r.index+20 > #r.data and '...' or '')}
 			end
 		end
 	end)
@@ -236,13 +236,19 @@ function Tokenizer:consume()
 	-- detect errors
 	if not status then
 		local err = nexttoken
-		error{
-			msg = err,
-			token = self.token,
-			tokentype = self.tokentype,
-			pos = self:getpos(),
-			traceback = debug.traceback(self.gettokenthread),
-		}
+		if type(err) == 'table' then
+			-- then repackage it and include our parser state
+			error{
+				msg = err.msg,
+				token = self.token,
+				tokentype = self.tokentype,
+				pos = self:getpos(),
+				traceback = debug.traceback(self.gettokenthread),
+			}
+		else
+			-- internal error - just rethrow
+			error(err)
+		end
 	end
 	self.nexttoken = nexttoken
 	self.nexttokentype = nexttokentype
