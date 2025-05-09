@@ -44,7 +44,7 @@ function DataReader:updatelinecol()
 	if not self.lastUpdateLineColIndex then
 		self.lastUpdateLineColIndex = 1
 	else
-		assert(self.index >= self.lastUpdateLineColIndex)
+		assert.ge(self.index, self.lastUpdateLineColIndex)
 	end
 	for i=self.lastUpdateLineColIndex,self.index do
 		if self.data:byte(i,i) == slashNByte then
