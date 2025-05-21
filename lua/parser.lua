@@ -659,8 +659,21 @@ function LuaParser:parse_tableconstructor()
 	end
 	local fields = self:parse_fieldlist()
 	self:mustbe('}', 'symbol')
-	return self:node('_table', table.unpack(fields or {}))
-		:setspan{from = from, to = self:getloc()}
+	--[[ ok design flaw I didn't foresee when trying to unify all the AST as indexed children (like my symmath project)
+	-- if this _table's children are too big then you can't unpack it into the ctor args...
+	local result = self:node('_table', table.unpack(fields or {}))
+	--]]
+	-- [[ ... so instead, manually insert them...
+	-- but a later TODO might be to go back to accepting a table-of-children.
+	local result = self:node'_table'
+	if fields then
+		for i,field in ipairs(fields) do
+			result[i] = field
+		end
+	end
+	--]]
+	result:setspan{from = from, to = self:getloc()}
+	return result
 end
 
 function LuaParser:parse_fieldlist()
