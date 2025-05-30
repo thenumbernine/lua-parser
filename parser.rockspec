@@ -10,7 +10,7 @@ description = {
 	license = "MIT"
 }
 dependencies = {
-	"lua >= 5.1"
+	"lua ~> 5.3"
 }
 build = {
 	type = "builtin",
@@ -26,11 +26,8 @@ build = {
 		["parser.lua.ast"] = "lua/ast.lua",
 		["parser.lua.parser"] = "lua/parser.lua",
 		["parser.lua.tokenizer"] = "lua/tokenizer.lua",
-		["parser.tests.flatten"] = "tests/flatten.lua",
-		["parser.tests.lua_to_c"] = "tests/lua_to_c.lua",
-		["parser.tests.lua_to_c_test"] = "tests/lua_to_c_test.lua",
-		["parser.tests.minify_tests"] = "tests/minify_tests.lua",
-		["parser.tests.parse"] = "tests/parse.lua",
-		["parser.tests.spantest"] = "tests/spantest.lua",
 	},
+	copy_directories = {
+		"tests"
+	}
 }
