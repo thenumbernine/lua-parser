@@ -77,8 +77,8 @@ function LuaAST:serializeRecursiveMember(field, args)
 			end
 
 			-- if we have a name coming in, only insert a space if we were already at a name
-			local namelhs = s:sub(-1):match'[_%w]'
-			local namerhs = x:sub(1,1):match'[_%w]'
+			local namelhs = s:sub(-1):match'[_%w%.]'
+			local namerhs = x:sub(1,1):match'[_%w%.]'
 			if namelhs and namerhs then
 				append' '
 			elseif not namelhs and not namerhs then
