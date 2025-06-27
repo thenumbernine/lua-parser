@@ -38,7 +38,7 @@ end
 function Tokenizer:skipWhiteSpaces()
 	local r = self.r
 	r:canbe'%s+'
---DEBUG: if r.lasttoken then print('read space ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken) end
+--DEBUG(@5): if r.lasttoken then print('read space ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken) end
 end
 
 -- Lua-specific comments (tho changing the comment symbol is easy ...)
@@ -50,16 +50,16 @@ function Tokenizer:parseComment()
 	if self:parseBlockComment() then return true end
 
 	if r:canbe(self.singleLineComment) then
---DEBUG:local start = r.index - #r.lasttoken
+--DEBUG(@5):local start = r.index - #r.lasttoken
 		-- read line
 		if not r:seekpast'\n' then
 			r:seekpast'$'
 		end
---DEBUG:local commentstr = r.data:sub(start, r.index-1)
+--DEBUG(@5):local commentstr = r.data:sub(start, r.index-1)
 		-- TODO how to insert comments into the AST?  should they be their own nodes?
 		-- should all whitespace be its own node, so the original code text can be reconstructed exactly?
 		--coroutine.yield(commentstr, 'comment')
---DEBUG:print('read comment ['..start..','..(r.index-1)..']:'..commentstr)
+--DEBUG(@5):print('read comment ['..start..','..(r.index-1)..']:'..commentstr)
 		return true
 	end
 end
@@ -74,8 +74,8 @@ end
 function Tokenizer:parseQuoteString()
 	local r = self.r
 	if r:canbe'["\']' then
---DEBUG: print('read quote string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
---DEBUG: local start = r.index-#r.lasttoken
+--DEBUG(@5): print('read quote string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
+--DEBUG(@5): local start = r.index-#r.lasttoken
 		local quote = r.lasttoken
 		local s = table()
 		while true do
@@ -139,7 +139,7 @@ function Tokenizer:parseQuoteString()
 				s:insert(r.lasttoken)
 			end
 		end
---DEBUG: print('read quote string ['..start..','..(r.index-#r.lasttoken)..']: '..r.data:sub(start, r.index-#r.lasttoken))
+--DEBUG(@5): print('read quote string ['..start..','..(r.index-#r.lasttoken)..']: '..r.data:sub(start, r.index-#r.lasttoken))
 		coroutine.yield(s:concat(), 'string')
 		return true
 	end
@@ -149,7 +149,7 @@ end
 function Tokenizer:parseName()
 	local r = self.r
 	if r:canbe'[%a_][%w_]*' then	-- name
---DEBUG: print('read name ['..(r.index-#r.lasttoken)..', '..r.index..']: '..r.lasttoken)
+--DEBUG(@5): print('read name ['..(r.index-#r.lasttoken)..', '..r.index..']: '..r.lasttoken)
 		coroutine.yield(r.lasttoken, self.keywords[r.lasttoken] and 'keyword' or 'name')
 		return true
 	end
@@ -163,13 +163,13 @@ function Tokenizer:parseNumber()
 	then 								-- otherwise I want it to continue to the next 'else'
 		-- lua doesn't consider the - to be a part of the number literal
 		-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
---DEBUG: local start = r.index
+--DEBUG(@5): local start = r.index
 		if r:canbe'0[xX]' then
 			self:parseHexNumber()
 		else
 			self:parseDecNumber()
 		end
---DEBUG: print('read number ['..start..', '..r.index..']: '..r.data:sub(start, r.index-1))
+--DEBUG(@5): print('read number ['..start..', '..r.index..']: '..r.data:sub(start, r.index-1))
 		return true
 	end
 end
@@ -197,7 +197,7 @@ function Tokenizer:parseSymbol()
 	-- see if it matches any symbols
 	for _,symbol in ipairs(self.symbols) do
 		if r:canbe(string.patescape(symbol)) then
---DEBUG: print('read symbol ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
+--DEBUG(@5): print('read symbol ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
 			coroutine.yield(r.lasttoken, 'symbol')
 			return true
 		end

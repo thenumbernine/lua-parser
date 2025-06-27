@@ -84,7 +84,7 @@ function LuaTokenizer:parseBlockString()
 	local r = self.r
 	if not r:canbe'%[=*%[' then return end
 	if self:readRestOfBlock(r.lasttoken) then
---DEBUG: print('read multi-line string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
+--DEBUG(@5): print('read multi-line string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
 		coroutine.yield(r.lasttoken, 'string')
 		return true
 	end

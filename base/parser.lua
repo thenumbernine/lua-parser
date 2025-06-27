@@ -31,8 +31,8 @@ function Parser:setData(data, source)
 	end, function(err)
 		-- throw an object if it's an error parsing the code
 		if type(err) == 'table' then
---DEBUG:print('got parse error:', require'ext.tolua'(err))
---DEBUG:print(debug.traceback())
+--DEBUG(@5):print('got parse error:', require'ext.tolua'(err))
+--DEBUG(@5):print(debug.traceback())
 			parseError = err
 			return
 		else
@@ -95,7 +95,7 @@ end
 
 -- make new ast node, assign it back to the parser (so it can tell what version / keywords / etc are being used)
 function Parser:node(index, ...)
---DEBUG:print('Parser:node', index, ...)
+--DEBUG(@5):print('Parser:node', index, ...)
 	local node = self.ast[index](...)
 	node.parser = self
 	return node
@@ -116,7 +116,7 @@ end
 -- used with self.parseExprPrecedenceRulesAndClassNames
 -- example in parser/lua/parser.lua
 function Parser:parse_expr_precedenceTable(i)
---DEBUG:print('Parser:parse_expr_precedenceTable', i, 'of', #self.parseExprPrecedenceRulesAndClassNames, 'token=', self.t.token)
+--DEBUG(@5):print('Parser:parse_expr_precedenceTable', i, 'of', #self.parseExprPrecedenceRulesAndClassNames, 'token=', self.t.token)
 	local precedenceLevel = self.parseExprPrecedenceRulesAndClassNames[i]
 	if precedenceLevel.unaryLHS then
 		local from = self:getloc()
