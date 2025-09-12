@@ -117,7 +117,7 @@ function LuaTokenizer:parseHexNumber(...)
 		local numdots = #token:gsub('[^%.]','')
 		assert.le(numdots, 1, {msg='malformed number'})
 		local n = table{'0x', token}
-		if r:canbe'p' then
+		if r:canbe'p' or r:canbe'P' then
 			n:insert(r.lasttoken)
 			-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
 			n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
@@ -150,7 +150,7 @@ function LuaTokenizer:parseDecNumber()
 	local numdots = #token:gsub('[^%.]','')
 	assert.le(numdots, 1, {msg='malformed number'})
 	local n = table{token}
-	if r:canbe'e' then
+	if r:canbe'e' or r:canbe'E' then
 		n:insert(r.lasttoken)
 		n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
 	elseif numdots == 0 and self.useluajit then

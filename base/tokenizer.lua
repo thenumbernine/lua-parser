@@ -185,7 +185,7 @@ function Tokenizer:parseDecNumber()
 	local token = r:canbe'[%.%d]+'
 	assert.le(#token:gsub('[^%.]',''), 1, 'malformed number')
 	local n = table{token}
-	if r:canbe'e' then
+	if r:canbe'e' or r:canbe'E' then
 		n:insert(r.lasttoken)
 		n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
 	end
