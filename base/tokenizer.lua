@@ -187,7 +187,10 @@ function Tokenizer:parseDecNumber()
 	local n = table{token}
 	if r:canbe'e' or r:canbe'E' then
 		n:insert(r.lasttoken)
-		n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+		if r:canbe'[%+%-]' then
+			n:insert(r.lasttoken)
+		end
+		n:insert(r:mustbe('%d+', 'malformed number'))
 	end
 	coroutine.yield(n:concat(), 'number')
 end

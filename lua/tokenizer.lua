@@ -120,7 +120,10 @@ function LuaTokenizer:parseHexNumber(...)
 		if r:canbe'p' or r:canbe'P' then
 			n:insert(r.lasttoken)
 			-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
-			n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+			if r:canbe'[%+%-]' then
+				n:insert(r.lasttoken)
+			end
+			n:insert(r:mustbe('%d+', 'malformed number'))
 		elseif numdots == 0 and self.useluajit then
 			if r:canbe'LL' then
 				n:insert'LL'
@@ -152,7 +155,10 @@ function LuaTokenizer:parseDecNumber()
 	local n = table{token}
 	if r:canbe'e' or r:canbe'E' then
 		n:insert(r.lasttoken)
-		n:insert(r:mustbe('[%+%-]%d+', 'malformed number'))
+		if r:canbe'[%+%-]' then
+			n:insert(r.lasttoken)
+		end
+		n:insert(r:mustbe('%d+', 'malformed number'))
 	elseif numdots == 0 and self.useluajit then
 		if r:canbe'LL' then
 			n:insert'LL'
