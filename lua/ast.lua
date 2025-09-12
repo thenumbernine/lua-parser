@@ -31,12 +31,15 @@ ast.node = LuaAST
 --[[
 args:
 	maintainSpan = set to true to have the output maintain the input's span
+	prettyPrint = pretty print output
 --]]
 local slashNByte = ('\n'):byte()
 function LuaAST:serializeRecursiveMember(field, args)
 	local maintainSpan
+	local prettyPrint
 	if args then
 		maintainSpan = args.maintainSpan
+		prettyPrint = args.prettyPrint
 	end
 	local s = ''
 	-- :serialize() impl provided by child classes
@@ -48,6 +51,7 @@ function LuaAST:serializeRecursiveMember(field, args)
 	local index = 1
 	local consume
 	local lastspan
+	local tab = ''	-- only used by prettyPrint
 	consume = function(x)
 		if type(x) == 'number' then
 			x = tostring(x)
@@ -66,6 +70,25 @@ function LuaAST:serializeRecursiveMember(field, args)
 				index = index + #u
 				s = s .. u
 			end
+
+			if prettyPrint then
+				if x == 'function'
+				or x == 'if'
+				or x == 'elseif'
+				or x == 'else'
+				or f == 'do'
+				or f == 'for'
+				or f == 'while'
+				or f == 'repeat'
+				then
+					tab = tab .. '\t'
+				elseif x == 'end' then
+					tab = tab:sub(1,#tab-1)
+					append'\n'
+					append(tab)
+				end
+			end
+
 
 			-- TODO here if you want ... pad lines and cols until we match the original location (or exceed it)
 			-- to do that, track appended strings to have a running line/col counter just like we do in parser
@@ -92,6 +115,14 @@ function LuaAST:serializeRecursiveMember(field, args)
 			lastspan = x.span
 			assert.is(x, BaseAST)
 			assert.index(x, field)
+
+			if prettyPrint then
+				if ast._stmt:isa(x) then
+					consume'\n'
+					consume(tab)
+				end
+			end
+
 			x[field](x, consume)
 		else
 			error('here with unknown type '..type(x))
