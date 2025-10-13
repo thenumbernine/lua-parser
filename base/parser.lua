@@ -30,10 +30,10 @@ function Parser:setData(data, source)
 		self.tree = self:parseTree()
 	end, function(err)
 		-- throw an object if it's an error parsing the code
-		if type(err) == 'table' then
---DEBUG(@5):print('got parse error:', require'ext.tolua'(err))
---DEBUG(@5):print(debug.traceback())
-			parseError = err
+		parseError = err:match'MSG:(.*)'
+		if parseError then
+--DEBUG(%5):print('got parse error:', parseError)
+--DEBUG(%5):print(debug.traceback())
 			return
 		else
 			return err..'\n'
@@ -42,8 +42,8 @@ function Parser:setData(data, source)
 		end
 	end))
 	if not result[1] then
-		if not parseError then error(result[2]) end	-- internal error
-		return false, self.t:getpos()..': '..tostring(parseError.msg) 	-- parsed code error
+		if not parseError then error(result[2]) end			-- internal error
+		return false, self.t:getpos()..': '..parseError 	-- parsed code error
 	end
 
 	--
@@ -88,7 +88,7 @@ function Parser:mustbe(token, tokentype, opentoken, openloc)
 		if opentoken then
 			msg = msg .. " to close "..tolua(opentoken).." at line="..openloc.line..' col='..openloc.col
 		end
-		error{msg=msg}
+		error('MSG:'..msg)
 	end
 	return self.lasttoken, self.lasttokentype
 end
@@ -126,9 +126,9 @@ function Parser:parse_expr_precedenceTable(i)
 			if rule.nextLevel then
 				nextLevel = self.parseExprPrecedenceRulesAndClassNames:find(nil, function(level)
 					return level.name == rule.nextLevel
-				end) or error{msg="couldn't find precedence level named "..tostring(rule.nextLevel)}
+				end) or error("MSG:couldn't find precedence level named "..tostring(rule.nextLevel))
 			end
-			local a = assert(self:parse_expr_precedenceTable(nextLevel), {msg='unexpected symbol'})
+			local a = assert(self:parse_expr_precedenceTable(nextLevel), 'MSG:unexpected symbol')
 			a = self:node(rule.className, a)
 			if a.span then
 				a:setspan{from = a.span.from, to = self:getloc()}
@@ -156,9 +156,9 @@ function Parser:parse_expr_precedenceTable(i)
 			if rule.nextLevel then
 				nextLevel = self.parseExprPrecedenceRulesAndClassNames:find(nil, function(level)
 					return level.name == rule.nextLevel
-				end) or error{msg="couldn't find precedence level named "..tostring(rule.nextLevel)}
+				end) or error("MSG:couldn't find precedence level named "..tostring(rule.nextLevel))
 			end
-			a = self:node(rule.className, a, (assert(self:parse_expr_precedenceTable(nextLevel), {msg='unexpected symbol'})))
+			a = self:node(rule.className, a, (assert(self:parse_expr_precedenceTable(nextLevel), 'MSG:unexpected symbol')))
 			if a.span then
 				a:setspan{from = a.span.from, to = self:getloc()}
 			end

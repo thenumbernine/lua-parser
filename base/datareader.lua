@@ -89,7 +89,7 @@ end
 
 function DataReader:mustbe(pattern, msg)
 --DEBUG(@5): print('DataReader:mustbe', require 'ext.tolua'(pattern))
-	if not self:canbe(pattern) then error{msg=msg or "expected "..pattern} end
+	if not self:canbe(pattern) then error("MSG:expected "..pattern) end
 	return self.lasttoken
 end
 

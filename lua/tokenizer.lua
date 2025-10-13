@@ -98,7 +98,7 @@ function LuaTokenizer:readRestOfBlock(startToken)
 	r:canbe'\n'	-- if the first character is a newline then skip it
 	local start = r.index
 	if not r:seekpast('%]'..eq..'%]') then
-		error{msg="expected closing block"}
+		error"MSG:expected closing block"
 	end
 	-- since we used seekpast, the string isn't being captured as a lasttoken ...
 	--return r:setlasttoken(r.data:sub(start, r.index - #r.lasttoken - 1))
@@ -115,7 +115,7 @@ function LuaTokenizer:parseHexNumber(...)
 		-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
 		local token = r:canbe'[%.%da-fA-F]+'
 		local numdots = #token:gsub('[^%.]','')
-		assert.le(numdots, 1, {msg='malformed number'})
+		assert.le(numdots, 1, 'MSG:malformed number')
 		local n = table{'0x', token}
 		if r:canbe'p' or r:canbe'P' then
 			n:insert(r.lasttoken)
@@ -151,7 +151,7 @@ function LuaTokenizer:parseDecNumber()
 	local r = self.r
 	local token = r:canbe'[%.%d]+'
 	local numdots = #token:gsub('[^%.]','')
-	assert.le(numdots, 1, {msg='malformed number'})
+	assert.le(numdots, 1, 'MSG:malformed number')
 	local n = table{token}
 	if r:canbe'e' or r:canbe'E' then
 		n:insert(r.lasttoken)
