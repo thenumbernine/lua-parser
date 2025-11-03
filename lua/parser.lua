@@ -331,7 +331,7 @@ function LuaParser:parse_stat()
 
 	local prefixexp = self:parse_prefixexp()
 	if prefixexp then
-		if self.ast._call:isa(prefixexp) then 	-- function call
+		if prefixexp.canBeStat then 	-- function call
 			return prefixexp
 		else	-- varlist assignment
 			local vars = table{prefixexp}

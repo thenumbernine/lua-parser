@@ -684,6 +684,7 @@ local _break = nodeclass('break', _stmt)
 function _break:serialize(consume) consume'break' end
 
 local _call = nodeclass'call'
+_call.canBeStat = true
 -- TODO 'args' a node of its own ?  or store it in self[i] ?
 function _call:init(func, ...)
 	self.func = func
