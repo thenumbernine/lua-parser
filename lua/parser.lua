@@ -195,7 +195,8 @@ function LuaParser:parse_block(blockName)
 	return chunk
 end
 
-function LuaParser:parse_stat()
+-- I'm splitting the parse_stat rule into keyword-based stat and function-call stat...
+function LuaParser:parse_stat_keyword()
 	local from = self:getloc()
 	if self:canbe('local', 'keyword') then
 		local ffrom = self:getloc()
@@ -315,6 +316,11 @@ function LuaParser:parse_stat()
 			return l:setspan{from = from, to = self:getloc()}
 		end
 	end
+end
+
+function LuaParser:parse_stat()
+	local node = self:parse_stat_keyword()
+	if node then return node end
 
 	-- now we handle functioncall and varlist = explist rules
 
@@ -329,6 +335,7 @@ function LuaParser:parse_stat()
 	likewise with var, complain if it is a call
 	--]]
 
+	local from = self:getloc()
 	local prefixexp = self:parse_prefixexp()
 	if prefixexp then
 		if prefixexp.canBeStat then 	-- function call
