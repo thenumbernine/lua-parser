@@ -97,7 +97,12 @@ end
 function Parser:node(index, ...)
 --DEBUG(@5):print('Parser:node', index, ...)
 	local node = self.ast[index](...)
+
+	-- TODO pass 'parser' into the ctor instead of doing this ...
+	-- this is here so langfix loop nodes don't have to scan all their children
 	node.parser = self
+	if node.updateParser then node:updateParser() end
+
 	return node
 end
 
