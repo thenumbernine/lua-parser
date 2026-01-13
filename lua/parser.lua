@@ -20,7 +20,7 @@ function LuaParser.parse(data, source, ...)
 end
 
 -- TODO instead of version and useluajit, how about parseFlags, and enable/disable them depending on the version
-function LuaParser:init(data, version, source, useluajit)
+function LuaParser:init(data, source, version, useluajit)
 	self.version = version or _VERSION:match'^Lua (.*)$'
 	if useluajit == nil then
 		-- I could test for _G.jit's presence, but what if luajit is compiled with jit off but still has LL language feature on ...

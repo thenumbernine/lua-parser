@@ -89,7 +89,7 @@ for i,line in ipairs(lines) do
 
 			local LuaParser = require 'parser.lua.parser'
 			-- mannnn between parser.parse, Parser:init, Parser:setData, and parser/base/parser and parser/lua/parser, I need to clean up these function signatures
-			local parser = LuaParser(nil, version, nil, testlua == 'luajit')
+			local parser = LuaParser(nil, nil, version, testlua == 'luajit')
 			local parseSuccess, errorString = parser:setData(line)
 			parseSuccess = not not parseSuccess
 			print('key results', keySuccess, 'parser results', parseSuccess, 'lua results', luaSuccess, 'line', line, 'version', version)
