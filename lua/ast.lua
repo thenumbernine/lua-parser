@@ -185,6 +185,7 @@ local fields = {
 	{'elseifs', 'many'},
 	{'elsestmt', 'many'},
 	{'vars', 'many'},
+	{'iterexprs', 'many'},
 }
 
 ast.exec = LuaAST.exec
