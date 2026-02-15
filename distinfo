@@ -37,7 +37,6 @@ files = {
 	"tests/validate.lua",
 }
 deps = {
-	"bit",
 	"ext",
 	"template",
 }
