@@ -102,7 +102,7 @@ function Tokenizer:parseQuoteString()
 					r:mustbe'}'
 
 					-- hmm, needs bit library or bit operations, which should only be present in version >= 5.3 anyways so ...
-					local bit = bit32 or require 'bit'
+					local bit = bit or bit32 or require 'bit'
 					if code < 0x80 then
 						s:insert(string.char(code))	-- 0xxxxxxx
 					elseif code < 0x800 then
