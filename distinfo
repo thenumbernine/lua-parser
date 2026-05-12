@@ -3,6 +3,8 @@
 --------------------------------------------
 
 name = "parser"
+git = "https://github.com/thenumbernine/lua-parser"
+
 files = {
 	"LICENSE",
 	"README.md",
