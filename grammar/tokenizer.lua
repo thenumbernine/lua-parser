@@ -8,4 +8,6 @@ function GrammarTokenizer:initSymbolsAndKeywords()
 	end
 end
 
+GrammarTokenizer.parseBlockComment = require 'parser.lua.tokenizer'.parseBlockComment
+
 return GrammarTokenizer

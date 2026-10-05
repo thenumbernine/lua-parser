@@ -243,7 +243,8 @@ function GrammarParser:buildTokenizer(data)
 end
 
 function GrammarParser:setData(data, source, ...)
-	GrammarParser.super.setData(self, data, source, ...)
+	local res = table.pack(GrammarParser.super.setData(self, data, source, ...))
+	if not res[1] then return res:unpack() end
 
 	-- now we should have our self.tree
 	-- from here we can convert it into a parse structure
@@ -655,7 +656,7 @@ function GrammarParser:parseExprList()
 end
 
 -- [[ test:
-local syntax51 = GrammarParser:fromFile'syntax_ast_5.1.txt'
+local syntax51 = print(GrammarParser:fromFile'syntax_ast_5.1.txt')
 --]]
 
 return GrammarParser
