@@ -123,6 +123,7 @@ function DataReader:ensureZeroOrOneDot(from, to)
 		end
 		from = from + 1
 	end
+	return numdots
 end
 
 return DataReader

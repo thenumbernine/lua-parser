@@ -122,7 +122,7 @@ function LuaTokenizer:parseHexNumber(...)
 		-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
 		if not r:canbe'^[%.%da-fA-F]+' then return end
 
-		r:ensureZeroOrOneDot(r.lastTokenFrom, r.lastTokenTo)
+		local numdots = r:ensureZeroOrOneDot(r.lastTokenFrom, r.lastTokenTo)
 
 		if r:canbe'^[Pp]' then
 			-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
@@ -150,7 +150,7 @@ function LuaTokenizer:parseDecNumber()
 	if not r:canbe'^[%.%d]+' then return end
 	local from = r.lastTokenFrom
 
-	r:ensureZeroOrOneDot(from, r.lastTokenTo)
+	local numdots = r:ensureZeroOrOneDot(from, r.lastTokenTo)
 
 	if r:canbe'^[Ee]' then
 		r:canbe'^[%+%-]'
