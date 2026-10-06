@@ -51,12 +51,13 @@ function LuaTokenizer:initSymbolsAndKeywords(version, useluajit)
 	end
 end
 
+local hashCode = ('#'):byte()
 function LuaTokenizer:init(...)
 	LuaTokenizer.super.init(self, ...)
 
 	-- skip past initial #'s
 	local r = self.r
-	if r.data:sub(1,1) == '#' then
+	if r.data:byte(1) == hashCode then
 		if not r:seekpast'\n' then
 			r:seekpast'$'
 		end
@@ -67,8 +68,8 @@ function LuaTokenizer:parseBlockComment()
 	local r = self.r
 	-- look for --[====[
 	if not r:canbe'^%-%-%[=*%[' then return end
-	self:readRestOfBlock(r:getlasttoken())
-	return true
+	local equalCount = r.lastTokenTo - r.lastTokenFrom - 3
+	return self:readRestOfBlock(equalCount)
 end
 
 function LuaTokenizer:parseString()
@@ -84,16 +85,17 @@ end
 function LuaTokenizer:parseBlockString()
 	local r = self.r
 	if not r:canbe'^%[=*%[' then return end
-	if self:readRestOfBlock(r:getlasttoken()) then
+	local equalCount = r.lastTokenTo - r.lastTokenFrom - 1
+	if self:readRestOfBlock(equalCount) then
 --DEBUG(@5): print('read multi-line string ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
 		return r:getlasttoken(), 'string'
 	end
 end
 
-function LuaTokenizer:readRestOfBlock(startToken)
+function LuaTokenizer:readRestOfBlock(equalCount)
 	local r = self.r
 
-	local eq = assert(startToken:match('%[(=*)%[$'))
+	local eq = ('='):rep(equalCount)
 	-- skip whitespace?
 	r:canbe'^\n'	-- if the first character is a newline then skip it
 	local start = r.index
@@ -104,9 +106,9 @@ function LuaTokenizer:readRestOfBlock(startToken)
 	--r:setlasttoken(r.data:sub(start, r.index - #r:getlasttoken() - 1))
 	--return true
 	-- ... so don't push it into the history here, just assign it.
-	local lasttoken = r:getlasttoken()
+	local lastTokenLen = r.lastTokenTo - r.lastTokenFrom + 1
 	r.lastTokenFrom = start
-	r.lastTokenTo = r.index - #lasttoken - 1
+	r.lastTokenTo = r.index - lastTokenLen - 1
 	return true
 end
 

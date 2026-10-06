@@ -45,8 +45,7 @@ function Tokenizer:gettoken()
 end
 
 function Tokenizer:skipWhiteSpaces()
-	local r = self.r
-	return r:canbe'^%s+'
+	return self.r:canbe'^%s+'
 --DEBUG(@5): print('read space ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
 end
 
@@ -78,13 +77,30 @@ function Tokenizer:parseString()
 	return self:parseQuoteString()
 end
 
+local _0Byte = ('0'):byte()
+local _9Byte = ('9'):byte()
+local aByte = ('a'):byte()
+local fByte = ('f'):byte()
+local AByte = ('A'):byte()
+local FByte = ('F'):byte()
+
+local function asciiByteToDec(b)
+	if b >= _0Byte and b <= _9Byte then return b - _0Byte end
+	error"shouldn't get here"
+end
+
+local function asciiByteToHex(b)
+	if b >= _0Byte and b <= _9Byte then return b - _0Byte end
+	if b >= aByte and b <= fByte then return b - aByte + 10 end
+	if b >= AByte and b <= FByte then return b - AByte + 10 end
+	error"shouldn't get here"
+end
+
 -- TODO this is a very lua function though it's in parser/base/ and not parser/lua/ ...
 -- '' or "" single-line quote-strings with escape-codes
 local backslashByte = ('\\'):byte()
 local xByte = ('x'):byte()
 local uByte = ('u'):byte()
-local _0Byte = ('0'):byte()
-local _9Byte = ('9'):byte()
 local escapeCodes = {
 	[('a'):byte()]='\a',
 	[('b'):byte()]='\b',
@@ -119,18 +135,18 @@ function Tokenizer:parseQuoteString()
 				if escapeCode then
 					s = s..escapeCode
 				elseif escByte == xByte and self.version >= '5.2' then
+					local code = 0
 					r:mustbe'^%x'
-					local esc =  r:getlasttoken()
+					code = code * 16 + asciiByteToHex(r.data:byte(r.lastTokenFrom))
 					r:mustbe'^%x'
-					esc = esc .. r:getlasttoken()
-					s = s..string.char(tonumber(esc, 16))
+					code = code * 16 + asciiByteToHex(r.data:byte(r.lastTokenFrom))
+					s = s..string.char(code)
 				elseif escByte == uByte and self.version >= '5.3' then
 					r:mustbe'^{'
 					local code = 0
 					while true do
-						local ch = r:canbe'^%x' and r:getlasttoken()
-						if not ch then break end
-						code = code * 16 + tonumber(ch, 16)
+						if not r:canbe'^%x' then break end
+						code = code * 16 + asciiByteToHex(r.data:byte(r.lastTokenFrom))
 					end
 					r:mustbe'^}'
 
@@ -155,11 +171,15 @@ function Tokenizer:parseQuoteString()
 							.. string.char(bit.bor(0x80, bit.band(0x3f, code)))
 					end
 				elseif escByte >= _0Byte and escByte <= _9Byte then
+					local code = asciiByteToDec(r.data:byte(r.lastTokenFrom))
 					-- can read up to three
-					local esc = r:getlasttoken()
-					if r:canbe'^%d' then esc = esc .. r:getlasttoken() end
-					if r:canbe'^%d' then esc = esc .. r:getlasttoken() end
-					s = s..string.char(tonumber(esc))
+					if r:canbe'^%d' then
+						code = code * 10 + asciiByteToDec(r.data:byte(r.lastTokenFrom))
+						if r:canbe'^%d' then
+							code = code * 10 + asciiByteToDec(r.data:byte(r.lastTokenFrom))
+						end
+					end
+					s = s..string.char(code)
 				else
 					if self.version >= '5.2' then
 						-- lua5.1 doesn't care about bad escape codes
@@ -228,10 +248,10 @@ function Tokenizer:parseSymbol()
 	local r = self.r
 	-- see if it matches any symbols
 --DEBUG:assert.eq(#self.symbols, #self.symbolsPatescape)
-	for _,symbolPatescape in ipairs(self.symbolsPatescape) do
+	for i,symbolPatescape in ipairs(self.symbolsPatescape) do
 		if r:canbe(symbolPatescape) then
 --DEBUG(@5): print('read symbol ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
-			return r:getlasttoken(), 'symbol'
+			return self.symbols[i], 'symbol'
 		end
 	end
 end
@@ -254,7 +274,7 @@ function Tokenizer:consume()
 	self.prev2tokenIndex = self.prevtokenIndex
 
 	self.previndex = self.r.index
-	self.prevtokenIndex = #self.r.tokenhistory/2+1
+	self.prevtokenIndex = #self.r.tokenhistory/2-1
 	--]]
 
 	self.token = self.nexttoken
