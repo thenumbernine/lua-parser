@@ -110,71 +110,56 @@ function LuaTokenizer:readRestOfBlock(startToken)
 	return true
 end
 
-
 function LuaTokenizer:parseHexNumber(...)
+	-- save here to include 0x
 	local r = self.r
+	local from = r.lastTokenFrom
+
 	-- if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
 	if self.version >= '5.2' then
 		-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
-		local token = r:canbe'^[%.%da-fA-F]+' and r:getlasttoken()
-		if not token then return end
-		local numdots = #token:gsub('[^%.]','')
-		assert.le(numdots, 1, 'MSG:malformed number')
-		local n = table{'0x', token}
+		if not r:canbe'^[%.%da-fA-F]+' then return end
+
+		r:ensureZeroOrOneDot(r.lastTokenFrom, r.lastTokenTo)
+
 		if r:canbe'^[Pp]' then
-			n:insert(r:getlasttoken())
 			-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
-			if r:canbe'^[%+%-]' then
-				n:insert(r:getlasttoken())
-			end
+			r:canbe'^[%+%-]'
 			r:mustbe('^%d+', 'malformed number')
-			n:insert(r:getlasttoken())
 		elseif numdots == 0 and self.useluajit then
 			if r:canbe'^LL' then
-				n:insert'LL'
 			elseif r:canbe'^ULL' then
-				n:insert'ULL'
 			end
 		end
-		return n:concat(), 'number'
 	else
 		--return LuaTokenizer.super.parseHexNumber(self, ...)
 		r:mustbe('^[%da-fA-F]+', 'malformed number')
-		local token = r:getlasttoken()
-		local n = table{'0x', token}
 		if self.useluajit then
 			if r:canbe'^LL' then
-				n:insert'LL'
 			elseif r:canbe'^ULL' then
-				n:insert'ULL'
 			end
 		end
-		return n:concat(), 'number'
 	end
+	return r.data:sub(from, r.lastTokenTo), 'number'
 end
 
 function LuaTokenizer:parseDecNumber()
 	local r = self.r
-	local token = r:canbe'^[%.%d]+' and r:getlasttoken()
-	if not token then return end
-	local numdots = #token:gsub('[^%.]','')
-	assert.le(numdots, 1, 'MSG:malformed number')
-	local n = table{token}
+	if not r:canbe'^[%.%d]+' then return end
+	local from = r.lastTokenFrom
+
+	r:ensureZeroOrOneDot(from, r.lastTokenTo)
+
 	if r:canbe'^[Ee]' then
-		n:insert(r:getlasttoken())
-		if r:canbe'^[%+%-]' then
-			n:insert(r:getlasttoken())
-		end
+		r:canbe'^[%+%-]'
 		r:mustbe('^%d+', 'malformed number')
-		n:insert(r:getlasttoken())
 	elseif numdots == 0 and self.useluajit then
 		if r:canbe'^LL' then
-			n:insert'LL'
 		elseif r:canbe'^ULL' then
-			n:insert'ULL'
 		end
 	end
-	return n:concat(), 'number'
+	local to = r.lastTokenTo
+	return r.data:sub(from, to), 'number'
 end
 
 return LuaTokenizer

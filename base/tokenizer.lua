@@ -106,7 +106,7 @@ function Tokenizer:parseQuoteString()
 --DEBUG(@5): print('read quote string ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
 --DEBUG(@5): local start = r.index-#r:getlasttoken()
 		local quoteFrom, quoteTo = r.lastTokenFrom, r.lastTokenTo
-		local s = table()
+		local s = ''
 		while true do
 			r:seekpast'.'
 			if r:subsetsMatch(r.lastTokenFrom, r.lastTokenTo, quoteFrom, quoteTo) then break end
@@ -117,13 +117,13 @@ function Tokenizer:parseQuoteString()
 				local escByte = r:canbe'^.' and r.data:byte(r.lastTokenFrom)
 				local escapeCode = escapeCodes[escByte]
 				if escapeCode then
-					s:insert(escapeCode)
+					s = s..escapeCode
 				elseif escByte == xByte and self.version >= '5.2' then
 					r:mustbe'^%x'
 					local esc =  r:getlasttoken()
 					r:mustbe'^%x'
 					esc = esc .. r:getlasttoken()
-					s:insert(string.char(tonumber(esc, 16)))
+					s = s..string.char(tonumber(esc, 16))
 				elseif escByte == uByte and self.version >= '5.3' then
 					r:mustbe'^{'
 					local code = 0
@@ -137,32 +137,29 @@ function Tokenizer:parseQuoteString()
 					-- hmm, needs bit library or bit operations, which should only be present in version >= 5.3 anyways so ...
 					local bit = bit or bit32 or require 'bit'
 					if code < 0x80 then
-						s:insert(string.char(code))	-- 0xxxxxxx
+						s = s..string.char(code)	-- 0xxxxxxx
 					elseif code < 0x800 then
-						s:insert(
-							string.char(bit.bor(0xc0, bit.band(0x1f, bit.rshift(code, 6))))
+						s = s
+							.. string.char(bit.bor(0xc0, bit.band(0x1f, bit.rshift(code, 6))))
 							.. string.char(bit.bor(0x80, bit.band(0x3f, code)))
-						)
 					elseif code < 0x10000 then
-						s:insert(
-							string.char(bit.bor(0xe0, bit.band(0x0f, bit.rshift(code, 12))))
+						s = s
+							.. string.char(bit.bor(0xe0, bit.band(0x0f, bit.rshift(code, 12))))
 							.. string.char(bit.bor(0x80, bit.band(0x3f, bit.rshift(code, 6))))
 							.. string.char(bit.bor(0x80, bit.band(0x3f, code)))
-						)
 					else
-						s:insert(
-							string.char(bit.bor(0xf0, bit.band(0x07, bit.rshift(code, 18))))
+						s = s
+							.. string.char(bit.bor(0xf0, bit.band(0x07, bit.rshift(code, 18))))
 							.. string.char(bit.bor(0x80, bit.band(0x3f, bit.rshift(code, 12))))
 							.. string.char(bit.bor(0x80, bit.band(0x3f, bit.rshift(code, 6))))
 							.. string.char(bit.bor(0x80, bit.band(0x3f, code)))
-						)
 					end
 				elseif escByte >= _0Byte and escByte <= _9Byte then
 					-- can read up to three
 					local esc = r:getlasttoken()
 					if r:canbe'^%d' then esc = esc .. r:getlasttoken() end
 					if r:canbe'^%d' then esc = esc .. r:getlasttoken() end
-					s:insert(string.char(tonumber(esc)))
+					s = s..string.char(tonumber(esc))
 				else
 					if self.version >= '5.2' then
 						-- lua5.1 doesn't care about bad escape codes
@@ -170,11 +167,11 @@ function Tokenizer:parseQuoteString()
 					end
 				end
 			else
-				s:insert(r:getlasttoken())
+				s = s..r:getlasttoken()
 			end
 		end
 --DEBUG(@5): print('read quote string ['..start..','..(r.index-#r:getlasttoken())..']: '..r.data:sub(start, r.index-#r:getlasttoken()))
-		return s:concat(), 'string'
+		return s, 'string'
 	end
 end
 
@@ -206,26 +203,25 @@ function Tokenizer:parseNumber()
 end
 
 function Tokenizer:parseHexNumber()
+	-- save here to include 0x
+	local from = r.lastTokenFrom
+
 	local r = self.r
 	r:mustbe('^[%da-fA-F]+', 'malformed number')
-	local token = r:getlasttoken()
-	return '0x'..token, 'number'
+
+	return r.data:sub(from, r.lastTokenTo), 'number'
 end
 
 function Tokenizer:parseDecNumber()
 	local r = self.r
-	local token = r:canbe'^[%.%d]+' and r:getlasttoken()
-	assert.le(#token:gsub('[^%.]',''), 1, 'malformed number')
-	local n = table{token}
+	if not r:canbe'^[%.%d]+' then return end
+	local from = r.lastTokenFrom
+	r:ensureZeroOrOneDot(from, r.lastTokenTo)
 	if r:canbe'^[eE]' then
-		n:insert(r:getlasttoken())
-		if r:canbe'^[%+%-]' then
-			n:insert(r:getlasttoken())
-		end
+		r:canbe'^[%+%-]'
 		r:mustbe('^%d+', 'malformed number')
-		n:insert(r:getlasttoken())
 	end
-	return n:concat(), 'number'
+	return r.data:sub(from, r.lastTokenTo), 'number'
 end
 
 function Tokenizer:parseSymbol()

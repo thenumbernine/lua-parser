@@ -112,4 +112,17 @@ function DataReader:mustbe(pattern, msg)
 	return true
 end
 
+function DataReader:ensureZeroOrOneDot(from, to)
+	local numdots = 0
+	while true do
+		from = self.data:find('.', from, true)
+		if not from or from > to then break end
+		numdots = numdots + 1
+		if numdots > 1 then
+			error'MSG:malformed number'
+		end
+		from = from + 1
+	end
+end
+
 return DataReader
