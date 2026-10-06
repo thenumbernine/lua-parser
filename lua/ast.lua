@@ -50,7 +50,7 @@ function LuaAST:serializeRecursiveMember(field, args)
 	local col = 1
 	local index = 1
 	local consume
-	local lastspan
+	local lastSpanFrom, lastSpanTo
 	local tab = ''	-- only used by prettyPrint
 	consume = function(x)
 		if type(x) == 'number' then
@@ -93,8 +93,8 @@ function LuaAST:serializeRecursiveMember(field, args)
 			-- TODO here if you want ... pad lines and cols until we match the original location (or exceed it)
 			-- to do that, track appended strings to have a running line/col counter just like we do in parser
 			-- to do that, separate teh updatelinecol() in the parser to work outside datareader
-			if maintainSpan and lastspan then
-				while line < lastspan.from.line do
+			if maintainSpan and lastSpanFrom then
+				while line < lastSpanFrom.line do
 					append'\n'
 				end
 			end
@@ -112,7 +112,8 @@ function LuaAST:serializeRecursiveMember(field, args)
 			end
 			append(x)
 		elseif type(x) == 'table' then
-			lastspan = x.span
+			lastSpanFrom = x.spanFrom
+			lastSpanTo = x.spanTo
 			assert.is(x, BaseAST)
 			assert.index(x, field)
 

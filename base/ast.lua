@@ -7,8 +7,9 @@ local BaseAST = class()
 -- this is too relaxed, since concat maps to tostring maps to toLua, and I want toLua only called from external, and toLua_recursive from internal
 --BaseAST.__concat = string.concat
 
-function BaseAST:setspan(span)
-	self.span = span
+function BaseAST:setspan(spanFrom, spanTo)
+	self.spanFrom = spanFrom
+	self.spanTo = spanTo
 	return self
 end
 

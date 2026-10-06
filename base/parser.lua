@@ -135,8 +135,8 @@ function Parser:parse_expr_precedenceTable(i)
 			end
 			local a = assert(self:parse_expr_precedenceTable(nextLevel), 'MSG:unexpected symbol')
 			a = self:node(rule.className, a)
-			if a.span then
-				a:setspan{from = a.span.from, to = self:getloc()}
+			if a.spanFrom then
+				a:setspan(a.spanFrom, self:getloc())
 			end
 			return a
 		end
@@ -164,8 +164,8 @@ function Parser:parse_expr_precedenceTable(i)
 				end) or error("MSG:couldn't find precedence level named "..tostring(rule.nextLevel))
 			end
 			a = self:node(rule.className, a, (assert(self:parse_expr_precedenceTable(nextLevel), 'MSG:unexpected symbol')))
-			if a.span then
-				a:setspan{from = a.span.from, to = self:getloc()}
+			if a.spanFrom then
+				a:setspan(a.spanFrom, self:getloc())
 			end
 		end
 		return a

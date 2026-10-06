@@ -36,10 +36,10 @@ local function printspan(x, tab)
 	if x.type then
 		local reconstructed = x:toLua()
 		print(tab..'tostring():', string.trim(reconstructed))
-		local fromIndexSpan = code:sub(x.span.from.index, x.span.to.index)
+		local fromIndexSpan = code:sub(x.spanFrom.index, x.spanTo.index)
 		print(tab..'span substr:', tolua(fromIndexSpan))
-		local fromTokenSpan = datareader.data:sub(datareader.tokenhistory[1+2*x.span.from.tokenIndex], datareader.tokenhistory[2+2*x.span.to.tokenIndex])
-		print(tab..'token range: '..x.span.from.tokenIndex..', '..x.span.to.tokenIndex)
+		local fromTokenSpan = datareader.data:sub(datareader.tokenhistory[1+2*x.spanFrom.tokenIndex], datareader.tokenhistory[2+2*x.spanTo.tokenIndex])
+		print(tab..'token range: '..x.spanFrom.tokenIndex..', '..x.spanTo.tokenIndex)
 		print(tab..'token substr:', tolua(fromTokenSpan))
 		print(tab..'type:', x.type)
 
@@ -74,11 +74,12 @@ local function printspan(x, tab)
 		--]]
 	end
 	for k,v in pairs(x) do
-		if k == 'span' then
-			print(tab..k..' = index range '..tostring(v.from.index)..'..'..tostring(v.to.index)
-				..', line/col range '..v.from.line..'/'..v.from.col..'..'..v.to.line..'/'..v.to.col)
+		if k == 'spanFrom' then
+			print(tab..'span = index range '..tostring(x.spanFrom.index)..'..'..tostring(x.spanTo.index)
+				..', line/col range '..x.spanFrom.line..'/'..x.spanFrom.col..'..'..x.spanTo.line..'/'..x.spanTo.col)
+		elseif k == 'spanTo' then
 		elseif k ~= 'parent'
-		and k ~= 'span'
+		and not (k == 'spanFrom' or k == 'spanTo')
 		and k ~= 'parser'
 		then
 			if type(v) == 'table' then

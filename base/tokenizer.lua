@@ -72,7 +72,25 @@ end
 -- TODO this is a very lua function though it's in parser/base/ and not parser/lua/ ...
 -- '' or "" single-line quote-strings with escape-codes
 local backslashByte = ('\\'):byte()
-local escapeCodes = {a='\a', b='\b', f='\f', n='\n', r='\r', t='\t', v='\v', ['\\']='\\', ['"']='"', ["'"]="'", ['0']='\0', ['\r']='\n', ['\n']='\n'}
+local xByte = ('x'):byte()
+local uByte = ('u'):byte()
+local _0Byte = ('0'):byte()
+local _9Byte = ('9'):byte()
+local escapeCodes = {
+	[('a'):byte()]='\a',
+	[('b'):byte()]='\b',
+	[('f'):byte()]='\f',
+	[('n'):byte()]='\n',
+	[('r'):byte()]='\r',
+	[('t'):byte()]='\t',
+	[('v'):byte()]='\v',
+	[('\\'):byte()]='\\',
+	[('"'):byte()]='"',
+	[("'"):byte()]="'",
+	[('0'):byte()]='\0',
+	[('\r'):byte()]='\n',
+	[('\n'):byte()]='\n'
+}
 function Tokenizer:parseQuoteString()
 	local r = self.r
 	if r:canbe'^["\']' then
@@ -87,17 +105,17 @@ function Tokenizer:parseQuoteString()
 			if r.lastTokenFrom == r.lastTokenTo
 			and r.data:byte(r.lastTokenFrom) == backslashByte
 			then
-				local esc = r:canbe'^.' and r:getlasttoken()
-				local escapeCode = escapeCodes[esc]
+				local escByte = r:canbe'^.' and r.data:byte(r.lastTokenFrom)
+				local escapeCode = escapeCodes[escByte]
 				if escapeCode then
 					s:insert(escapeCode)
-				elseif esc == 'x' and self.version >= '5.2' then
+				elseif escByte == xByte and self.version >= '5.2' then
 					r:mustbe'^%x'
-					esc =  r:getlasttoken()
+					local esc =  r:getlasttoken()
 					r:mustbe'^%x'
 					esc = esc .. r:getlasttoken()
 					s:insert(string.char(tonumber(esc, 16)))
-				elseif esc == 'u' and self.version >= '5.3' then
+				elseif escByte == uByte and self.version >= '5.3' then
 					r:mustbe'^{'
 					local code = 0
 					while true do
@@ -130,8 +148,9 @@ function Tokenizer:parseQuoteString()
 							.. string.char(bit.bor(0x80, bit.band(0x3f, code)))
 						)
 					end
-				elseif esc:match'%d' then
+				elseif escByte >= _0Byte and escByte <= _9Byte then
 					-- can read up to three
+					local esc = r:getlasttoken()
 					if r:canbe'^%d' then esc = esc .. r:getlasttoken() end
 					if r:canbe'^%d' then esc = esc .. r:getlasttoken() end
 					s:insert(string.char(tonumber(esc)))
