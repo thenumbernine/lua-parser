@@ -72,7 +72,7 @@ tableconstructor ::= '{' [fieldlist] '}' ;
 fieldlist ::= field {fieldsep field} [fieldsep] ;
 
 field ::= '[' exp ']' '=' exp
-	| Name '=' exp 
+	| Name '=' exp
 	| exp
 	;
 

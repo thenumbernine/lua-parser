@@ -37,12 +37,12 @@ end
 
 function Tokenizer:skipWhiteSpaces()
 	local r = self.r
-	r:canbe'%s+'
+	r:canbe'^%s+'
 --DEBUG(@5): if r.lasttoken then print('read space ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken) end
 end
 
 -- Lua-specific comments (tho changing the comment symbol is easy ...)
-Tokenizer.singleLineComment = string.patescape'--'
+Tokenizer.singleLineComment = '^'..string.patescape'--'
 function Tokenizer:parseComment()
 	local r = self.r
 
@@ -73,7 +73,7 @@ end
 -- '' or "" single-line quote-strings with escape-codes
 function Tokenizer:parseQuoteString()
 	local r = self.r
-	if r:canbe'["\']' then
+	if r:canbe'^["\']' then
 --DEBUG(@5): print('read quote string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
 --DEBUG(@5): local start = r.index-#r.lasttoken
 		local quote = r.lasttoken
@@ -83,23 +83,23 @@ function Tokenizer:parseQuoteString()
 			if r.lasttoken == quote then break end
 			if r:done() then error("MSG:unfinished string") end
 			if r.lasttoken == '\\' then
-				local esc = r:canbe'.'
+				local esc = r:canbe'^.'
 				local escapeCodes = {a='\a', b='\b', f='\f', n='\n', r='\r', t='\t', v='\v', ['\\']='\\', ['"']='"', ["'"]="'", ['0']='\0', ['\r']='\n', ['\n']='\n'}
 				local escapeCode = escapeCodes[esc]
 				if escapeCode then
 					s:insert(escapeCode)
 				elseif esc == 'x' and self.version >= '5.2' then
-					esc = r:mustbe'%x' .. r:mustbe'%x'
+					esc = r:mustbe'^%x' .. r:mustbe'^%x'
 					s:insert(string.char(tonumber(esc, 16)))
 				elseif esc == 'u' and self.version >= '5.3' then
-					r:mustbe'{'
+					r:mustbe'^{'
 					local code = 0
 					while true do
-						local ch = r:canbe'%x'
+						local ch = r:canbe'^%x'
 						if not ch then break end
 						code = code * 16 + tonumber(ch, 16)
 					end
-					r:mustbe'}'
+					r:mustbe'^}'
 
 					-- hmm, needs bit library or bit operations, which should only be present in version >= 5.3 anyways so ...
 					local bit = bit or bit32 or require 'bit'
@@ -124,10 +124,10 @@ function Tokenizer:parseQuoteString()
 							.. string.char(bit.bor(0x80, bit.band(0x3f, code)))
 						)
 					end
-				elseif esc:match('%d') then
+				elseif esc:match'%d' then
 					-- can read up to three
-					if r:canbe'%d' then esc = esc .. r.lasttoken end
-					if r:canbe'%d' then esc = esc .. r.lasttoken end
+					if r:canbe'^%d' then esc = esc .. r.lasttoken end
+					if r:canbe'^%d' then esc = esc .. r.lasttoken end
 					s:insert(string.char(tonumber(esc)))
 				else
 					if self.version >= '5.2' then
@@ -148,7 +148,7 @@ end
 -- C names
 function Tokenizer:parseName()
 	local r = self.r
-	if r:canbe'[%a_][%w_]*' then	-- name
+	if r:canbe'^[%a_][%w_]*' then	-- name
 --DEBUG(@5): print('read name ['..(r.index-#r.lasttoken)..', '..r.index..']: '..r.lasttoken)
 		coroutine.yield(r.lasttoken, self.keywords[r.lasttoken] and 'keyword' or 'name')
 		return true
@@ -164,7 +164,7 @@ function Tokenizer:parseNumber()
 		-- lua doesn't consider the - to be a part of the number literal
 		-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
 --DEBUG(@5): local start = r.index
-		if r:canbe'0[xX]' then
+		if r:canbe'^0[xX]' then
 			self:parseHexNumber()
 		else
 			self:parseDecNumber()
@@ -176,21 +176,21 @@ end
 
 function Tokenizer:parseHexNumber()
 	local r = self.r
-	local token = r:mustbe('[%da-fA-F]+', 'malformed number')
+	local token = r:mustbe('^[%da-fA-F]+', 'malformed number')
 	coroutine.yield('0x'..token, 'number')
 end
 
 function Tokenizer:parseDecNumber()
 	local r = self.r
-	local token = r:canbe'[%.%d]+'
+	local token = r:canbe'^[%.%d]+'
 	assert.le(#token:gsub('[^%.]',''), 1, 'malformed number')
 	local n = table{token}
-	if r:canbe'e' or r:canbe'E' then
+	if r:canbe'^[eE]' then
 		n:insert(r.lasttoken)
-		if r:canbe'[%+%-]' then
+		if r:canbe'^[%+%-]' then
 			n:insert(r.lasttoken)
 		end
-		n:insert(r:mustbe('%d+', 'malformed number'))
+		n:insert(r:mustbe('^%d+', 'malformed number'))
 	end
 	coroutine.yield(n:concat(), 'number')
 end
@@ -198,8 +198,9 @@ end
 function Tokenizer:parseSymbol()
 	local r = self.r
 	-- see if it matches any symbols
-	for _,symbol in ipairs(self.symbols) do
-		if r:canbe(string.patescape(symbol)) then
+--DEBUG:assert.eq(#self.symbols, #self.symbolsPatescape)
+	for _,symbolPatescape in ipairs(self.symbolsPatescape) do
+		if r:canbe(symbolPatescape) then
 --DEBUG(@5): print('read symbol ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
 			coroutine.yield(r.lasttoken, 'symbol')
 			return true
@@ -213,6 +214,7 @@ function Tokenizer:start()
 	self.symbols = self.symbols:mapi(function(v,k) return true, v end):keys()
 	-- arrange symbols from largest to smallest
 	self.symbols:sort(function(a,b) return #a > #b end)
+	self.symbolsPatescape = self.symbols:mapi(function(symbol) return '^'..string.patescape(symbol) end)
 	self:consume()
 	self:consume()
 end

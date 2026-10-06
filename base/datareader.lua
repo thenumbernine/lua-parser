@@ -84,7 +84,8 @@ end
 
 function DataReader:canbe(pattern)
 --DEBUG(@5): print('DataReader:canbe', require 'ext.tolua'(pattern))
-	return self:seekpast('^'..pattern)
+--DEBUG: assert.eq(pattern:sub(1,1), '^')
+	return self:seekpast(pattern)
 end
 
 function DataReader:mustbe(pattern, msg)
