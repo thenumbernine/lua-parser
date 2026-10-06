@@ -38,7 +38,7 @@ end
 function Tokenizer:skipWhiteSpaces()
 	local r = self.r
 	r:canbe'^%s+'
---DEBUG(@5): if r.lasttoken then print('read space ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken) end
+--DEBUG(@5): print('read space ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
 end
 
 -- Lua-specific comments (tho changing the comment symbol is easy ...)
@@ -50,7 +50,7 @@ function Tokenizer:parseComment()
 	if self:parseBlockComment() then return true end
 
 	if r:canbe(self.singleLineComment) then
---DEBUG(@5):local start = r.index - #r.lasttoken
+--DEBUG(@5):local start = r.index - #r:getlasttoken()
 		-- read line
 		if not r:seekpast'\n' then
 			r:seekpast'$'
@@ -71,31 +71,37 @@ end
 
 -- TODO this is a very lua function though it's in parser/base/ and not parser/lua/ ...
 -- '' or "" single-line quote-strings with escape-codes
+local backslashByte = ('\\'):byte()
+local escapeCodes = {a='\a', b='\b', f='\f', n='\n', r='\r', t='\t', v='\v', ['\\']='\\', ['"']='"', ["'"]="'", ['0']='\0', ['\r']='\n', ['\n']='\n'}
 function Tokenizer:parseQuoteString()
 	local r = self.r
 	if r:canbe'^["\']' then
---DEBUG(@5): print('read quote string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
---DEBUG(@5): local start = r.index-#r.lasttoken
-		local quote = r.lasttoken
+--DEBUG(@5): print('read quote string ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
+--DEBUG(@5): local start = r.index-#r:getlasttoken()
+		local quoteFrom, quoteTo = r.lastTokenFrom, r.lastTokenTo
 		local s = table()
 		while true do
 			r:seekpast'.'
-			if r.lasttoken == quote then break end
+			if r:subsetsMatch(r.lastTokenFrom, r.lastTokenTo, quoteFrom, quoteTo) then break end
 			if r:done() then error("MSG:unfinished string") end
-			if r.lasttoken == '\\' then
-				local esc = r:canbe'^.'
-				local escapeCodes = {a='\a', b='\b', f='\f', n='\n', r='\r', t='\t', v='\v', ['\\']='\\', ['"']='"', ["'"]="'", ['0']='\0', ['\r']='\n', ['\n']='\n'}
+			if r.lastTokenFrom == r.lastTokenTo
+			and r.data:byte(r.lastTokenFrom) == backslashByte
+			then
+				local esc = r:canbe'^.' and r:getlasttoken()
 				local escapeCode = escapeCodes[esc]
 				if escapeCode then
 					s:insert(escapeCode)
 				elseif esc == 'x' and self.version >= '5.2' then
-					esc = r:mustbe'^%x' .. r:mustbe'^%x'
+					r:mustbe'^%x'
+					esc =  r:getlasttoken()
+					r:mustbe'^%x'
+					esc = esc .. r:getlasttoken()
 					s:insert(string.char(tonumber(esc, 16)))
 				elseif esc == 'u' and self.version >= '5.3' then
 					r:mustbe'^{'
 					local code = 0
 					while true do
-						local ch = r:canbe'^%x'
+						local ch = r:canbe'^%x' and r:getlasttoken()
 						if not ch then break end
 						code = code * 16 + tonumber(ch, 16)
 					end
@@ -126,8 +132,8 @@ function Tokenizer:parseQuoteString()
 					end
 				elseif esc:match'%d' then
 					-- can read up to three
-					if r:canbe'^%d' then esc = esc .. r.lasttoken end
-					if r:canbe'^%d' then esc = esc .. r.lasttoken end
+					if r:canbe'^%d' then esc = esc .. r:getlasttoken() end
+					if r:canbe'^%d' then esc = esc .. r:getlasttoken() end
 					s:insert(string.char(tonumber(esc)))
 				else
 					if self.version >= '5.2' then
@@ -136,10 +142,10 @@ function Tokenizer:parseQuoteString()
 					end
 				end
 			else
-				s:insert(r.lasttoken)
+				s:insert(r:getlasttoken())
 			end
 		end
---DEBUG(@5): print('read quote string ['..start..','..(r.index-#r.lasttoken)..']: '..r.data:sub(start, r.index-#r.lasttoken))
+--DEBUG(@5): print('read quote string ['..start..','..(r.index-#r:getlasttoken())..']: '..r.data:sub(start, r.index-#r:getlasttoken()))
 		coroutine.yield(s:concat(), 'string')
 		return true
 	end
@@ -149,8 +155,8 @@ end
 function Tokenizer:parseName()
 	local r = self.r
 	if r:canbe'^[%a_][%w_]*' then	-- name
---DEBUG(@5): print('read name ['..(r.index-#r.lasttoken)..', '..r.index..']: '..r.lasttoken)
-		coroutine.yield(r.lasttoken, self.keywords[r.lasttoken] and 'keyword' or 'name')
+--DEBUG(@5): print('read name ['..(r.index-#r:getlasttoken())..', '..r.index..']: '..r:getlasttoken())
+		coroutine.yield(r:getlasttoken(), self.keywords[r:getlasttoken()] and 'keyword' or 'name')
 		return true
 	end
 end
@@ -176,21 +182,23 @@ end
 
 function Tokenizer:parseHexNumber()
 	local r = self.r
-	local token = r:mustbe('^[%da-fA-F]+', 'malformed number')
+	r:mustbe('^[%da-fA-F]+', 'malformed number')
+	local token = r:getlasttoken()
 	coroutine.yield('0x'..token, 'number')
 end
 
 function Tokenizer:parseDecNumber()
 	local r = self.r
-	local token = r:canbe'^[%.%d]+'
+	local token = r:canbe'^[%.%d]+' and r:getlasttoken()
 	assert.le(#token:gsub('[^%.]',''), 1, 'malformed number')
 	local n = table{token}
 	if r:canbe'^[eE]' then
-		n:insert(r.lasttoken)
+		n:insert(r:getlasttoken())
 		if r:canbe'^[%+%-]' then
-			n:insert(r.lasttoken)
+			n:insert(r:getlasttoken())
 		end
-		n:insert(r:mustbe('^%d+', 'malformed number'))
+		r:mustbe('^%d+', 'malformed number')
+		n:insert(r:getlasttoken())
 	end
 	coroutine.yield(n:concat(), 'number')
 end
@@ -201,8 +209,8 @@ function Tokenizer:parseSymbol()
 --DEBUG:assert.eq(#self.symbols, #self.symbolsPatescape)
 	for _,symbolPatescape in ipairs(self.symbolsPatescape) do
 		if r:canbe(symbolPatescape) then
---DEBUG(@5): print('read symbol ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
-			coroutine.yield(r.lasttoken, 'symbol')
+--DEBUG(@5): print('read symbol ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
+			coroutine.yield(r:getlasttoken(), 'symbol')
 			return true
 		end
 	end
@@ -226,7 +234,7 @@ function Tokenizer:consume()
 	self.prev2tokenIndex = self.prevtokenIndex
 
 	self.previndex = self.r.index
-	self.prevtokenIndex = #self.r.tokenhistory+1
+	self.prevtokenIndex = #self.r.tokenhistory/2+1
 	--]]
 
 	self.token = self.nexttoken

@@ -67,7 +67,7 @@ function LuaTokenizer:parseBlockComment()
 	local r = self.r
 	-- look for --[====[
 	if not r:canbe'^%-%-%[=*%[' then return end
-	self:readRestOfBlock(r.lasttoken)
+	self:readRestOfBlock(r:getlasttoken())
 	return true
 end
 
@@ -83,9 +83,9 @@ end
 function LuaTokenizer:parseBlockString()
 	local r = self.r
 	if not r:canbe'^%[=*%[' then return end
-	if self:readRestOfBlock(r.lasttoken) then
---DEBUG(@5): print('read multi-line string ['..(r.index-#r.lasttoken)..','..r.index..']: '..r.lasttoken)
-		coroutine.yield(r.lasttoken, 'string')
+	if self:readRestOfBlock(r:getlasttoken()) then
+--DEBUG(@5): print('read multi-line string ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
+		coroutine.yield(r:getlasttoken(), 'string')
 		return true
 	end
 end
@@ -101,10 +101,13 @@ function LuaTokenizer:readRestOfBlock(startToken)
 		error"MSG:expected closing block"
 	end
 	-- since we used seekpast, the string isn't being captured as a lasttoken ...
-	--return r:setlasttoken(r.data:sub(start, r.index - #r.lasttoken - 1))
+	--r:setlasttoken(r.data:sub(start, r.index - #r:getlasttoken() - 1))
+	--return true
 	-- ... so don't push it into the history here, just assign it.
-	r.lasttoken = r.data:sub(start, r.index - #r.lasttoken - 1)
-	return r.lasttoken
+	local lasttoken = r:getlasttoken()
+	r.lastTokenFrom = start
+	r.lastTokenTo = r.index - #lasttoken - 1
+	return r:getlasttoken()
 end
 
 
@@ -113,17 +116,18 @@ function LuaTokenizer:parseHexNumber(...)
 	-- if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
 	if self.version >= '5.2' then
 		-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
-		local token = r:canbe'^[%.%da-fA-F]+'
+		local token = r:canbe'^[%.%da-fA-F]+' and r:getlasttoken()
 		local numdots = #token:gsub('[^%.]','')
 		assert.le(numdots, 1, 'MSG:malformed number')
 		local n = table{'0x', token}
 		if r:canbe'^[Pp]' then
-			n:insert(r.lasttoken)
+			n:insert(r:getlasttoken())
 			-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
 			if r:canbe'^[%+%-]' then
-				n:insert(r.lasttoken)
+				n:insert(r:getlasttoken())
 			end
-			n:insert(r:mustbe('^%d+', 'malformed number'))
+			r:mustbe('^%d+', 'malformed number')
+			n:insert(r:getlasttoken())
 		elseif numdots == 0 and self.useluajit then
 			if r:canbe'^LL' then
 				n:insert'LL'
@@ -134,7 +138,8 @@ function LuaTokenizer:parseHexNumber(...)
 		coroutine.yield(n:concat(), 'number')
 	else
 		--return LuaTokenizer.super.parseHexNumber(self, ...)
-		local token = r:mustbe('^[%da-fA-F]+', 'malformed number')
+		r:mustbe('^[%da-fA-F]+', 'malformed number')
+		local token = r:getlasttoken()
 		local n = table{'0x', token}
 		if self.useluajit then
 			if r:canbe'^LL' then
@@ -149,16 +154,17 @@ end
 
 function LuaTokenizer:parseDecNumber()
 	local r = self.r
-	local token = r:canbe'^[%.%d]+'
+	local token = r:canbe'^[%.%d]+' and r:getlasttoken()
 	local numdots = #token:gsub('[^%.]','')
 	assert.le(numdots, 1, 'MSG:malformed number')
 	local n = table{token}
 	if r:canbe'^[Ee]' then
-		n:insert(r.lasttoken)
+		n:insert(r:getlasttoken())
 		if r:canbe'^[%+%-]' then
-			n:insert(r.lasttoken)
+			n:insert(r:getlasttoken())
 		end
-		n:insert(r:mustbe('^%d+', 'malformed number'))
+		r:mustbe('^%d+', 'malformed number')
+		n:insert(r:getlasttoken())
 	elseif numdots == 0 and self.useluajit then
 		if r:canbe'^LL' then
 			n:insert'LL'

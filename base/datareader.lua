@@ -28,6 +28,7 @@ function DataReader:init(data)
 	self.index = 1
 
 	-- keep track of all tokens as we parse them.
+	-- this holds an even number of numbers, each pair is a from-to index in self.data
 	self.tokenhistory = table()
 
 	-- TODO this isn't robust against different OS file formats.  maybe switching back to determining line number offline / upon error encounter is better than trying to track it while we parse.
@@ -57,29 +58,46 @@ function DataReader:updatelinecol()
 	self.lastUpdateLineColIndex = self.index+1
 end
 
-function DataReader:setlasttoken(lasttoken, skipped)
-	self.lasttoken = lasttoken
-	if self.tracktokens then
-		if skipped and #skipped > 0 then
---DEBUG(@5): print('SKIPPED', require 'ext.tolua'(skipped))
-			self.tokenhistory:insert(skipped)
-		end
---DEBUG(@5): print('TOKEN', require 'ext.tolua'(self.lasttoken))
-		self.tokenhistory:insert(self.lasttoken)
---DEBUG(paranoid): local sofar = self.tokenhistory:concat()
---DEBUG(paranoid): assert.eq(self.data:sub(1,#sofar), sofar, "source vs tokenhistory")
+-- try to use sparingly to cut down on string-allocs
+function DataReader:getlasttoken()
+	return (self.data:sub(self.lastTokenFrom, self.lastTokenTo))
+end
+
+function DataReader:subsetsMatch(from1, to1, from2, to2)
+	local lenMinusOne = to1 - from1
+	if lenMinusOne ~= to2 - from2 then return false end
+	for i=0,lenMinusOne do
+		if self.data:byte(from1+i) ~= self.data:byte(from2+i) then return false end
 	end
-	return self.lasttoken
+	return true
+end
+
+function DataReader:setlasttoken(lastTokenFrom, lastTokenTo, skippedFrom, skippedTo)
+	self.lastTokenFrom = lastTokenFrom
+	self.lastTokenTo = lastTokenTo
+	if self.tracktokens then
+		if skippedFrom and skippedTo > skippedFrom then
+--DEBUG(@5): print('SKIPPED', require 'ext.tolua'(self.data:sub(skippedFrom, skippedTo)))
+			self.tokenhistory:insert(skippedFrom)
+			self.tokenhistory:insert(skippedTo)
+		end
+--DEBUG(@5): print('TOKEN', require 'ext.tolua'(self.data:sub(lastTokenFrom, lastTokenTo)))
+		self.tokenhistory:insert(lastTokenFrom)
+		self.tokenhistory:insert(lastTokenTo)
+	end
 end
 
 function DataReader:seekpast(pattern)
 --DEBUG(@5): print('DataReader:seekpast', require 'ext.tolua'(pattern))
 	local from, to = self.data:find(pattern, self.index)
 	if not from then return end
-	local skipped = self.data:sub(self.index, from - 1)
+	local skippedFrom = self.index
+	local skippedTo = from - 1
+	--local skipped = self.data:sub(self.index, from - 1)
 	self.index = to + 1
 	self:updatelinecol()
-	return self:setlasttoken(self.data:sub(from, to), skipped)
+	self:setlasttoken(from, to, skippedFrom, skippedTo)
+	return true
 end
 
 function DataReader:canbe(pattern)
@@ -91,7 +109,7 @@ end
 function DataReader:mustbe(pattern, msg)
 --DEBUG(@5): print('DataReader:mustbe', require 'ext.tolua'(pattern))
 	if not self:canbe(pattern) then error("MSG:expected "..pattern) end
-	return self.lasttoken
+	return true
 end
 
 return DataReader
