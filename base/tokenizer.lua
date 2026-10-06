@@ -291,18 +291,9 @@ function Tokenizer:getpos()
 		..' code "'..self.r.data:sub(self.r.index):match'^[^\n]*'..'"'
 end
 
--- return the span across
+-- return the index in the data reader
 function Tokenizer:getloc()
-	local r = self.r
-	local line = self.r.line
-	local col = self.r.col
-
-	return {
-		line = line,
-		col = col,
-		index = self.prev2index,
-		tokenIndex = self.prev2tokenIndex,
-	}
+	return self.prev2index
 end
 
 return Tokenizer

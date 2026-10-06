@@ -61,11 +61,8 @@ function Parser:setData(data, source)
 	return true
 end
 
--- TODO I don't need all these, just :getloc()
 function Parser:getloc()
-	local loc = self.t:getloc()
-	loc.source = self.source
-	return loc
+	return self.t:getloc()
 end
 
 function Parser:canbe(token, tokentype)	-- token is optional
