@@ -73,7 +73,8 @@ end
 
 function LuaTokenizer:parseString()
 	-- try to parse block strings
-	if self:parseBlockString() then return true end
+	local tk, tt = self:parseBlockString()
+	if tk then return tk, tt end
 
 	-- try for base's quote strings
 	return LuaTokenizer.super.parseString(self)
@@ -85,8 +86,7 @@ function LuaTokenizer:parseBlockString()
 	if not r:canbe'^%[=*%[' then return end
 	if self:readRestOfBlock(r:getlasttoken()) then
 --DEBUG(@5): print('read multi-line string ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
-		coroutine.yield(r:getlasttoken(), 'string')
-		return true
+		return r:getlasttoken(), 'string'
 	end
 end
 
@@ -107,7 +107,7 @@ function LuaTokenizer:readRestOfBlock(startToken)
 	local lasttoken = r:getlasttoken()
 	r.lastTokenFrom = start
 	r.lastTokenTo = r.index - #lasttoken - 1
-	return r:getlasttoken()
+	return true
 end
 
 
@@ -117,6 +117,7 @@ function LuaTokenizer:parseHexNumber(...)
 	if self.version >= '5.2' then
 		-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
 		local token = r:canbe'^[%.%da-fA-F]+' and r:getlasttoken()
+		if not token then return end
 		local numdots = #token:gsub('[^%.]','')
 		assert.le(numdots, 1, 'MSG:malformed number')
 		local n = table{'0x', token}
@@ -135,7 +136,7 @@ function LuaTokenizer:parseHexNumber(...)
 				n:insert'ULL'
 			end
 		end
-		coroutine.yield(n:concat(), 'number')
+		return n:concat(), 'number'
 	else
 		--return LuaTokenizer.super.parseHexNumber(self, ...)
 		r:mustbe('^[%da-fA-F]+', 'malformed number')
@@ -148,13 +149,14 @@ function LuaTokenizer:parseHexNumber(...)
 				n:insert'ULL'
 			end
 		end
-		coroutine.yield(n:concat(), 'number')
+		return n:concat(), 'number'
 	end
 end
 
 function LuaTokenizer:parseDecNumber()
 	local r = self.r
 	local token = r:canbe'^[%.%d]+' and r:getlasttoken()
+	if not token then return end
 	local numdots = #token:gsub('[^%.]','')
 	assert.le(numdots, 1, 'MSG:malformed number')
 	local n = table{token}
@@ -172,7 +174,7 @@ function LuaTokenizer:parseDecNumber()
 			n:insert'ULL'
 		end
 	end
-	coroutine.yield(n:concat(), 'number')
+	return n:concat(), 'number'
 end
 
 return LuaTokenizer

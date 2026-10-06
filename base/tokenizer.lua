@@ -16,28 +16,37 @@ function Tokenizer:init(data, ...)
 	self:initSymbolsAndKeywords(...)
 
 	self.r = DataReader(data)
-	self.gettokenthread = coroutine.create(function()
-		local r = self.r
+end
 
-		while not r:done() do
-			self:skipWhiteSpaces()
-			if r:done() then break end
+function Tokenizer:gettoken()
+	local r = self.r
 
-			if self:parseComment() then
-			elseif self:parseString() then
-			elseif self:parseName() then
-			elseif self:parseNumber() then
-			elseif self:parseSymbol() then
-			else
-				error("MSG:unknown token "..r.data:sub(r.index, r.index+20)..(r.index+20 > #r.data and '...' or ''))
-			end
-		end
-	end)
+	local ws
+	repeat
+		ws = self:skipWhiteSpaces()
+			or self:parseComment()
+	until not ws
+
+	if r:done() then return true end
+
+	tk, tt = self:parseString()
+	if tk then return tk, tt end
+
+	tk, tt = self:parseName()
+	if tk then return tk, tt end
+
+	tk, tt = self:parseNumber()
+	if tk then return tk, tt end
+
+	tk, tt = self:parseSymbol()
+	if tk then return tk, tt end
+
+	error("MSG:unknown token "..r.data:sub(r.index, r.index+20)..(r.index+20 > #r.data and '...' or ''))
 end
 
 function Tokenizer:skipWhiteSpaces()
 	local r = self.r
-	r:canbe'^%s+'
+	return r:canbe'^%s+'
 --DEBUG(@5): print('read space ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
 end
 
@@ -66,7 +75,7 @@ end
 
 -- parse a string
 function Tokenizer:parseString()
-	if self:parseQuoteString() then return true end
+	return self:parseQuoteString()
 end
 
 -- TODO this is a very lua function though it's in parser/base/ and not parser/lua/ ...
@@ -165,8 +174,7 @@ function Tokenizer:parseQuoteString()
 			end
 		end
 --DEBUG(@5): print('read quote string ['..start..','..(r.index-#r:getlasttoken())..']: '..r.data:sub(start, r.index-#r:getlasttoken()))
-		coroutine.yield(s:concat(), 'string')
-		return true
+		return s:concat(), 'string'
 	end
 end
 
@@ -175,8 +183,7 @@ function Tokenizer:parseName()
 	local r = self.r
 	if r:canbe'^[%a_][%w_]*' then	-- name
 --DEBUG(@5): print('read name ['..(r.index-#r:getlasttoken())..', '..r.index..']: '..r:getlasttoken())
-		coroutine.yield(r:getlasttoken(), self.keywords[r:getlasttoken()] and 'keyword' or 'name')
-		return true
+		return r:getlasttoken(), self.keywords[r:getlasttoken()] and 'keyword' or 'name'
 	end
 end
 
@@ -190,12 +197,11 @@ function Tokenizer:parseNumber()
 		-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
 --DEBUG(@5): local start = r.index
 		if r:canbe'^0[xX]' then
-			self:parseHexNumber()
+			return self:parseHexNumber()
 		else
-			self:parseDecNumber()
+			return self:parseDecNumber()
 		end
 --DEBUG(@5): print('read number ['..start..', '..r.index..']: '..r.data:sub(start, r.index-1))
-		return true
 	end
 end
 
@@ -203,7 +209,7 @@ function Tokenizer:parseHexNumber()
 	local r = self.r
 	r:mustbe('^[%da-fA-F]+', 'malformed number')
 	local token = r:getlasttoken()
-	coroutine.yield('0x'..token, 'number')
+	return '0x'..token, 'number'
 end
 
 function Tokenizer:parseDecNumber()
@@ -219,7 +225,7 @@ function Tokenizer:parseDecNumber()
 		r:mustbe('^%d+', 'malformed number')
 		n:insert(r:getlasttoken())
 	end
-	coroutine.yield(n:concat(), 'number')
+	return n:concat(), 'number'
 end
 
 function Tokenizer:parseSymbol()
@@ -229,8 +235,7 @@ function Tokenizer:parseSymbol()
 	for _,symbolPatescape in ipairs(self.symbolsPatescape) do
 		if r:canbe(symbolPatescape) then
 --DEBUG(@5): print('read symbol ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
-			coroutine.yield(r:getlasttoken(), 'symbol')
-			return true
+			return r:getlasttoken(), 'symbol'
 		end
 	end
 end
@@ -258,22 +263,16 @@ function Tokenizer:consume()
 
 	self.token = self.nexttoken
 	self.tokentype = self.nexttokentype
-	if coroutine.status(self.gettokenthread) == 'dead' then
-		self.nexttoken = nil
-		self.nexttokentype = nil
-		-- done = true
-		return
-	end
-	local status, nexttoken, nexttokentype = coroutine.resume(self.gettokenthread)
+
+	local nexttoken, nexttokentype = self:gettoken()
 	-- detect errors
-	if not status then
-		local err = nexttoken
+	if not nexttoken then
+		local err = nexttokentype
 		--[[ enabling this to forward errors wasn't so foolproof...
 		if type(err) == 'table' then
 		--]]
 			-- then repackage it and include our parser state
 			error('MSG:'..err..' token='..tostring(self.token)..' type='..tostring(self.tokentype)..' pos='..self:getpos())
-				--..'\n'..debug.traceback(self.gettokenthread))
 		--[[ see above
 		else
 			-- internal error - just rethrow
@@ -281,8 +280,15 @@ function Tokenizer:consume()
 		end
 		--]]
 	end
-	self.nexttoken = nexttoken
-	self.nexttokentype = nexttokentype
+
+	-- change "done" to empty
+	if nexttoken == true then
+		self.nexttoken = nil
+		self.nexttokentype = nil
+	else
+		self.nexttoken = nexttoken
+		self.nexttokentype = nexttokentype
+	end
 end
 
 function Tokenizer:getpos()
