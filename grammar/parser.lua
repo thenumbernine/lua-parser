@@ -569,6 +569,7 @@ end
 	}))
 
 --]]
+	return true
 end
 
 function GrammarParser:parseTree()
