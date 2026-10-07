@@ -83,7 +83,10 @@ function Parser:mustbe(token, tokentype, opentoken, openloc)
 		local msg = "expected token="..tolua(token).." tokentype="..tolua(tokentype)
 			.." but found token="..tolua(lasttoken).." type="..tolua(lasttokentype)
 		if opentoken then
-			msg = msg .. " to close "..tolua(opentoken).." at line="..openloc.line..' col='..openloc.col
+			local sofar = self.t.r.data:sub(1, openloc)
+			local line = select(2, sofar:gsub('\n', ''))
+			local col = #sofar:match'[^\n]*$'
+			msg = msg .. " to close "..tolua(opentoken).." at line="..line..' col='..col
 		end
 		error('MSG:'..msg)
 	end
