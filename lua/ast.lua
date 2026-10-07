@@ -398,7 +398,7 @@ ast.nodeclass = nodeclass
 
 -- helper function
 local function isLuaName(s)
-	return s:match'^[_%a][_%w]*$'
+	return s:find'^[_%a][_%w]*$'
 end
 function ast.keyIsName(key, parser)
 	return ast._string:isa(key)

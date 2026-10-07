@@ -46,7 +46,7 @@ end
 
 function Tokenizer:skipWhiteSpaces()
 	return self.r:canbe'^%s+'
---DEBUG(@5): print('read space ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
+--DEBUG(@5): print('read space ['..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..','..r.index..']: '..r:getlasttoken())
 end
 
 -- Lua-specific comments (tho changing the comment symbol is easy ...)
@@ -58,7 +58,7 @@ function Tokenizer:parseComment()
 	if self:parseBlockComment() then return true end
 
 	if r:canbe(self.singleLineComment) then
---DEBUG(@5):local start = r.index - #r:getlasttoken()
+--DEBUG(@5):local start = r.index - (r.lastTokenTo-r.lastTokenFrom+1)
 		-- read line
 		if not r:seekpast'\n' then
 			r:seekpast'$'
@@ -119,8 +119,8 @@ local escapeCodes = {
 function Tokenizer:parseQuoteString()
 	local r = self.r
 	if r:canbe'^["\']' then
---DEBUG(@5): print('read quote string ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
---DEBUG(@5): local start = r.index-#r:getlasttoken()
+--DEBUG(@5): print('read quote string ['..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..','..r.index..']: '..r:getlasttoken())
+--DEBUG(@5): local start = r.index-(r.lastTokenTo-r.lastTokenFrom+1)
 		local quoteFrom, quoteTo = r.lastTokenFrom, r.lastTokenTo
 		local s = ''
 		while true do
@@ -190,7 +190,7 @@ function Tokenizer:parseQuoteString()
 				s = s..r:getlasttoken()
 			end
 		end
---DEBUG(@5): print('read quote string ['..start..','..(r.index-#r:getlasttoken())..']: '..r.data:sub(start, r.index-#r:getlasttoken()))
+--DEBUG(@5): print('read quote string ['..start..','..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..']: '..r.data:sub(start, r.index-(r.lastTokenTo-r.lastTokenFrom+1)))
 		return s, 'string'
 	end
 end
@@ -199,16 +199,17 @@ end
 function Tokenizer:parseName()
 	local r = self.r
 	if r:canbe'^[%a_][%w_]*' then	-- name
---DEBUG(@5): print('read name ['..(r.index-#r:getlasttoken())..', '..r.index..']: '..r:getlasttoken())
-		return r:getlasttoken(), self.keywords[r:getlasttoken()] and 'keyword' or 'name'
+--DEBUG(@5): print('read name ['..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..', '..r.index..']: '..r:getlasttoken())
+		local lasttoken = r:getlasttoken()
+		return lasttoken, self.keywords[lasttoken] and 'keyword' or 'name'
 	end
 end
 
 function Tokenizer:parseNumber()
 	local r = self.r
-	if r.data:match('^[%.%d]', r.index) -- if it's a decimal or a number...
-	and (r.data:match('^%d', r.index)	-- then, if it's a number it's good
-	or r.data:match('^%.%d', r.index))	-- or if it's a decimal then if it has a number following it then it's good ...
+	if r.data:find('^[%.%d]', r.index) -- if it's a decimal or a number...
+	and (r.data:find('^%d', r.index)	-- then, if it's a number it's good
+	or r.data:find('^%.%d', r.index))	-- or if it's a decimal then if it has a number following it then it's good ...
 	then 								-- otherwise I want it to continue to the next 'else'
 		-- lua doesn't consider the - to be a part of the number literal
 		-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
@@ -250,7 +251,7 @@ function Tokenizer:parseSymbol()
 --DEBUG:assert.eq(#self.symbols, #self.symbolsPatescape)
 	for i,symbolPatescape in ipairs(self.symbolsPatescape) do
 		if r:canbe(symbolPatescape) then
---DEBUG(@5): print('read symbol ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
+--DEBUG(@5): print('read symbol ['..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..','..r.index..']: '..r:getlasttoken())
 			return self.symbols[i], 'symbol'
 		end
 	end

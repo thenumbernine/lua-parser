@@ -110,7 +110,7 @@ end
 function Parser:getNextRule(rules)
 	for _, rule in pairs(rules) do
 		-- TODO why even bother separate it in canbe() ?
-		local keywordOrSymbol = rule.token:match'^[_a-zA-Z][_a-zA-Z0-9]*$' and 'keyword' or 'symbol'
+		local keywordOrSymbol = rule.token:find'^[_a-zA-Z][_a-zA-Z0-9]*$' and 'keyword' or 'symbol'
 		if self:canbe(rule.token, keywordOrSymbol) then
 			return rule
 		end
