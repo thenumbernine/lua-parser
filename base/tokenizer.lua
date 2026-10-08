@@ -201,16 +201,32 @@ function Tokenizer:parseName()
 	if r:canbe'^[%a_][%w_]*' then	-- name
 --DEBUG(@5): print('read name ['..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..', '..r.index..']: '..r:getlasttoken())
 		local lasttoken = r:getlasttoken()
-		return lasttoken, self.keywords[lasttoken] and 'keyword' or 'name'
+		-- how to detect if it is a keyword without allocating a substring?
+		-- [[
+		local tokenType = self.keywords[lasttoken] and 'keyword' or 'name'
+		--]]
+		--[[ runs slower but i'm hoping to prevent allocations with this
+		local tokenType = 'name'
+		local t = self.keywordTree
+		for i=1,#lasttoken do
+			local b = lasttoken:byte(i)
+			t = t[b]
+			if not t then goto fail end
+		end
+		if t[true] then tokenType = 'keyword' end
+::fail::
+		--]]
+		return lasttoken, tokenType
 	end
 end
 
 function Tokenizer:parseNumber()
 	local r = self.r
-	if r.data:find('^[%.%d]', r.index) -- if it's a decimal or a number...
-	and (r.data:find('^%d', r.index)	-- then, if it's a number it's good
-	or r.data:find('^%.%d', r.index))	-- or if it's a decimal then if it has a number following it then it's good ...
-	then 								-- otherwise I want it to continue to the next 'else'
+	if r.data:find('^[%.%d]', r.index) 		-- if it's a decimal or a number...
+	and (
+		r.data:find('^%d', r.index)			-- then, if it's a number it's good
+		or r.data:find('^%.%d', r.index)	-- or if it's a decimal then if it has a number following it then it's good ...
+	) then 									-- otherwise I want it to continue to the next 'else'
 		-- lua doesn't consider the - to be a part of the number literal
 		-- instead, it parses it as a unary - and then possibly optimizes it into the literal during ast optimization
 --DEBUG(@5): local start = r.index
@@ -264,6 +280,23 @@ function Tokenizer:start()
 	-- arrange symbols from largest to smallest
 	self.symbols:sort(function(a,b) return #a > #b end)
 	self.symbolsPatescape = self.symbols:mapi(function(symbol) return '^'..string.patescape(symbol) end)
+
+	self.keywordTree = {}
+	for keyword in pairs(self.keywords) do
+		local t = self.keywordTree
+		for i=1,#keyword do
+			local b = keyword:byte(i)
+			local n = t[b]
+			if not n then
+				n = {}
+				t[b] = n
+			end
+			t = n
+		end
+		-- terminator
+		t[true] = true
+	end
+
 	self:consume()
 	self:consume()
 end
