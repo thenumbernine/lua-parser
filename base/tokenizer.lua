@@ -29,6 +29,8 @@ function Tokenizer:parseNextToken()
 
 	if r:done() then return true end
 
+	local tk, tt
+
 	tk, tt = self:parseString()
 	if tk then return tk, tt end
 
