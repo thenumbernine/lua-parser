@@ -231,7 +231,7 @@ function Tokenizer:parseDecNumber()
 	local from = r.lastTokenFrom
 	r:ensureZeroOrOneDot(from, r.lastTokenTo)
 	if r:canbe'^[eE]' then
-		r:canbe'^[%+%-]'
+		r:canbe'^[+-]'
 		r:mustbe('^%d+', 'malformed number')
 	end
 	return from, r.lastTokenTo, 'number'
@@ -273,53 +273,124 @@ end
 -- separate this in case someone has to modify the tokenizer symbols and keywords before starting
 function Tokenizer:start()
 	self.tokenTree = {}
+
+
+	-- i'm too lazy to write another parser.
+	-- this is a table of objects per character rule.
+	-- each has list of characters for this character rule,
+	--  'maybe' or 'multiple' flags apply
+	local newnodes
+	local function addrule(args, rules)
+		local sofar = args.sofar or ''
+		local tokentype = args.type
+		local t = args.tree
+		if #rules == 0 then
+			if t[true] and t[true] ~= tokentype then
+				error("got overlapping token at "..sofar..': '..t[true]..' vs '..tokentype)
+			end
+			t[true] = tokentype
+			return
+		end
+		local r = rules[1]
+		local rest = table.sub(rules, 2)
+		if r.maybe then
+			local rnomaybe = {}
+			for i=1,#r do rnomaybe[i] = r[i] end
+			addrule({
+				sofar = sofar..'?',
+				type = tokentype,
+				tree = t,
+			}, table{rnomaybe}:append(rest))
+			addrule({
+				sofar = sofar..'?',
+				type = tokentype,
+				tree = t,
+			}, rest)
+		elseif r.many then
+			local manyNode
+			for _,b in ipairs(r) do
+				local n = t[b]
+				if n then
+					addrule({
+						sofar = sofar..'*',
+						type = tokentype,
+						tree = n,
+					}, rest)
+				else
+					if not manyNode then
+						-- all previous keys
+						manyNode = {}
+						for _,b in ipairs(r) do
+							manyNode[b] = manyNode
+						end
+						addrule({
+							sofar = sofar..'*',
+							type = tokentype,
+							tree = manyNode,
+						}, rest)
+					end
+					t[b] = manyNode
+				end
+			end
+		else
+			for _,b in ipairs(r) do
+				local n = t[b]
+				if not n then
+					n = {}
+					newnodes:insert(n)
+					t[b] = n
+				else
+					-- TODO verify there's no cyclic edges, otherwise we'll have to break them apart
+					-- only store one previous cycles
+					assert.ne(t, n)
+				end
+				addrule({
+					sofar = sofar..string.char(b),
+					type = tokentype,
+					tree = n,
+				}, rest)
+			end
+		end
+	end
+
+
 	local nodesForTypes = {}
 	for _,info in ipairs{
 		{type='keyword', strs=table.keys(self.keywords)},
 		{type='symbol', strs=table.keys(self.symbols)},
 	} do
-		nodesForTypes[info.type] = table()
+		newnodes = table()
+		nodesForTypes[info.type] = newnodes
 		for _,s in pairs(info.strs) do
-			local t = self.tokenTree
-			for i=1,#s do
-				local b = s:byte(i)
-				local n = t[b]
-				if not n then
-					n = {}
-					nodesForTypes[info.type]:insert(n)
-					t[b] = n
-				end
-				t = n
-			end
-			-- terminator
-			t[true] = info.type
+			addrule({
+					type = info.type,
+					tree = self.tokenTree,
+				},
+				string.split(s)
+				:mapi(function(c) return {c:byte()} end)
+			)
 		end
 	end
 
 
---[[
-decimal numbers?
-
-%d+
-%d+LL
-%d+ULL
-
-%d*%.%d+[Ee][%+%-]%d+
-%d+%.%d*[Ee][%+%-]%d+
-
-hex numbers
-
-0x%x+LL
-0x%x+ULL
-
-0x%x*%.%x+[Pp][%+%-]%d+
-0x%x+%.%x*[Pp][%+%-]%d+
-
---]]
-
-	-- also names
-	--local pat = '[_%a][_%w]*'
-
+	--	names
+	--	[_%a][_%w]*
+	--[=[
+	local lcase = range(('a'):byte(), ('z'):byte())
+	local ucase = range(('a'):byte(), ('z'):byte())
+	local alpha = table():append(lcase, ucase)
+	local alphanum = table(alpha):append(range(('0'):byte(), ('9'):byte()))
+	addrule({
+			type = 'name',
+			tree = self.tokenTree,
+		},
+		table{
+			table(alpha, {maybe=true}),
+			table(alphanum, {many=true})
+		}
+	)
+	--]=]
+	-- [=[
 	-- fill in the tokenTree to handle names
 	local name1 = table{(('_'):byte())}
 	for i=('a'):byte(),('z'):byte() do
@@ -350,6 +421,89 @@ hex numbers
 			n[b] = n[b] or nameNode
 		end
 	end
+	--]=]
+
+
+--[[
+decimal numbers?
+
+%d+
+%d+[lL][lL]
+%d+[uU][lL][lL]
+
+%d+[Ee][+-]%d+
+%d*%.%d+
+%d+%.%d*[Ee][+-]%d+
+
+hex numbers
+
+0x%x+[lL][lL]
+0x%x+[uU][lL][lL]
+
+0x%x*%.%x+[Pp][+-]%d+
+0x%x+%.%x*[Pp][+-]%d+
+--]]
+--[=[
+	local lByte = ('l'):byte()
+	local LByte = ('L'):byte()
+	local uByte = ('u'):byte()
+	local UByte = ('U'):byte()
+	-- %d+
+	local decNode = {
+		[true] = 'number',
+	}
+	if self.useluajit then
+		-- %d+[uU]?[lL][lL]
+		local numberTerm = {[true] = 'number'}
+		local LL = {[lByte] = numberTerm, [LByte] = numberTerm}
+		local ULL = {[lByte] = LL, [LByte] = LL}
+		decNode[uByte] = ULL
+		decNode[UByte] = ULL
+		decNode[lByte] = LL
+		decNode[LByte] = LL
+	end
+	for b=('0'):byte(),('9'):byte() do
+		decNode[b] = decNode
+	end
+
+	-- %d+[eE][+-]
+	local decExpNext = {[true] = 'number'}
+	for i=('0'):byte(),('9'):byte() do
+		decExpNext[i] = decExpNext
+	end
+	local decExp1st = {}
+	for i=('0'):byte(),('9'):byte() do
+		decExp1st[i] = decExpNext
+	end
+	local decEPMExp = {
+		[('+'):byte()] = decExp1st,
+		[('-'):byte()] = decExp1st,
+	}
+	decNode[('e'):byte()] = decEPMExp
+	decNode[('E'):byte()] = decEPMExp
+
+	local decDecNode = {[true] = 'number'}
+	for b=('0'):byte(),('9'):byte() do
+		decDecNode[b] = decDecNode
+	end
+	decDecNode[('e'):byte()] = decEPMExp
+	decDecNode[('E'):byte()] = decEPMExp
+
+
+	decNode[('.'):byte()] = decDecNode
+
+	for b=('1'):byte(),('9'):byte() do
+		assert(not self.tokenTree[b])
+		self.tokenTree[b] = decNode
+	end
+
+	local _0Node = {[true] = 'number'}
+	-- TODO octal support?
+	for b=('1'):byte(),('9'):byte() do
+		_0Node[b] = decNode
+	end
+	self.tokenTree[('0'):byte()] = _0Node
+--]=]
 
 	self:consume()
 	self:consume()

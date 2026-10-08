@@ -126,19 +126,19 @@ function LuaTokenizer:parseHexNumber(...)
 
 		if r:canbe'^[Pp]' then
 			-- fun fact, while the hex float can include hex digits, its 'p+-' exponent must be in decimal.
-			r:canbe'^[%+%-]'
+			r:canbe'^[+-]'
 			r:mustbe('^%d+', 'malformed number')
 		elseif numdots == 0 and self.useluajit then
-			if r:canbe'^LL' then
-			elseif r:canbe'^ULL' then
+			if r:canbe'^[lLl[lL]' then
+			elseif r:canbe'^[uU][lL][lL]' then
 			end
 		end
 	else
 		--return LuaTokenizer.super.parseHexNumber(self, ...)
 		r:mustbe('^%x+', 'malformed number')
 		if self.useluajit then
-			if r:canbe'^LL' then
-			elseif r:canbe'^ULL' then
+			if r:canbe'^[lL][lL]' then
+			elseif r:canbe'^[uU][lL][lL]' then
 			end
 		end
 	end
@@ -153,7 +153,7 @@ function LuaTokenizer:parseDecNumber()
 	local numdots = r:ensureZeroOrOneDot(from, r.lastTokenTo)
 
 	if r:canbe'^[Ee]' then
-		r:canbe'^[%+%-]'
+		r:canbe'^[+-]'
 		r:mustbe('^%d+', 'malformed number')
 	elseif numdots == 0 and self.useluajit then
 		if r:canbe'^LL' then
