@@ -301,14 +301,19 @@ function Tokenizer:start()
 decimal numbers?
 
 %d+
-%d*%.%d+
-%d+%.%d*
+%d+LL
+%d+ULL
 
-[Ee][%+%-][%d+]
-
-U?LL
+%d*%.%d+[Ee][%+%-]%d+
+%d+%.%d*[Ee][%+%-]%d+
 
 hex numbers
+
+0x%x+LL
+0x%x+ULL
+
+0x%x*%.%x+[Pp][%+%-]%d+
+0x%x+%.%x*[Pp][%+%-]%d+
 
 --]]
 
