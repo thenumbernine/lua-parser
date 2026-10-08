@@ -55,8 +55,8 @@ function Parser:setData(data, source)
 		self.ast.refreshparents(self.tree)
 	end
 
-	if self.t.token then
-		return false, self.t:getpos()..": expected eof, found "..self.t.token
+	if self.t.tokenFrom then
+		return false, self.t:getpos()..": expected eof, found "..tostring(self.t:gettoken())
 	end
 	return true
 end
@@ -65,32 +65,36 @@ function Parser:getloc()
 	return self.t:getloc()
 end
 
-function Parser:canbe(token, tokentype)	-- token is optional
-	assert(tokentype)
-	if (not token or token == self.t.token)
-	and tokentype == self.t.tokentype
-	then
-		self.lasttoken, self.lasttokentype = self.t.token, self.t.tokentype
-		self.t:consume()
-		return self.lasttoken, self.lasttokentype
-	end
+function Parser:canbe(reqToken, reqTokenType)	-- reqToken is optional
+--DEBUG:assert(reqTokenType)
+	if reqTokenType ~= self.t.tokenType then return end
+	local thisToken = self.t:gettoken()
+	if reqToken and reqToken ~= thisToken then return end
+
+	self.lasttoken, self.lasttokentype = thisToken, self.t.tokenType
+	self.t:consume()
+	return true
 end
 
-function Parser:mustbe(token, tokentype, opentoken, openloc)
-	local lasttoken, lasttokentype = self.t.token, self.t.tokentype
-	self.lasttoken, self.lasttokentype = self:canbe(token, tokentype)
-	if not self.lasttoken then
-		local msg = "expected token="..tolua(token).." tokentype="..tolua(tokentype)
-			.." but found token="..tolua(lasttoken).." type="..tolua(lasttokentype)
+function Parser:mustbe(reqToken, reqTokenType, opentoken, openloc)
+	local t = self.t
+	local lastTokenFrom, lastTokenTo, lastTokenType, lastTokenExtra
+		= t.tokenFrom, t.tokenTo, t.tokenType, t.tokenExtra
+	if not self:canbe(reqToken, reqTokenType) then
+		-- same as Tokenzier:gettoken() but defer until failure
+		local lastToken = lastTokenFrom and (lastTokenExtra or t.r.data):sub(lastTokenFrom, lastTokenTo)
+
+		local msg = "expected token="..tolua(reqToken).." tokenType="..tolua(reqTokenType)
+			.." but found token="..tolua(lastToken).." type="..tolua(lastTokenType)
 		if opentoken then
-			local sofar = self.t.r.data:sub(1, openloc)
+			local sofar = t.r.data:sub(1, openloc)
 			local line = select(2, sofar:gsub('\n', ''))
 			local col = #sofar:match'[^\n]*$'
 			msg = msg .. " to close "..tolua(opentoken).." at line="..line..' col='..col
 		end
 		error('MSG:'..msg)
 	end
-	return self.lasttoken, self.lasttokentype
+	return true
 end
 
 -- make new ast node, assign it back to the parser (so it can tell what version / keywords / etc are being used)
@@ -121,7 +125,7 @@ end
 -- used with self.parseExprPrecedenceRulesAndClassNames
 -- example in parser/lua/parser.lua
 function Parser:parse_expr_precedenceTable(i)
---DEBUG(@5):print('Parser:parse_expr_precedenceTable', i, 'of', #self.parseExprPrecedenceRulesAndClassNames, 'token=', self.t.token)
+--DEBUG(@5):print('Parser:parse_expr_precedenceTable', i, 'of', #self.parseExprPrecedenceRulesAndClassNames, 'token=', self.t:gettoken())
 	local precedenceLevel = self.parseExprPrecedenceRulesAndClassNames[i]
 	if precedenceLevel.unaryLHS then
 		local from = self:getloc()

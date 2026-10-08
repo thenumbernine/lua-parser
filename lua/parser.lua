@@ -299,7 +299,8 @@ function LuaParser:parse_stat_keyword()
 			:setspan(from, self:getloc())
 	elseif self.version >= '5.2' then
 		if self:canbe('goto', 'keyword') then
-			local name = self:mustbe(nil, 'name')
+			self:mustbe(nil, 'name')
+			local name = self.lasttoken
 			local g = self:node('_goto', name)
 				:setspan(from, self:getloc())
 			self.gotos[name] = g
@@ -309,7 +310,8 @@ function LuaParser:parse_stat_keyword()
 			return self:parse_break()
 				:setspan(from, self:getloc())
 		elseif self:canbe('::', 'symbol') then
-			local name = self:mustbe(nil, 'name')
+			self:mustbe(nil, 'name')
+			local name = self.lasttoken
 			local l = self:node('_label', name)
 			self.labels[name] = true
 			self:mustbe('::', 'symbol')
@@ -392,14 +394,18 @@ function LuaParser:parse_funcname()
 	if not name then return end
 	while self:canbe('.', 'symbol') do
 		local sfrom = self.t:getloc()
+		self:mustbe(nil, 'name')
+		local s = self.lasttoken
 		name = self:node('_index',
 			name,
-			self:node('_string', self:mustbe(nil, 'name'))
+			self:node('_string', s)
 				:setspan(sfrom, self:getloc())
 		):setspan(from, self:getloc())
 	end
 	if self:canbe(':', 'symbol') then
-		name = self:node('_indexself', name, self:mustbe(nil, 'name'))
+		self:mustbe(nil, 'name')
+		local s = self.lasttoken
+		name = self:node('_indexself', name, s)
 			:setspan(from, self:getloc())
 	end
 	return name
@@ -408,7 +414,7 @@ end
 -- parses a varialbe name, without attribs, and returns it in a '_var' node
 function LuaParser:parse_var()
 	local from = self:getloc()
-	local name = self:canbe(nil, 'name')
+	local name = self:canbe(nil, 'name') and self.lasttoken
 	if not name then return end
 	return self:node('_var', name)
 		:setspan(from, self:getloc())
@@ -428,7 +434,7 @@ end
 
 function LuaParser:parse_attnamelist()
 	local from = self:getloc()
-	local name = self:canbe(nil, 'name')
+	local name = self:canbe(nil, 'name') and self.lasttoken
 	if not name then return end
 	local attrib = self:parse_attrib()
 	local names = table{
@@ -437,7 +443,8 @@ function LuaParser:parse_attnamelist()
 	}
 	while self:canbe(',', 'symbol') do
 		from = self:getloc()
-		local name = self:mustbe(nil, 'name')
+		self:mustbe(nil, 'name')
+		local name = self.lasttoken
 		local attrib = self:parse_attrib()
 		names:insert(
 			self:node('_var', name, attrib)
@@ -451,7 +458,8 @@ function LuaParser:parse_attrib()
 	if self.version < '5.4' then return end
 	local attrib
 	if self:canbe('<', 'symbol') then
-		attrib = self:mustbe(nil, 'name')
+		self:mustbe(nil, 'name')
+		attrib = self.lasttoken
 		self:mustbe('>', 'symbol')
 	end
 	return attrib
@@ -551,16 +559,20 @@ function LuaParser:parse_prefixexp()
 			prefixexp:setspan(from, self:getloc())
 		elseif self:canbe('.', 'symbol') then
 			local sfrom = self:getloc()
+			self:mustbe(nil, 'name')
+			local s = self.lasttoken
 			prefixexp = self:node('_index',
 				prefixexp,
-				self:node('_string', self:mustbe(nil, 'name'))
+				self:node('_string', s)
 					:setspan(sfrom, self:getloc())
 			)
 			:setspan(from, self:getloc())
 		elseif self:canbe(':', 'symbol') then
+			self:mustbe(nil, 'name')
+			local s = self.lasttoken
 			prefixexp = self:node('_indexself',
 				prefixexp,
-				self:mustbe(nil, 'name')
+				s
 			):setspan(from, self:getloc())
 			local args = self:parse_args()
 			if not args then error"MSG:function arguments expected" end
@@ -703,7 +715,7 @@ function LuaParser:parse_field()
 		self:mustbe(']', 'symbol')
 		self:mustbe('=', 'symbol')
 		local valexp = self:parse_exp()
-		if not valexp then error("MSG:expected expression but found "..tostring(self.t.token)) end
+		if not valexp then error("MSG:expected expression but found "..tostring(self.t:gettoken())) end
 		return self:node('_assign', {keyexp}, {valexp})
 			:setspan(from, self:getloc())
 	end

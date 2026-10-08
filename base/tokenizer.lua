@@ -29,16 +29,18 @@ function Tokenizer:parseNextToken()
 
 	if r:done() then return true end
 
-	local tk, tt
+	-- "tokenData" is because strings parse-and-convert
+	-- whereas all other tokens don't need to convert so they don't need any tokenData data besides the range in the input stream
+	local tokenFrom, tokenTo, tokenType, tokenData
 
-	tk, tt = self:parseString()
-	if tk then return tk, tt end
+	tokenFrom, tokenTo, tokenType, tokenData = self:parseString()
+	if tokenFrom then return tokenFrom, tokenTo, tokenType, tokenData end
 
-	tk, tt = self:parseNumber()
-	if tk then return tk, tt end
+	tokenFrom, tokenTo, tokenType, tokenData = self:parseNumber()
+	if tokenFrom then return tokenFrom, tokenTo, tokenType, tokenData end
 
-	tk, tt = self:parseNameOrSymbol()
-	if tk then return tk, tt end
+	tokenFrom, tokenTo, tokenType, tokenData = self:parseNameOrSymbol()
+	if tokenFrom then return tokenFrom, tokenTo, tokenType, tokenData end
 
 	error("MSG:unknown token "..r.data:sub(r.index, r.index+20)..(r.index+20 > #r.data and '...' or ''))
 end
@@ -190,7 +192,7 @@ function Tokenizer:parseQuoteString()
 			end
 		end
 --DEBUG(@5): print('read quote string ['..start..','..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..']: '..r.data:sub(start, r.index-(r.lastTokenTo-r.lastTokenFrom+1)))
-		return s, 'string'
+		return 1, #s, 'string', s
 	end
 end
 
@@ -232,7 +234,7 @@ function Tokenizer:parseDecNumber()
 		r:canbe'^[%+%-]'
 		r:mustbe('^%d+', 'malformed number')
 	end
-	return r.data:sub(from, r.lastTokenTo), 'number'
+	return from, r.lastTokenTo, 'number'
 end
 
 function Tokenizer:parseNameOrSymbol()
@@ -255,7 +257,8 @@ function Tokenizer:parseNameOrSymbol()
 			r.index = to+1
 			r:updatelinecol()
 			r:setlasttoken(from, to, from, from-1)
-			return r.data:sub(from, to), lastValidType
+
+			return from, to, lastValidType
 		else
 			local possibleEnd = n[true]
 			if possibleEnd then
@@ -330,6 +333,14 @@ function Tokenizer:start()
 	self:consume()
 end
 
+function Tokenizer:gettoken()
+	if not self.tokenFrom then return nil end
+	if not self.token then
+		self.token = (self.tokenData or self.r.data):sub(self.tokenFrom, self.tokenTo)
+	end
+	return self.token
+end
+
 function Tokenizer:consume()
 	-- [[ TODO store these in an array somewhere, make the history adjustable
 	-- then in all the get[prev][2]loc's just pass an index for how far back to search
@@ -340,18 +351,21 @@ function Tokenizer:consume()
 	self.prevtokenIndex = #self.r.tokenhistory/2-1
 	--]]
 
-	self.token = self.nexttoken
-	self.tokentype = self.nexttokentype
+	self.token = nil
+	self.tokenFrom = self.nextTokenFrom
+	self.tokenTo = self.nextTokenTo
+	self.tokenData = self.nextTokenData
+	self.tokenType = self.nextTokenType
 
-	local nexttoken, nexttokentype = self:parseNextToken()
+	local nextTokenFrom, nextTokenTo, nextTokenType, nextTokenData = self:parseNextToken()
 	-- detect errors
-	if not nexttoken then
-		local err = nexttokentype
+	if not nextTokenFrom then
+		local err = nextTokenType
 		--[[ enabling this to forward errors wasn't so foolproof...
 		if type(err) == 'table' then
 		--]]
 			-- then repackage it and include our parser state
-			error('MSG:'..err..' token='..tostring(self.token)..' type='..tostring(self.tokentype)..' pos='..self:getpos())
+			error('MSG:'..err..' token='..tostring(self:gettoken())..' type='..tostring(self.tokenType)..' pos='..self:getpos())
 		--[[ see above
 		else
 			-- internal error - just rethrow
@@ -361,12 +375,16 @@ function Tokenizer:consume()
 	end
 
 	-- change "done" to empty
-	if nexttoken == true then
-		self.nexttoken = nil
-		self.nexttokentype = nil
+	if nextTokenFrom == true then
+		self.nextTokenFrom = nil
+		self.nextTokenTo = nil
+		self.nextTokenType = nil
+		self.nextTokenData = nil
 	else
-		self.nexttoken = nexttoken
-		self.nexttokentype = nexttokentype
+		self.nextTokenFrom = nextTokenFrom
+		self.nextTokenTo = nextTokenTo
+		self.nextTokenType = nextTokenType
+		self.nextTokenData = nextTokenData
 	end
 end
 

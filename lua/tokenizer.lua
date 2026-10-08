@@ -74,8 +74,8 @@ end
 
 function LuaTokenizer:parseString()
 	-- try to parse block strings
-	local tk, tt = self:parseBlockString()
-	if tk then return tk, tt end
+	local tokenFrom, tokenTo, tokenType, tokenData = self:parseBlockString()
+	if tokenFrom then return tokenFrom, tokenTo, tokenType, tokenData end
 
 	-- try for base's quote strings
 	return LuaTokenizer.super.parseString(self)
@@ -88,7 +88,7 @@ function LuaTokenizer:parseBlockString()
 	local equalCount = r.lastTokenTo - r.lastTokenFrom - 1
 	if self:readRestOfBlock(equalCount) then
 --DEBUG(@5): print('read multi-line string ['..(r.index-#r:getlasttoken())..','..r.index..']: '..r:getlasttoken())
-		return r:getlasttoken(), 'string'
+		return r.lastTokenFrom, r.lastTokenTo, 'string'
 	end
 end
 
@@ -142,7 +142,7 @@ function LuaTokenizer:parseHexNumber(...)
 			end
 		end
 	end
-	return r.data:sub(from, r.lastTokenTo), 'number'
+	return from, r.lastTokenTo, 'number'
 end
 
 function LuaTokenizer:parseDecNumber()
@@ -160,7 +160,7 @@ function LuaTokenizer:parseDecNumber()
 		elseif r:canbe'^ULL' then
 		end
 	end
-	return r.data:sub(from, r.lastTokenTo), 'number'
+	return from, r.lastTokenTo, 'number'
 end
 
 return LuaTokenizer
