@@ -220,7 +220,7 @@ function Tokenizer:parseHexNumber()
 	local from = r.lastTokenFrom
 
 	local r = self.r
-	r:mustbe('^[%da-fA-F]+', 'malformed number')
+	r:mustbe('^%x+', 'malformed number')
 
 	return r.data:sub(from, r.lastTokenTo), 'number'
 end
@@ -296,6 +296,25 @@ function Tokenizer:start()
 		end
 	end
 
+
+--[[
+decimal numbers?
+
+%d+
+%d*%.%d+
+%d+%.%d*
+
+[Ee][%+%-][%d+]
+
+U?LL
+
+hex numbers
+
+--]]
+
+	-- also names
+	--local pat = '[_%a][_%w]*'
+
 	-- fill in the tokenTree to handle names
 	local name1 = table{(('_'):byte())}
 	for i=('a'):byte(),('z'):byte() do
@@ -319,6 +338,7 @@ function Tokenizer:start()
 	end
 
 	-- now for keyword nodes, add remaining name transitions
+	-- TODO instead of this, how about automata combine?
 	for _,n in ipairs(nodesForTypes.keyword) do
 		n[true] = n[true] or 'name'
 		for _,b in ipairs(name2) do

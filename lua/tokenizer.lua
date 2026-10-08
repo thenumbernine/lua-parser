@@ -120,7 +120,7 @@ function LuaTokenizer:parseHexNumber(...)
 	-- if version is 5.2 then allow decimals in hex #'s, and use 'p's instead of 'e's for exponents
 	if self.version >= '5.2' then
 		-- TODO this looks like the float-parse code below (but with e+- <-> p+-) but meh I'm lazy so I just copied it.
-		if not r:canbe'^[%.%da-fA-F]+' then return end
+		if not r:canbe'^[%.%x]+' then return end
 
 		local numdots = r:ensureZeroOrOneDot(r.lastTokenFrom, r.lastTokenTo)
 
@@ -135,7 +135,7 @@ function LuaTokenizer:parseHexNumber(...)
 		end
 	else
 		--return LuaTokenizer.super.parseHexNumber(self, ...)
-		r:mustbe('^[%da-fA-F]+', 'malformed number')
+		r:mustbe('^%x+', 'malformed number')
 		if self.useluajit then
 			if r:canbe'^LL' then
 			elseif r:canbe'^ULL' then
