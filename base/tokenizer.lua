@@ -36,8 +36,10 @@ function Tokenizer:parseNextToken()
 	tokenFrom, tokenTo, tokenType, tokenData = self:parseString()
 	if tokenFrom then return tokenFrom, tokenTo, tokenType, tokenData end
 
+	-- [=[
 	tokenFrom, tokenTo, tokenType, tokenData = self:parseNumber()
 	if tokenFrom then return tokenFrom, tokenTo, tokenType, tokenData end
+	--]=]
 
 	tokenFrom, tokenTo, tokenType, tokenData = self:parseNameOrSymbol()
 	if tokenFrom then return tokenFrom, tokenTo, tokenType, tokenData end
@@ -196,6 +198,7 @@ function Tokenizer:parseQuoteString()
 	end
 end
 
+-- [=[
 function Tokenizer:parseNumber()
 	local r = self.r
 	if r.data:find('^[%.%d]', r.index) 		-- if it's a decimal or a number...
@@ -236,6 +239,7 @@ function Tokenizer:parseDecNumber()
 	end
 	return from, r.lastTokenTo, 'number'
 end
+--]=]
 
 function Tokenizer:parseNameOrSymbol()
 	local r = self.r
@@ -446,6 +450,21 @@ hex numbers
 
 0x%x*%.%x+[Pp][+-]%d+
 0x%x+%.%x*[Pp][+-]%d+
+
+combined:
+
+%d*%.%d+
+%d*%d+
+%d*%d+[lL][lL]				luajit
+%d*%d+[uU][lL][lL]			luajit
+%d*%d+[Ee][+-]%d+
+%d*%d+%.%d*[Ee][+-]%d+
+
+0x%x*%.%x+[Pp][+-]%d+		>= 5.2
+0x%x*%x+[lL][lL]			luajit
+0x%x*%x+[uU][lL][lL]		luajit
+0x%x*%x+%.%x*[Pp][+-]%d+	>= 5.2
+
 --]]
 --[=[
 	local lByte = ('l'):byte()
@@ -456,11 +475,12 @@ hex numbers
 	local decNode = {
 		[true] = 'number',
 	}
+
+	-- %d+[uU]?[lL][lL]
+	local numberTerm = {[true] = 'number'}
+	local LL = {[lByte] = numberTerm, [LByte] = numberTerm}
+	local ULL = {[lByte] = LL, [LByte] = LL}
 	if self.useluajit then
-		-- %d+[uU]?[lL][lL]
-		local numberTerm = {[true] = 'number'}
-		local LL = {[lByte] = numberTerm, [LByte] = numberTerm}
-		local ULL = {[lByte] = LL, [LByte] = LL}
 		decNode[uByte] = ULL
 		decNode[UByte] = ULL
 		decNode[lByte] = LL
@@ -486,14 +506,13 @@ hex numbers
 	decNode[('e'):byte()] = decEPMExp
 	decNode[('E'):byte()] = decEPMExp
 
+	-- %d+%.%d*[Ee][+-]%d+
 	local decDecNode = {[true] = 'number'}
 	for b=('0'):byte(),('9'):byte() do
 		decDecNode[b] = decDecNode
 	end
 	decDecNode[('e'):byte()] = decEPMExp
 	decDecNode[('E'):byte()] = decEPMExp
-
-
 	decNode[('.'):byte()] = decDecNode
 
 	for b=('1'):byte(),('9'):byte() do
@@ -501,12 +520,57 @@ hex numbers
 		self.tokenTree[b] = decNode
 	end
 
+	-- 0x%x*%.%x+[Pp][+-]%d+
+	-- 0x%x+%.%x*[Pp][+-]%d+
+	local hexDecNode = {[true] = 'number'}
+	for b=('0'):byte(),('9'):byte() do
+		hexDecNode[b] = decDecNode
+	end
+	if self.version >= '5.2' then
+		hexDecNode[('p'):byte()] = decEPMExp
+		hexDecNode[('P'):byte()] = decEPMExp
+	end
+
+	local hexBytes = table():append(
+		range(('0'):byte(), ('9'):byte()),
+		range(('a'):byte(), ('f'):byte()),
+		range(('A'):byte(), ('F'):byte())
+	)
+
+	local hexNode = {[true] = 'number'}
+	for _,b in ipairs(hexBytes) do
+		hexNode[b] = hexNode
+	end
+	if self.useluajit then
+		hexNode[uByte] = ULL
+		hexNode[UByte] = ULL
+		hexNode[lByte] = LL
+		hexNode[LByte] = LL
+	end
+	hexNode[('.'):byte()] = hexDecNode
+	if self.version >= '5.2' then
+		hexNode[('p'):byte()] = decEPMExp
+		hexNode[('P'):byte()] = decEPMExp
+	end
+
+	local hex1stNode = {}
+	for _,b in ipairs(hexBytes) do
+		hex1stNode[b] = hexNode
+	end
+	hex1stNode[('.'):byte()] = hexDecNode
+
 	local _0Node = {[true] = 'number'}
-	-- TODO octal support?
+	_0Node[('x'):byte()] = hex1stNode
+	_0Node[('X'):byte()] = hex1stNode
 	for b=('1'):byte(),('9'):byte() do
 		_0Node[b] = decNode
 	end
 	self.tokenTree[('0'):byte()] = _0Node
+
+	-- %d*%.%d+
+	for b=('0'):byte(),('9'):byte() do
+		self.tokenTree[('.'):byte()][b] = decDecNode
+	end
 --]=]
 
 	self:consume()

@@ -112,6 +112,7 @@ function LuaTokenizer:readRestOfBlock(equalCount)
 	return true
 end
 
+-- [=[
 function LuaTokenizer:parseHexNumber(...)
 	-- save here to include 0x
 	local r = self.r
@@ -162,5 +163,6 @@ function LuaTokenizer:parseDecNumber()
 	end
 	return from, r.lastTokenTo, 'number'
 end
+--]=]
 
 return LuaTokenizer
