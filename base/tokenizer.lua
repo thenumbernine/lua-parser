@@ -11,7 +11,7 @@ end
 
 function Tokenizer:init(data, ...)
 	-- TODO move what this does to just the subclass initialization
-	self.symbols = table(self.symbols)
+	self.symbols = table(self.symbols):setmetatable(nil)
 	self.keywords = table(self.keywords):setmetatable(nil)
 	self:initSymbolsAndKeywords(...)
 
@@ -272,14 +272,11 @@ end
 
 -- separate this in case someone has to modify the tokenizer symbols and keywords before starting
 function Tokenizer:start()
-	-- TODO provide tokenizer the AST namespace and have it build the tokens (and keywords?) here automatically
-	self.symbols = self.symbols:mapi(function(v,k) return true, v end):keys()
-
 	self.tokenTree = {}
 	local nodesForTypes = {}
 	for _,info in ipairs{
 		{type='keyword', strs=table.keys(self.keywords)},
-		{type='symbol', strs=self.symbols},
+		{type='symbol', strs=table.keys(self.symbols)},
 	} do
 		nodesForTypes[info.type] = table()
 		for _,s in pairs(info.strs) do
@@ -354,8 +351,8 @@ function Tokenizer:consume()
 	self.token = nil
 	self.tokenFrom = self.nextTokenFrom
 	self.tokenTo = self.nextTokenTo
-	self.tokenData = self.nextTokenData
 	self.tokenType = self.nextTokenType
+	self.tokenData = self.nextTokenData
 
 	local nextTokenFrom, nextTokenTo, nextTokenType, nextTokenData = self:parseNextToken()
 	-- detect errors

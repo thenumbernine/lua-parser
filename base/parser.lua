@@ -68,6 +68,7 @@ end
 function Parser:canbe(reqToken, reqTokenType)	-- reqToken is optional
 --DEBUG:assert(reqTokenType)
 	if reqTokenType ~= self.t.tokenType then return end
+
 	local thisToken = self.t:gettoken()
 	if reqToken and reqToken ~= thisToken then return end
 
@@ -78,11 +79,11 @@ end
 
 function Parser:mustbe(reqToken, reqTokenType, opentoken, openloc)
 	local t = self.t
-	local lastTokenFrom, lastTokenTo, lastTokenType, lastTokenExtra
-		= t.tokenFrom, t.tokenTo, t.tokenType, t.tokenExtra
+	local lastTokenFrom, lastTokenTo, lastTokenType, lastTokenData
+		= t.tokenFrom, t.tokenTo, t.tokenType, t.tokenData
 	if not self:canbe(reqToken, reqTokenType) then
 		-- same as Tokenzier:gettoken() but defer until failure
-		local lastToken = lastTokenFrom and (lastTokenExtra or t.r.data):sub(lastTokenFrom, lastTokenTo)
+		local lastToken = lastTokenFrom and (lastTokenData or t.r.data):sub(lastTokenFrom, lastTokenTo)
 
 		local msg = "expected token="..tolua(reqToken).." tokenType="..tolua(reqTokenType)
 			.." but found token="..tolua(lastToken).." type="..tolua(lastTokenType)
@@ -175,7 +176,6 @@ function Parser:parse_expr_precedenceTable(i)
 		return a
 	end
 end
-
 
 
 return Parser

@@ -20,12 +20,12 @@ function LuaTokenizer:initSymbolsAndKeywords(version, useluajit)
 	self.useluajit = useluajit
 
 	for w in ([[... .. == ~= <= >= + - * / ^ < > = ( ) { } [ ] ; : , .]]):gmatch('%S+') do
-		self.symbols:insert(w)
+		self.symbols[w] = true
 	end
 
 	if version >= '5.1' then
-		self.symbols:insert'#'
-		self.symbols:insert'%'
+		self.symbols['#'] = true
+		self.symbols['%'] = true
 	end
 
 	for w in ([[and break do else elseif end false for function if in local nil not or repeat return then true until while]]):gmatch('%S+') do
@@ -37,17 +37,17 @@ function LuaTokenizer:initSymbolsAndKeywords(version, useluajit)
 	-- if I use a load('goto=true') test without ext.load then load() doens't accept strings for 5.1 when the goto isn't a keyword, so I might as well just test if load can load any string ...
 	-- TODO separate language features from versions and put all the language options in a ctor table somewhere
 	do--if version >= '5.2' then
-		self.symbols:insert'::'	-- for labels .. make sure you insert it before ::
+		self.symbols['::'] = true	-- for labels .. make sure you insert it before ::
 		self.keywords['goto'] = true
 	end
 
 	if version >= '5.3' then -- and not useluajit then ... setting this fixes some validation tests, but setting it breaks langfix+luajit ... TODO straighten out parser/version configuration
-		self.symbols:insert'//'
-		self.symbols:insert'~'
-		self.symbols:insert'&'
-		self.symbols:insert'|'
-		self.symbols:insert'<<'
-		self.symbols:insert'>>'
+		self.symbols['//'] = true
+		self.symbols['~'] = true
+		self.symbols['&'] = true
+		self.symbols['|'] = true
+		self.symbols['<<'] = true
+		self.symbols['>>'] = true
 	end
 end
 
