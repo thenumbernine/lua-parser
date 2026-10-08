@@ -280,9 +280,10 @@ function Tokenizer:start()
 	-- each has list of characters for this character rule,
 	--  'maybe' or 'multiple' flags apply
 	local newnodes
-	local function addrule(args, rules)
+	local function addrule(args)
 		local sofar = args.sofar or ''
 		local tokentype = args.type
+		local rules = args.rules
 		local t = args.tree
 		if #rules == 0 then
 			if t[true] and t[true] ~= tokentype then
@@ -296,26 +297,29 @@ function Tokenizer:start()
 		if r.maybe then
 			local rnomaybe = {}
 			for i=1,#r do rnomaybe[i] = r[i] end
-			addrule({
+			addrule{
 				sofar = sofar..'?',
 				type = tokentype,
 				tree = t,
-			}, table{rnomaybe}:append(rest))
-			addrule({
+				rules = table{rnomaybe}:append(rest),
+			}
+			addrule{
 				sofar = sofar..'?',
 				type = tokentype,
 				tree = t,
-			}, rest)
+				rules = res,
+			}
 		elseif r.many then
 			local manyNode
 			for _,b in ipairs(r) do
 				local n = t[b]
 				if n then
-					addrule({
+					addrule{
 						sofar = sofar..'*',
 						type = tokentype,
 						tree = n,
-					}, rest)
+						rules = rest,
+					}
 				else
 					if not manyNode then
 						-- all previous keys
@@ -323,11 +327,12 @@ function Tokenizer:start()
 						for _,b in ipairs(r) do
 							manyNode[b] = manyNode
 						end
-						addrule({
+						addrule{
 							sofar = sofar..'*',
 							type = tokentype,
 							tree = manyNode,
-						}, rest)
+							rules = rest,
+						}
 					end
 					t[b] = manyNode
 				end
@@ -344,11 +349,12 @@ function Tokenizer:start()
 					-- only store one previous cycles
 					assert.ne(t, n)
 				end
-				addrule({
+				addrule{
 					sofar = sofar..string.char(b),
 					type = tokentype,
 					tree = n,
-				}, rest)
+					rules = rest,
+				}
 			end
 		end
 	end
@@ -362,35 +368,33 @@ function Tokenizer:start()
 		newnodes = table()
 		nodesForTypes[info.type] = newnodes
 		for _,s in pairs(info.strs) do
-			addrule({
-					type = info.type,
-					tree = self.tokenTree,
-				},
-				string.split(s)
-				:mapi(function(c) return {c:byte()} end)
-			)
+			addrule{
+				type = info.type,
+				tree = self.tokenTree,
+				rules = string.split(s)
+					:mapi(function(c) return {c:byte()} end),
+			}
 		end
 	end
 
 
 	--	names
 	--	[_%a][_%w]*
-	--[=[
+	-- [=[
 	local lcase = range(('a'):byte(), ('z'):byte())
 	local ucase = range(('a'):byte(), ('z'):byte())
 	local alpha = table():append(lcase, ucase)
 	local alphanum = table(alpha):append(range(('0'):byte(), ('9'):byte()))
-	addrule({
-			type = 'name',
-			tree = self.tokenTree,
-		},
-		table{
+	addrule{
+		type = 'name',
+		tree = self.tokenTree,
+		rules = table{
 			table(alpha, {maybe=true}),
 			table(alphanum, {many=true})
-		}
-	)
+		},
+	}
 	--]=]
-	-- [=[
+	--[=[
 	-- fill in the tokenTree to handle names
 	local name1 = table{(('_'):byte())}
 	for i=('a'):byte(),('z'):byte() do
