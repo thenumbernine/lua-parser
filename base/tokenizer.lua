@@ -380,7 +380,7 @@ function Tokenizer:start()
 
 	--	names
 	--	[_%a][_%w]*
-	-- [=[
+	--[=[
 	local lcase = range(('a'):byte(), ('z'):byte())
 	local ucase = range(('a'):byte(), ('z'):byte())
 	local alpha = table():append(lcase, ucase)
@@ -394,7 +394,7 @@ function Tokenizer:start()
 		},
 	}
 	--]=]
-	--[=[
+	-- [=[
 	-- fill in the tokenTree to handle names
 	local name1 = table{(('_'):byte())}
 	for i=('a'):byte(),('z'):byte() do
