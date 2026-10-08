@@ -18,7 +18,7 @@ function Tokenizer:init(data, ...)
 	self.r = DataReader(data)
 end
 
-function Tokenizer:gettoken()
+function Tokenizer:parseNextToken()
 	local r = self.r
 
 	local ws
@@ -35,10 +35,7 @@ function Tokenizer:gettoken()
 	tk, tt = self:parseNumber()
 	if tk then return tk, tt end
 
-	tk, tt = self:parseName()
-	if tk then return tk, tt end
-
-	tk, tt = self:parseSymbol()
+	tk, tt = self:parseNameOrSymbol()
 	if tk then return tk, tt end
 
 	error("MSG:unknown token "..r.data:sub(r.index, r.index+20)..(r.index+20 > #r.data and '...' or ''))
@@ -236,89 +233,94 @@ function Tokenizer:parseDecNumber()
 	return r.data:sub(from, r.lastTokenTo), 'number'
 end
 
--- names
-function Tokenizer:parseName()
-	local r = self.r
-	if r:canbe'^[%a_][%w_]*' then	-- name
---DEBUG(@5): print('read name ['..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..', '..r.index..']: '..r:getlasttoken())
-		local lasttoken = r:getlasttoken()
-		local tokenType = 'name'
-		local t = self.keywordTree
-		for i=1,#lasttoken do
-			local b = lasttoken:byte(i)
-			t = t[b]
-			if not t then goto fail end
-		end
-		t = t[true]
-		if t then tokenType = t end
-::fail::
-		return lasttoken, tokenType
-	end
-end
-
-function Tokenizer:parseSymbol()
+function Tokenizer:parseNameOrSymbol()
 	local r = self.r
 	-- see if it matches any symbols
 --DEBUG:assert.eq(#self.symbols, #self.symbolsPatescape)
-	--[[
-	for i,symbolPatescape in ipairs(self.symbolsPatescape) do
-		if r:canbe(symbolPatescape) then
---DEBUG(@5): print('read symbol ['..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..','..r.index..']: '..r:getlasttoken())
-			return self.symbols[i], 'symbol'
-		end
-	end
-	--]]
-	-- [[
-	local t = self.symbolTree
-	local lastValid
+	local t = self.tokenTree
+	local lastValidLoc
+	local lastValidType
 	for i=r.index,math.huge do
 		local b = r.data:byte(i)
 		local n = t[b]
 		if not n then
-			if not lastValid then
+			if not lastValidLoc then
 				return
 			end
-			-- r:seekpast implementation:
+			-- r:canbe/r:seekpast implementation:
 			local from = r.index
-			local to = lastValid
+			local to = lastValidLoc
 			r.index = to+1
 			r:updatelinecol()
 			r:setlasttoken(from, to, from, from-1)
-			return r.data:sub(from, to), 'symbol'
+			return r.data:sub(from, to), lastValidType
 		else
-			if n[true] then lastValid = i end
+			local possibleEnd = n[true]
+			if possibleEnd then
+				lastValidType = possibleEnd
+				lastValidLoc = i
+			end
 		end
 		t = n
 	end
-	--]]
 end
 
 -- separate this in case someone has to modify the tokenizer symbols and keywords before starting
 function Tokenizer:start()
 	-- TODO provide tokenizer the AST namespace and have it build the tokens (and keywords?) here automatically
 	self.symbols = self.symbols:mapi(function(v,k) return true, v end):keys()
-	-- arrange symbols from largest to smallest
-	self.symbols:sort(function(a,b) return #a > #b end)
-	self.symbolsPatescape = self.symbols:mapi(function(symbol) return '^'..string.patescape(symbol) end)
 
+	self.tokenTree = {}
+	local nodesForTypes = {}
 	for _,info in ipairs{
-		{field='keywordTree', type='keyword', strs=table.keys(self.keywords)},
-		{field='symbolTree', type='symbol', strs=self.symbols},
+		{type='keyword', strs=table.keys(self.keywords)},
+		{type='symbol', strs=self.symbols},
 	} do
-		self[info.field] = {}
+		nodesForTypes[info.type] = table()
 		for _,s in pairs(info.strs) do
-			local t = self[info.field]
+			local t = self.tokenTree
 			for i=1,#s do
 				local b = s:byte(i)
 				local n = t[b]
 				if not n then
 					n = {}
+					nodesForTypes[info.type]:insert(n)
 					t[b] = n
 				end
 				t = n
 			end
 			-- terminator
 			t[true] = info.type
+		end
+	end
+
+	-- fill in the tokenTree to handle names
+	local name1 = table{(('_'):byte())}
+	for i=('a'):byte(),('z'):byte() do
+		name1:insert(i)
+		name1:insert(i + ('A'):byte() - ('a'):byte())
+	end
+	local name2 = table(name1)
+	for i=0,9 do
+		name2:insert(('0'):byte() + i)
+	end
+
+	-- add self-transitions so we can process name characters as long as they go
+	local nameNode = {[true] = 'name'}
+	for _,b in ipairs(name2) do
+		nameNode[b] = nameNode
+	end
+
+	-- add first character of name transitions to table
+	for _,b in ipairs(name1) do
+		self.tokenTree[b] = self.tokenTree[b] or nameNode
+	end
+
+	-- now for keyword nodes, add remaining name transitions
+	for _,n in ipairs(nodesForTypes.keyword) do
+		n[true] = n[true] or 'name'
+		for _,b in ipairs(name2) do
+			n[b] = n[b] or nameNode
 		end
 	end
 
@@ -339,7 +341,7 @@ function Tokenizer:consume()
 	self.token = self.nexttoken
 	self.tokentype = self.nexttokentype
 
-	local nexttoken, nexttokentype = self:gettoken()
+	local nexttoken, nexttokentype = self:parseNextToken()
 	-- detect errors
 	if not nexttoken then
 		local err = nexttokentype

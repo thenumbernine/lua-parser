@@ -160,8 +160,7 @@ function LuaTokenizer:parseDecNumber()
 		elseif r:canbe'^ULL' then
 		end
 	end
-	local to = r.lastTokenTo
-	return r.data:sub(from, to), 'number'
+	return r.data:sub(from, r.lastTokenTo), 'number'
 end
 
 return LuaTokenizer
