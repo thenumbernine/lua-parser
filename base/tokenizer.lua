@@ -32,10 +32,10 @@ function Tokenizer:gettoken()
 	tk, tt = self:parseString()
 	if tk then return tk, tt end
 
-	tk, tt = self:parseName()
+	tk, tt = self:parseNumber()
 	if tk then return tk, tt end
 
-	tk, tt = self:parseNumber()
+	tk, tt = self:parseName()
 	if tk then return tk, tt end
 
 	tk, tt = self:parseSymbol()
@@ -195,31 +195,6 @@ function Tokenizer:parseQuoteString()
 	end
 end
 
--- C names
-function Tokenizer:parseName()
-	local r = self.r
-	if r:canbe'^[%a_][%w_]*' then	-- name
---DEBUG(@5): print('read name ['..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..', '..r.index..']: '..r:getlasttoken())
-		local lasttoken = r:getlasttoken()
-		-- how to detect if it is a keyword without allocating a substring?
-		-- [[
-		local tokenType = self.keywords[lasttoken] and 'keyword' or 'name'
-		--]]
-		--[[ runs slower but i'm hoping to prevent allocations with this
-		local tokenType = 'name'
-		local t = self.keywordTree
-		for i=1,#lasttoken do
-			local b = lasttoken:byte(i)
-			t = t[b]
-			if not t then goto fail end
-		end
-		if t[true] then tokenType = 'keyword' end
-::fail::
-		--]]
-		return lasttoken, tokenType
-	end
-end
-
 function Tokenizer:parseNumber()
 	local r = self.r
 	if r.data:find('^[%.%d]', r.index) 		-- if it's a decimal or a number...
@@ -261,16 +236,61 @@ function Tokenizer:parseDecNumber()
 	return r.data:sub(from, r.lastTokenTo), 'number'
 end
 
+-- names
+function Tokenizer:parseName()
+	local r = self.r
+	if r:canbe'^[%a_][%w_]*' then	-- name
+--DEBUG(@5): print('read name ['..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..', '..r.index..']: '..r:getlasttoken())
+		local lasttoken = r:getlasttoken()
+		local tokenType = 'name'
+		local t = self.keywordTree
+		for i=1,#lasttoken do
+			local b = lasttoken:byte(i)
+			t = t[b]
+			if not t then goto fail end
+		end
+		t = t[true]
+		if t then tokenType = t end
+::fail::
+		return lasttoken, tokenType
+	end
+end
+
 function Tokenizer:parseSymbol()
 	local r = self.r
 	-- see if it matches any symbols
 --DEBUG:assert.eq(#self.symbols, #self.symbolsPatescape)
+	--[[
 	for i,symbolPatescape in ipairs(self.symbolsPatescape) do
 		if r:canbe(symbolPatescape) then
 --DEBUG(@5): print('read symbol ['..(r.index-(r.lastTokenTo-r.lastTokenFrom+1))..','..r.index..']: '..r:getlasttoken())
 			return self.symbols[i], 'symbol'
 		end
 	end
+	--]]
+	-- [[
+	local t = self.symbolTree
+	local lastValid
+	for i=r.index,math.huge do
+		local b = r.data:byte(i)
+		local n = t[b]
+		if not n then
+			if not lastValid then
+				return
+			end
+			-- r:seekpast implementation:
+			local from = r.index
+			local to = lastValid
+			r.index = to+1
+			r:updatelinecol()
+			r:setlasttoken(from, to, from, from-1)
+			return r.data:sub(from, to), 'symbol'
+		else
+			if n[true] then lastValid = i end
+		end
+		t = n
+	end
+	--]]
 end
 
 -- separate this in case someone has to modify the tokenizer symbols and keywords before starting
@@ -281,20 +301,25 @@ function Tokenizer:start()
 	self.symbols:sort(function(a,b) return #a > #b end)
 	self.symbolsPatescape = self.symbols:mapi(function(symbol) return '^'..string.patescape(symbol) end)
 
-	self.keywordTree = {}
-	for keyword in pairs(self.keywords) do
-		local t = self.keywordTree
-		for i=1,#keyword do
-			local b = keyword:byte(i)
-			local n = t[b]
-			if not n then
-				n = {}
-				t[b] = n
+	for _,info in ipairs{
+		{field='keywordTree', type='keyword', strs=table.keys(self.keywords)},
+		{field='symbolTree', type='symbol', strs=self.symbols},
+	} do
+		self[info.field] = {}
+		for _,s in pairs(info.strs) do
+			local t = self[info.field]
+			for i=1,#s do
+				local b = s:byte(i)
+				local n = t[b]
+				if not n then
+					n = {}
+					t[b] = n
+				end
+				t = n
 			end
-			t = n
+			-- terminator
+			t[true] = info.type
 		end
-		-- terminator
-		t[true] = true
 	end
 
 	self:consume()
