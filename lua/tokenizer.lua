@@ -130,7 +130,7 @@ function LuaTokenizer:parseHexNumber(...)
 			r:canbe'^[+-]'
 			r:mustbe('^%d+', 'malformed number')
 		elseif numdots == 0 and self.useluajit then
-			if r:canbe'^[lLl[lL]' then
+			if r:canbe'^[lL][lL]' then
 			elseif r:canbe'^[uU][lL][lL]' then
 			end
 		end

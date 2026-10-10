@@ -225,7 +225,7 @@ function Tokenizer:parseHexNumber()
 	local r = self.r
 	r:mustbe('^%x+', 'malformed number')
 
-	return r.data:sub(from, r.lastTokenTo), 'number'
+	return from, r.lastTokenTo, 'number'
 end
 
 function Tokenizer:parseDecNumber()
