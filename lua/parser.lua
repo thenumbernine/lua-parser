@@ -151,7 +151,8 @@ function LuaParser:setData(data, source)
 	-- last verify that all gotos went to all labels
 	for _,g in pairs(self.gotos) do
 		if not self.labels[g.name] then
-			return false, "line "..g.spanTo.line..": no visible label '"..g.name.."' for <goto>"
+			local line, col = self.t:getIndexLineCol(g.spanTo)
+			return false, "line "..line..": no visible label '"..g.name.."' for <goto>"
 		end
 	end
 	return true

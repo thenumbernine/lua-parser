@@ -638,6 +638,19 @@ function Tokenizer:getpos()
 		..' code "'..self.r.data:sub(self.r.index):match'^[^\n]*'..'"'
 end
 
+function Tokenizer:getIndexLineCol(index)
+	local line = 1
+	local i = 1
+	while i < index do
+		local j = self.r.data:find('\n', i)
+		if not j or j >= index then break end
+		line = line + 1
+		i = j+1
+	end
+	local col = index - i
+	return line, col
+end
+
 -- return the index in the data reader
 function Tokenizer:getloc()
 	return self.prev2index

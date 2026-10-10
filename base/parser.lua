@@ -88,9 +88,7 @@ function Parser:mustbe(reqToken, reqTokenType, opentoken, openloc)
 		local msg = "expected token="..tolua(reqToken).." tokenType="..tolua(reqTokenType)
 			.." but found token="..tolua(lastToken).." type="..tolua(lastTokenType)
 		if opentoken then
-			local sofar = t.r.data:sub(1, openloc)
-			local line = select(2, sofar:gsub('\n', ''))
-			local col = #sofar:match'[^\n]*$'
+			local line, col = self.t:getIndexLineCol(openloc)
 			msg = msg .. " to close "..tolua(opentoken).." at line="..line..' col='..col
 		end
 		error('MSG:'..msg)
