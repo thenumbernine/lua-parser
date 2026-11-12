@@ -141,8 +141,8 @@ function LuaAST:serializeRecursiveMember(field, args)
 	return s
 end
 
-function LuaAST:toLua(args)
-	return self:serializeRecursiveMember('toLua_recursive', args)
+function LuaAST:toLua(...)
+	return self:serializeRecursiveMember('toLua_recursive', ...)
 end
 
 -- why distinguish toLua() and serialize(consume)?

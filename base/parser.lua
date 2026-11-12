@@ -61,8 +61,17 @@ function Parser:setData(data, source)
 	return true
 end
 
-function Parser:getloc()
-	return self.t:getloc()
+-- the location preceding the previous whitespace/comment separator
+function Parser:getlocL() return self.t:getlocL() end
+
+-- the location of the token start
+function Parser:getloc() return self.t:getloc() end
+
+-- the location of the token end
+function Parser:getlocR() return self.t:getlocR() end
+
+function Parser:getlocLC()
+	return self.t:getlocL(), self.t:getloc()
 end
 
 function Parser:canbe(reqToken, reqTokenType)	-- reqToken is optional
@@ -139,7 +148,7 @@ function Parser:parse_expr_precedenceTable(i)
 			local a = assert(self:parse_expr_precedenceTable(nextLevel), 'MSG:unexpected symbol')
 			a = self:node(rule.className, a)
 			if a.spanFrom then
-				a:setspan(a.spanFrom, self:getloc())
+				a:setspan(a.spanSep, a.spanFrom, self:getloc())
 			end
 			return a
 		end
@@ -168,7 +177,7 @@ function Parser:parse_expr_precedenceTable(i)
 			end
 			a = self:node(rule.className, a, (assert(self:parse_expr_precedenceTable(nextLevel), 'MSG:unexpected symbol')))
 			if a.spanFrom then
-				a:setspan(a.spanFrom, self:getloc())
+				a:setspan(a.spanSep, a.spanFrom, self:getloc())
 			end
 		end
 		return a

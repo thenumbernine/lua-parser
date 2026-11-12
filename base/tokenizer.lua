@@ -6,10 +6,14 @@ local DataReader = require 'parser.base.datareader'
 
 local Tokenizer = class()
 
+Tokenizer.tokenSepStart = 1
+Tokenizer.prevTokenEnd = 1
+
 function Tokenizer:initSymbolsAndKeywords(...)
 end
 
 function Tokenizer:init(data, ...)
+
 	-- TODO move what this does to just the subclass initialization
 	self.symbols = table(self.symbols):setmetatable(nil)
 	self.keywords = table(self.keywords):setmetatable(nil)
@@ -21,28 +25,61 @@ end
 function Tokenizer:parseNextToken()
 	local r = self.r
 
+	local sepStart = self.prevTokenEnd
+
 	local ws
 	repeat
 		ws = self:skipWhiteSpaces()
 			or self:parseComment()
 	until not ws
 
-	if r:done() then return true end
+	local sepEnd = self.r.index
+
+--DEBUG:print('token sep', sepStart, sepEnd, 'tokenSepStart', self.tokenSepStart)
+
+	if r:done() then
+		self.prevTokenEnd = sepEnd
+		return true	-- return a token for the final whitespace/comment?
+	end
 
 	-- "tokenData" is because strings parse-and-convert
 	-- whereas all other tokens don't need to convert so they don't need any tokenData data besides the range in the input stream
 	local tokenFrom, tokenTo, tokenType, tokenData
 
 	tokenFrom, tokenTo, tokenType, tokenData = self:parseString()
-	if tokenFrom then return tokenFrom, tokenTo, tokenType, tokenData end
+	if tokenFrom then
+		self.prevTokenEnd = tokenTo+1
+		return tokenFrom,
+			tokenTo,
+			tokenType,
+			tokenData,
+			sepStart,
+			sepEnd
+	end
 
 	-- [=[
 	tokenFrom, tokenTo, tokenType, tokenData = self:parseNumber()
-	if tokenFrom then return tokenFrom, tokenTo, tokenType, tokenData end
+	if tokenFrom then
+		self.prevTokenEnd = tokenTo+1
+		return tokenFrom,
+			tokenTo,
+			tokenType,
+			tokenData,
+			sepStart,
+			sepEnd
+	end
 	--]=]
 
 	tokenFrom, tokenTo, tokenType, tokenData = self:parseNameOrSymbol()
-	if tokenFrom then return tokenFrom, tokenTo, tokenType, tokenData end
+	if tokenFrom then
+		self.prevTokenEnd = tokenTo+1
+		return tokenFrom,
+			tokenTo,
+			tokenType,
+			tokenData,
+			sepStart,
+			sepEnd
+	end
 
 	error("MSG:unknown token "..r.data:sub(r.index, r.index+20)..(r.index+20 > #r.data and '...' or ''))
 end
@@ -588,10 +625,12 @@ end
 function Tokenizer:consume()
 	-- [[ TODO store these in an array somewhere, make the history adjustable
 	-- then in all the get[prev][2]loc's just pass an index for how far back to search
-	self.prev2index = self.previndex
+	self.prev2indexTokenLeft = self.previndexTokenLeft
+	self.prev2indexWithSep = self.previndexWithSep
 	self.prev2tokenIndex = self.prevtokenIndex
 
-	self.previndex = self.r.index
+	self.previndexTokenLeft = self.r.index
+	self.previndexWithSep = self.tokenSepStart	-- include previous comment and space
 	self.prevtokenIndex = #self.r.tokenhistory/2-1
 	--]]
 
@@ -600,8 +639,17 @@ function Tokenizer:consume()
 	self.tokenTo = self.nextTokenTo
 	self.tokenType = self.nextTokenType
 	self.tokenData = self.nextTokenData
+	self.tokenSepStart = self.nextTokenSepStart
+	self.tokenSepEnd = self.nextTokenSepEnd
 
-	local nextTokenFrom, nextTokenTo, nextTokenType, nextTokenData = self:parseNextToken()
+	local nextTokenFrom,
+		nextTokenTo,
+		nextTokenType,
+		nextTokenData,
+		nextTokenSepStart,
+		nextTokenSepEnd
+		= self:parseNextToken()
+
 	-- detect errors
 	if not nextTokenFrom then
 		local err = nextTokenType
@@ -624,11 +672,15 @@ function Tokenizer:consume()
 		self.nextTokenTo = nil
 		self.nextTokenType = nil
 		self.nextTokenData = nil
+		self.nextTokenSepStart = nil
+		self.nextTokenSepEnd = nil
 	else
 		self.nextTokenFrom = nextTokenFrom
 		self.nextTokenTo = nextTokenTo
 		self.nextTokenType = nextTokenType
 		self.nextTokenData = nextTokenData
+		self.nextTokenSepStart = nextTokenSepStart
+		self.nextTokenSepEnd = nextTokenSepEnd
 	end
 end
 
@@ -647,13 +699,25 @@ function Tokenizer:getIndexLineCol(index)
 		line = line + 1
 		i = j+1
 	end
-	local col = index - i
+	local col = index - i+1
 	return line, col
 end
 
 -- return the index in the data reader
+
+-- assumes we are calling before token parse
+function Tokenizer:getlocL()
+	return self.prev2indexWithSep
+end
+-- assumes we are calling before token parse
 function Tokenizer:getloc()
-	return self.prev2index
+	return self.prev2indexTokenLeft
+end
+-- assumes we are calling after token parse
+function Tokenizer:getlocR()
+	-- wait don't we want left-of-whitespace?
+	return self.prev2indexTokenLeft-1
+	--return self.prev3indexWithSep-1
 end
 
 return Tokenizer

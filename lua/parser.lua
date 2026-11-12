@@ -168,7 +168,7 @@ function LuaParser:parseTree()
 end
 
 function LuaParser:parse_chunk()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	local stmts = table()
 	if self.version >= '5.2' or self.useluajit then
 		-- preceding ;'s allowed
@@ -186,7 +186,7 @@ function LuaParser:parse_chunk()
 		self:canbe(';', 'symbol')
 	end
 	return self:node('_block', table.unpack(stmts))
-		:setspan(from, self:getloc())
+		:setspan(fromSep, from, self:getlocR())
 end
 
 function LuaParser:parse_block(blockName)
@@ -198,9 +198,9 @@ end
 
 -- I'm splitting the parse_stat rule into keyword-based stat and function-call stat...
 function LuaParser:parse_stat_keyword()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	if self:canbe('local', 'keyword') then
-		local ffrom = self:getloc()
+		local ffromSep, ffrom = self:getlocLC()
 		if self:canbe('function', 'keyword') then
 			local namevar = self:parse_var()
 			if not namevar then error"MSG:expected name" end
@@ -208,26 +208,25 @@ function LuaParser:parse_stat_keyword()
 				self:makeFunction(
 					namevar,
 					table.unpack((assert(self:parse_funcbody(), "MSG:expected function body")))
-				):setspan(ffrom , self:getloc())
-			}):setspan(from , self:getloc())
+				):setspan(ffromSep, ffrom , self:getlocR())
+			}):setspan(fromSep, from, self:getlocR())
 		else
-			local afrom = self:getloc()
 			local namelist = assert(self:parse_attnamelist(), "MSG:expected attr name list")
 			if self:canbe('=', 'symbol') then
 				local explist = assert(self:parse_explist(), "MSG:expected expr list")
 				local assign = self:node('_assign', namelist, explist)
-					:setspan(ffrom, self:getloc())
+					:setspan(ffromSep, ffrom, self:getlocR())
 				return self:node('_local', {assign})
-					:setspan(from, self:getloc())
+					:setspan(fromSep, from, self:getlocR())
 			else
 				return self:node('_local', namelist)
-					:setspan(from, self:getloc())
+					:setspan(fromSep, from, self:getlocR())
 			end
 		end
 	elseif self:canbe('function', 'keyword') then
 		local funcname = self:parse_funcname()
 		return self:makeFunction(funcname, table.unpack((assert(self:parse_funcbody(), "MSG:expected function body"))))
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	elseif self:canbe('for', 'keyword') then
 		local namelist = assert(self:parse_namelist(), "MSG:expected name list")
 		if self:canbe('=', 'symbol') then
@@ -240,7 +239,7 @@ function LuaParser:parse_stat_keyword()
 			local block = assert(self:parse_block'for =', "MSG:for loop expected block")
 			self:mustbe('end', 'keyword', 'do', doloc)
 			return self:node('_foreq', namelist[1], explist[1], explist[2], explist[3], table.unpack(block))
-				:setspan(from, self:getloc())
+				:setspan(fromSep, from, self:getlocR())
 		elseif self:canbe('in', 'keyword') then
 			local explist = assert(self:parse_explist(), "MSG:expected expr list")
 			local doloc = self:getloc()
@@ -248,7 +247,7 @@ function LuaParser:parse_stat_keyword()
 			local block = assert(self:parse_block'for in', "MSG:expected block")
 			self:mustbe('end', 'keyword', 'do', doloc)
 			return self:node('_forin', namelist, explist, table.unpack(block))
-				:setspan(from, self:getloc())
+				:setspan(fromSep, from, self:getlocR())
 		else
 			error"MSG:'=' or 'in' expected"
 		end
@@ -258,25 +257,25 @@ function LuaParser:parse_stat_keyword()
 		local block = self:parse_block()
 		local stmts = table(block)
 		-- ...and add elseifs and else to this
-		local efrom = self:getloc()
+		local efromSep, efrom = self:getlocLC()
 		while self:canbe('elseif', 'keyword') do
 			local cond = assert(self:parse_exp(), 'MSG:unexpected symbol')
 			self:mustbe('then', 'keyword')
 			stmts:insert(
 				self:node('_elseif', cond, table.unpack((assert(self:parse_block(), 'MSG:expected block'))))
-					:setspan(efrom, self:getloc())
+					:setspan(efromSep, efrom, self:getlocR())
 			)
-			efrom = self:getloc()
+			efromSep, efrom = self:getlocLC()
 		end
 		if self:canbe('else', 'keyword') then
 			stmts:insert(
 				self:node('_else', table.unpack((assert(self:parse_block(), 'MSG:expected block'))))
-					:setspan(efrom, self:getloc())
+					:setspan(efromSep, efrom, self:getlocR())
 			)
 		end
 		self:mustbe('end', 'keyword', 'if', from)
 		return self:node('_if', cond, table.unpack(stmts))
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	elseif self:canbe('repeat', 'keyword') then
 		local block = assert(self:parse_block'repeat', 'MSG:expected block')
 		self:mustbe('until', 'keyword')
@@ -284,7 +283,7 @@ function LuaParser:parse_stat_keyword()
 			'_repeat',
 			(assert(self:parse_exp(), 'MSG:unexpected symbol')),
 			table.unpack(block)
-		):setspan(from, self:getloc())
+		):setspan(fromSep, from, self:getlocR())
 	elseif self:canbe('while', 'keyword') then
 		local cond = assert(self:parse_exp(), 'MSG:unexpected symbol')
 		local doloc = self:getloc()
@@ -292,31 +291,31 @@ function LuaParser:parse_stat_keyword()
 		local block = assert(self:parse_block'while', 'MSG:expected block')
 		self:mustbe('end', 'keyword', 'do', doloc)
 		return self:node('_while', cond, table.unpack(block))
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	elseif self:canbe('do', 'keyword') then
 		local block = assert(self:parse_block(), 'MSG:expected block')
 		self:mustbe('end', 'keyword', 'do', from)
 		return self:node('_do', table.unpack(block))
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	elseif self.version >= '5.2' then
 		if self:canbe('goto', 'keyword') then
 			self:mustbe(nil, 'name')
 			local name = self.lasttoken
 			local g = self:node('_goto', name)
-				:setspan(from, self:getloc())
+				:setspan(fromSep, from, self:getlocR())
 			self.gotos[name] = g
 			return g
 		-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
 		elseif self:canbe('break', 'keyword') then
 			return self:parse_break()
-				:setspan(from, self:getloc())
+				:setspan(fromSep, from, self:getlocR())
 		elseif self:canbe('::', 'symbol') then
 			self:mustbe(nil, 'name')
 			local name = self.lasttoken
 			local l = self:node('_label', name)
 			self.labels[name] = true
 			self:mustbe('::', 'symbol')
-			return l:setspan(from, self:getloc())
+			return l:setspan(fromSep, from, self:getlocR())
 		end
 	end
 end
@@ -338,7 +337,7 @@ function LuaParser:parse_stat()
 	likewise with var, complain if it is a call
 	--]]
 
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	local prefixexp = self:parse_prefixexp()
 	if prefixexp then
 		if prefixexp.canBeStat then 	-- function call
@@ -350,75 +349,75 @@ function LuaParser:parse_stat()
 				assert.ne(var.type, 'call', "MSG:syntax error")
 				vars:insert(var)
 			end
-			return self:parse_assign(vars, from)
+			return self:parse_assign(vars, fromSep, from)
 		end
 	end
 end
 
-function LuaParser:parse_assign(vars, from)
+function LuaParser:parse_assign(vars, fromSep, from)
 	self:mustbe('=', 'symbol')
 	return self:node('_assign', vars, (assert(self:parse_explist(), 'MSG:expected expr')))
-		:setspan(from, self:getloc())
+		:setspan(fromSep, from, self:getlocR())
 end
 
 -- 'laststat' in 5.1, 'retstat' in 5.2+
 function LuaParser:parse_retstat()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	-- lua5.2+ break is a statement, so you can have multiple breaks in a row with no syntax error
 	-- that means only handle 'break' here in 5.1
 	if self.version <= '5.1' and self:canbe('break', 'keyword') then
 		return self:parse_break()
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	end
 	if self:canbe('return', 'keyword') then
 		local explist = self:parse_explist() or {}
 		return self:node('_return', table.unpack(explist))
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	end
 end
 
 -- verify we're in a loop, then return the break
 
 function LuaParser:parse_break()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	if not ({['while']=1, ['repeat']=1, ['for =']=1, ['for in']=1})[self.blockStack:last()] then
 		error"MSG:break not inside loop"
 	end
 	return self:node('_break')
-		:setspan(from, self:getloc())
+		:setspan(fromSep, from, self:getlocR())
 end
 
 
 function LuaParser:parse_funcname()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	local name = self:parse_var()
 	if not name then return end
 	while self:canbe('.', 'symbol') do
-		local sfrom = self.t:getloc()
+		local sfromSep, sfrom = self:getlocLC()
 		self:mustbe(nil, 'name')
 		local s = self.lasttoken
 		name = self:node('_index',
 			name,
 			self:node('_string', s)
-				:setspan(sfrom, self:getloc())
-		):setspan(from, self:getloc())
+				:setspan(sfromSep, sfrom, self:getlocR())
+		):setspan(fromSep, from, self:getlocR())
 	end
 	if self:canbe(':', 'symbol') then
 		self:mustbe(nil, 'name')
 		local s = self.lasttoken
 		name = self:node('_indexself', name, s)
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	end
 	return name
 end
 
 -- parses a varialbe name, without attribs, and returns it in a '_var' node
 function LuaParser:parse_var()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	local name = self:canbe(nil, 'name') and self.lasttoken
 	if not name then return end
 	return self:node('_var', name)
-		:setspan(from, self:getloc())
+		:setspan(fromSep, from, self:getlocR())
 end
 
 function LuaParser:parse_namelist()
@@ -434,22 +433,22 @@ end
 -- same as above but with optional attributes
 
 function LuaParser:parse_attnamelist()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	local name = self:canbe(nil, 'name') and self.lasttoken
 	if not name then return end
 	local attrib = self:parse_attrib()
 	local names = table{
 		self:node('_var', name, attrib)
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	}
 	while self:canbe(',', 'symbol') do
-		from = self:getloc()
+		fromSep, from = self:getlocLC()
 		self:mustbe(nil, 'name')
 		local name = self.lasttoken
 		local attrib = self:parse_attrib()
 		names:insert(
 			self:node('_var', name, attrib)
-				:setspan(from, self:getloc())
+				:setspan(fromSep, from, self:getlocR())
 		)
 	end
 	return names
@@ -497,32 +496,32 @@ function LuaParser:parse_subexp()
 	local functiondef = self:parse_functiondef()
 	if functiondef then return functiondef end
 
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	if self:canbe('...', 'symbol') then
 		if self.version == '5.0' then error"MSG:unexpected symbol near '...'" end
 		assert.eq(self.functionStack:last(), 'function-vararg', 'MSG:unexpected symbol')
 		return self:node('_vararg')
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	end
 	if self:canbe(nil, 'string') then
 		return self:node('_string', self.lasttoken)
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	end
 	if self:canbe(nil, 'number') then
 		return self:node('_number', self.lasttoken)
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	end
 	if self:canbe('true', 'keyword') then
 		return self:node('_true')
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	end
 	if self:canbe('false', 'keyword') then
 		return self:node('_false')
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	end
 	if self:canbe('nil', 'keyword') then
 		return self:node('_nil')
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	end
 end
 
@@ -541,13 +540,13 @@ prefixexp ::= (Name {'[' exp ']' | `.` Name | [`:` Name] args} | `(` exp `)`) {a
 
 function LuaParser:parse_prefixexp()
 	local prefixexp
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 
 	if self:canbe('(', 'symbol') then
 		local exp = assert(self:parse_exp(), 'MSG:unexpected symbol')
 		self:mustbe(')', 'symbol')
 		prefixexp = self:node('_par', exp)
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	else
 		prefixexp = self:parse_var()
 		if not prefixexp then return end
@@ -557,34 +556,34 @@ function LuaParser:parse_prefixexp()
 		if self:canbe('[', 'symbol') then
 			prefixexp = self:node('_index', prefixexp, (assert(self:parse_exp(), 'MSG:unexpected symbol')))
 			self:mustbe(']', 'symbol')
-			prefixexp:setspan(from, self:getloc())
+			prefixexp:setspan(fromSep, from, self:getlocR())
 		elseif self:canbe('.', 'symbol') then
-			local sfrom = self:getloc()
+			local sfromSep, sfrom = self:getlocLC()
 			self:mustbe(nil, 'name')
 			local s = self.lasttoken
 			prefixexp = self:node('_index',
 				prefixexp,
 				self:node('_string', s)
-					:setspan(sfrom, self:getloc())
+					:setspan(sfromSep, from, self:getlocR())
 			)
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 		elseif self:canbe(':', 'symbol') then
 			self:mustbe(nil, 'name')
 			local s = self.lasttoken
 			prefixexp = self:node('_indexself',
 				prefixexp,
 				s
-			):setspan(from, self:getloc())
+			):setspan(fromSep, from, self:getlocR())
 			local args = self:parse_args()
 			if not args then error"MSG:function arguments expected" end
 			prefixexp = self:node('_call', prefixexp, table.unpack(args))
-				:setspan(from, self:getloc())
+				:setspan(fromSep, from, self:getlocR())
 		else
 			local args = self:parse_args()
 			if not args then break end
 
 			prefixexp = self:node('_call', prefixexp, table.unpack(args))
-				:setspan(from, self:getloc())
+				:setspan(fromSep, from, self:getlocR())
 		end
 	end
 
@@ -596,11 +595,11 @@ end
 -- returns a table of the args -- particularly an empty table if no args were found
 
 function LuaParser:parse_args()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	if self:canbe(nil, 'string') then
 		return {
 			self:node('_string', self.lasttoken)
-				:setspan(from, self:getloc())
+				:setspan(fromSep, from, self:getlocR())
 		}
 	end
 
@@ -621,10 +620,10 @@ end
 -- 'function' in the 5.1 syntax
 
 function LuaParser:parse_functiondef()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	if not self:canbe('function', 'keyword') then return end
 	return self:makeFunction(nil, table.unpack((assert(self:parse_funcbody(), 'MSG:expected function body'))))
-		:setspan(from, self:getloc())
+		:setspan(fromSep, from, self:getlocR())
 end
 -- returns a table of ... first element is a table of args, rest of elements are the body statements
 
@@ -643,11 +642,11 @@ function LuaParser:parse_funcbody()
 end
 
 function LuaParser:parse_parlist()	-- matches namelist() with ... as a terminator
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	if self:canbe('...', 'symbol') then
 		return table{
 			self:node('_vararg')
-				:setspan(from, self:getloc())
+				:setspan(fromSep, from, self:getlocR())
 		}
 	end
 
@@ -655,11 +654,11 @@ function LuaParser:parse_parlist()	-- matches namelist() with ... as a terminato
 	if not namevar then return end
 	local names = table{namevar}
 	while self:canbe(',', 'symbol') do
-		from = self:getloc()
+		fromSep, from = self:getlocLC()
 		if self:canbe('...', 'symbol') then
 			names:insert(
 				self:node('_vararg')
-					:setspan(from, self:getloc())
+					:setspan(fromSep, from, self:getlocR())
 			)
 			return names
 		end
@@ -671,7 +670,7 @@ function LuaParser:parse_parlist()	-- matches namelist() with ... as a terminato
 end
 
 function LuaParser:parse_tableconstructor()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	if not self:canbe('{', 'symbol') then return end
 	if self.version == '5.0' then
 		-- despite what the 5.0 syntax says, it looks like the 5.0 parser will parse and ignore a leading semicolon as valid: {; 1, 2, 3, 4}
@@ -692,7 +691,7 @@ function LuaParser:parse_tableconstructor()
 		end
 	end
 	--]]
-	result:setspan(from, self:getloc())
+	result:setspan(fromSep, from, self:getlocR())
 	return result
 end
 
@@ -710,7 +709,7 @@ function LuaParser:parse_fieldlist()
 end
 
 function LuaParser:parse_field()
-	local from = self:getloc()
+	local fromSep, from = self:getlocLC()
 	if self:canbe('[', 'symbol') then
 		local keyexp = assert(self:parse_exp(), 'MSG:unexpected symbol')
 		self:mustbe(']', 'symbol')
@@ -718,7 +717,7 @@ function LuaParser:parse_field()
 		local valexp = self:parse_exp()
 		if not valexp then error("MSG:expected expression but found "..tostring(self.t:gettoken())) end
 		return self:node('_assign', {keyexp}, {valexp})
-			:setspan(from, self:getloc())
+			:setspan(fromSep, from, self:getlocR())
 	end
 
 	-- this will be Name or exp
@@ -729,11 +728,11 @@ function LuaParser:parse_field()
 	if self.ast._var:isa(exp) and self:canbe('=', 'symbol') then
 		return self:node('_assign',
 			{
-				self:node('_string', exp.name):setspan(exp.spanFrom, exp.spanTo)
+				self:node('_string', exp.name):setspan(exp.spanFromSep, exp.spanFrom, exp.spanTo)
 			}, {
 				(assert(self:parse_exp(), 'MSG:unexpected symbol'))
 			}
-		):setspan(from, self:getloc())
+		):setspan(fromSep, from, self:getlocR())
 	else
 		return exp
 	end
