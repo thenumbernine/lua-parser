@@ -71,7 +71,10 @@ function Parser:getloc() return self.t:getloc() end
 function Parser:getlocR() return self.t:getlocR() end
 
 function Parser:getlocLC()
-	return self.t:getlocL(), self.t:getloc()
+	local l,c = self.t:getlocL(), self.t:getloc()
+	-- horrible hack for now for trimming prev-seps from leftmost children
+	self.t.prevTokenDataEnd = l
+	return l,c
 end
 
 function Parser:canbe(reqToken, reqTokenType)	-- reqToken is optional
@@ -135,8 +138,8 @@ end
 function Parser:parse_expr_precedenceTable(i)
 --DEBUG(@5):print('Parser:parse_expr_precedenceTable', i, 'of', #self.parseExprPrecedenceRulesAndClassNames, 'token=', self.t:gettoken())
 	local precedenceLevel = self.parseExprPrecedenceRulesAndClassNames[i]
+	local fromSep, from = self:getlocLC()
 	if precedenceLevel.unaryLHS then
-		local from = self:getloc()
 		local rule = self:getNextRule(precedenceLevel.rules)
 		if rule then
 			local nextLevel = i
@@ -149,6 +152,8 @@ function Parser:parse_expr_precedenceTable(i)
 			a = self:node(rule.className, a)
 			if a.spanFrom then
 				a:setspan(a.spanSep, a.spanFrom, self:getloc())
+			else
+				a:setspan(fromSep, from, self:getloc())
 			end
 			return a
 		end
@@ -178,6 +183,8 @@ function Parser:parse_expr_precedenceTable(i)
 			a = self:node(rule.className, a, (assert(self:parse_expr_precedenceTable(nextLevel), 'MSG:unexpected symbol')))
 			if a.spanFrom then
 				a:setspan(a.spanSep, a.spanFrom, self:getloc())
+			else
+				a:setspan(fromSep, from, self:getloc())
 			end
 		end
 		return a

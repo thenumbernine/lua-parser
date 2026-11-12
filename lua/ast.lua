@@ -31,6 +31,7 @@ ast.node = LuaAST
 --[[
 args:
 	maintainSpan = set to true to have the output maintain the input's span
+					TODO rename this to "preserveComments" or something
 	prettyPrint = pretty print output
 --]]
 local slashNByte = ('\n'):byte()
@@ -51,7 +52,7 @@ function LuaAST:serializeRecursiveMember(field, args)
 	local index = 1
 	local consume
 	local lastSpan = 1
-	local lastSpanLine = 0
+	local lastSpanLine = 1
 	local tab = ''	-- only used by prettyPrint
 	local slashnByte = ('\n'):byte()
 	consume = function(x)
@@ -91,7 +92,6 @@ function LuaAST:serializeRecursiveMember(field, args)
 				end
 			end
 
-
 			-- TODO here if you want ... pad lines and cols until we match the original location (or exceed it)
 			-- to do that, track appended strings to have a running line/col counter just like we do in parser
 			-- to do that, separate teh updatelinecol() in the parser to work outside datareader
@@ -100,6 +100,7 @@ function LuaAST:serializeRecursiveMember(field, args)
 					append'\n'
 				end
 			end
+
 
 			-- if we have a name coming in, only insert a space if we were already at a name
 			local namelhs = s:sub(-1):match'[_%w%.]'
@@ -114,6 +115,22 @@ function LuaAST:serializeRecursiveMember(field, args)
 			end
 			append(x)
 		elseif type(x) == 'table' then
+			--[[
+print the separator preceding the token
+however, in a tree,
+a node and its leftmost children will all have the same preceding separator
+and depending on what level of the tree you print, you don't know if you want the preceding separator or not
+so either traverse the tree and chop off first-children separators
+or upon print override leftmost children separators
+
+... this would be so helpful if there was a standard way to reference/traverse children in-order...
+			--]]
+			--[[ works but spits out too many lines/whitespaces...
+			if maintainSpan and x.parser then
+				consume(x.parser.t.r.data:sub(x.spanSep or 1, (x.spanFrom or 1)-1))
+			end
+			--]]
+			-- [[ old lazy and so so and ugly way
 			if x.spanFrom then
 				for i=lastSpan,x.spanFrom do
 					if x.parser.t.r.data:byte(i) == slashnByte then
@@ -122,6 +139,8 @@ function LuaAST:serializeRecursiveMember(field, args)
 				end
 				lastSpan = x.spanFrom+1
 			end
+			--]]
+
 			assert.is(x, BaseAST)
 			assert.index(x, field)
 

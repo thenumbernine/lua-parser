@@ -6,8 +6,14 @@ local DataReader = require 'parser.base.datareader'
 
 local Tokenizer = class()
 
-Tokenizer.tokenSepStart = 1
-Tokenizer.prevTokenEnd = 1
+Tokenizer.parseNextTokenPrevIndex = 1
+Tokenizer.prevTokenDataEnd = 1
+Tokenizer.tokenDataSepStart = 1
+Tokenizer.tokenDataSepEnd = 1
+Tokenizer.tokenDataEnd = 1
+Tokenizer.nextTokenDataSepStart = 1
+Tokenizer.nextTokenDataSepEnd = 1
+Tokenizer.nextTokenDataEnd = 1
 
 function Tokenizer:initSymbolsAndKeywords(...)
 end
@@ -25,7 +31,7 @@ end
 function Tokenizer:parseNextToken()
 	local r = self.r
 
-	local sepStart = self.prevTokenEnd
+	local sepStart = self.parseNextTokenPrevIndex
 
 	local ws
 	repeat
@@ -35,10 +41,10 @@ function Tokenizer:parseNextToken()
 
 	local sepEnd = self.r.index
 
---DEBUG:print('token sep', sepStart, sepEnd, 'tokenSepStart', self.tokenSepStart)
+--DEBUG:print('token sep', sepStart, sepEnd, 'tokenDataSepStart', self.tokenDataSepStart)
 
 	if r:done() then
-		self.prevTokenEnd = sepEnd
+		self.parseNextTokenPrevIndex = sepEnd
 		return true	-- return a token for the final whitespace/comment?
 	end
 
@@ -48,7 +54,7 @@ function Tokenizer:parseNextToken()
 
 	tokenFrom, tokenTo, tokenType, tokenData = self:parseString()
 	if tokenFrom then
-		self.prevTokenEnd = tokenTo+1
+		self.parseNextTokenPrevIndex = tokenTo+1
 		return tokenFrom,
 			tokenTo,
 			tokenType,
@@ -60,7 +66,7 @@ function Tokenizer:parseNextToken()
 	-- [=[
 	tokenFrom, tokenTo, tokenType, tokenData = self:parseNumber()
 	if tokenFrom then
-		self.prevTokenEnd = tokenTo+1
+		self.parseNextTokenPrevIndex = tokenTo+1
 		return tokenFrom,
 			tokenTo,
 			tokenType,
@@ -72,7 +78,7 @@ function Tokenizer:parseNextToken()
 
 	tokenFrom, tokenTo, tokenType, tokenData = self:parseNameOrSymbol()
 	if tokenFrom then
-		self.prevTokenEnd = tokenTo+1
+		self.parseNextTokenPrevIndex = tokenTo+1
 		return tokenFrom,
 			tokenTo,
 			tokenType,
@@ -623,31 +629,23 @@ function Tokenizer:gettoken()
 end
 
 function Tokenizer:consume()
-	-- [[ TODO store these in an array somewhere, make the history adjustable
-	-- then in all the get[prev][2]loc's just pass an index for how far back to search
-	self.prev2indexTokenLeft = self.previndexTokenLeft
-	self.prev2indexWithSep = self.previndexWithSep
-	self.prev2tokenIndex = self.prevtokenIndex
-
-	self.previndexTokenLeft = self.r.index
-	self.previndexWithSep = self.tokenSepStart	-- include previous comment and space
-	self.prevtokenIndex = #self.r.tokenhistory/2-1
-	--]]
+	self.prevTokenDataEnd = self.tokenDataEnd
 
 	self.token = nil
 	self.tokenFrom = self.nextTokenFrom
 	self.tokenTo = self.nextTokenTo
 	self.tokenType = self.nextTokenType
 	self.tokenData = self.nextTokenData
-	self.tokenSepStart = self.nextTokenSepStart
-	self.tokenSepEnd = self.nextTokenSepEnd
+	self.tokenDataSepStart = self.nextTokenDataSepStart
+	self.tokenDataSepEnd = self.nextTokenDataSepEnd
+	self.tokenDataEnd = self.nextTokenDataEnd
 
 	local nextTokenFrom,
 		nextTokenTo,
 		nextTokenType,
 		nextTokenData,
-		nextTokenSepStart,
-		nextTokenSepEnd
+		nextTokenDataSepStart,
+		nextTokenDataSepEnd
 		= self:parseNextToken()
 
 	-- detect errors
@@ -672,15 +670,16 @@ function Tokenizer:consume()
 		self.nextTokenTo = nil
 		self.nextTokenType = nil
 		self.nextTokenData = nil
-		self.nextTokenSepStart = nil
-		self.nextTokenSepEnd = nil
+		self.nextTokenDataSepStart = nil
+		self.nextTokenDataSepEnd = nil
 	else
 		self.nextTokenFrom = nextTokenFrom
 		self.nextTokenTo = nextTokenTo
 		self.nextTokenType = nextTokenType
 		self.nextTokenData = nextTokenData
-		self.nextTokenSepStart = nextTokenSepStart
-		self.nextTokenSepEnd = nextTokenSepEnd
+		self.nextTokenDataSepStart = nextTokenDataSepStart
+		self.nextTokenDataSepEnd = nextTokenDataSepEnd
+		self.nextTokenDataEnd = self.r.index
 	end
 end
 
@@ -707,17 +706,17 @@ end
 
 -- assumes we are calling before token parse
 function Tokenizer:getlocL()
-	return self.prev2indexWithSep
+	--return self.parseNextTokenPrevIndex
+	--return self.tokenDataSepStart
+	return self.prevTokenDataEnd
 end
 -- assumes we are calling before token parse
 function Tokenizer:getloc()
-	return self.prev2indexTokenLeft
+	return self.tokenDataSepEnd
 end
 -- assumes we are calling after token parse
 function Tokenizer:getlocR()
-	-- wait don't we want left-of-whitespace?
-	return self.prev2indexTokenLeft-1
-	--return self.prev3indexWithSep-1
+	return self.prevTokenDataEnd-1
 end
 
 return Tokenizer

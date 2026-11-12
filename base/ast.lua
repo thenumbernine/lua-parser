@@ -11,9 +11,25 @@ local BaseAST = class()
 -- spanFrom = where the token starts
 -- spanTo = where the token ends
 function BaseAST:setspan(spanSep, spanFrom, spanTo)
+--DEBUG:assert(spanSep)
+--DEBUG:assert(spanFrom)
+--DEBUG:assert(spanTo)
 	self.spanSep = spanSep
 	self.spanFrom = spanFrom
 	self.spanTo = spanTo
+
+--DEBUG:local sepLine, sepCol = self.parser.t:getIndexLineCol(self.spanSep)
+--DEBUG:local fromLine, fromCol = self.parser.t:getIndexLineCol(self.spanFrom)
+--DEBUG:local toLine, toCol = self.parser.t:getIndexLineCol(self.spanTo)
+--DEBUG:print('node '..self.type..' '
+--DEBUG:	..sepLine..':'..sepCol
+--DEBUG:	..' from index '
+--DEBUG:	..fromLine..':'..fromCol
+--DEBUG:	..' to index '
+--DEBUG:	..toLine..':'..toCol
+--DEBUG:	..' sep '..require 'ext.tolua'(self.parser.t.r.data:sub(self.spanSep, self.spanFrom-1))
+--DEBUG:	..' token '..require 'ext.tolua'(self.parser.t.r.data:sub(self.spanFrom, self.spanTo))
+--DEBUG:)
 	return self
 end
 

@@ -725,10 +725,13 @@ function LuaParser:parse_field()
 	local exp = self:parse_exp()
 	if not exp then return end
 
-	if self.ast._var:isa(exp) and self:canbe('=', 'symbol') then
+	if self.ast._var:isa(exp)
+	and self:canbe('=', 'symbol')
+	then
 		return self:node('_assign',
 			{
-				self:node('_string', exp.name):setspan(exp.spanFromSep, exp.spanFrom, exp.spanTo)
+				self:node('_string', exp.name)
+					:setspan(exp.spanSep, exp.spanFrom, exp.spanTo)
 			}, {
 				(assert(self:parse_exp(), 'MSG:unexpected symbol'))
 			}
